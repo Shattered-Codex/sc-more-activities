@@ -1,0 +1,1 @@
+# sc-more-activities
