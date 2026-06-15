@@ -26,4 +26,8 @@ export class Constants {
   static isDnd5eActive() {
     return game?.system?.id === "dnd5e" && Boolean(globalThis.dnd5e);
   }
+
+  static isDnd5eSystem() {
+    return game?.system?.id === "dnd5e";
+  }
 }

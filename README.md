@@ -3,9 +3,9 @@
 SC - More Activities is a Shattered Codex activity platform for the `dnd5e`
 system in Foundry VTT.
 
-This module is currently in Phase 1 of implementation. The current build is an
+This module is currently in Phase 2 of implementation. The current build is an
 installable module shell with localization, styles, settings, documentation and
-support launchers, lifecycle logging, and Shattered Codex structure.
+support launchers, lifecycle logging, and an early activity registration API.
 
 ## Current Scope
 
@@ -15,9 +15,59 @@ support launchers, lifecycle logging, and Shattered Codex structure.
 - Shattered Codex scoped CSS tokens.
 - Basic settings and external documentation/support launchers.
 - Debug-only lifecycle logging.
+- Early public API at `game.modules.get("sc-more-activities").api`.
+- Synchronous registration hook:
+  `sc-more-activities.registerActivities`.
+- Activity registry lifecycle lock after registration collection.
 
-The registry, public API, adapter, activity types, migration tools, and catalog
-UI are intentionally not implemented in this phase.
+The `dnd5e` adapter, activity types, migration tools, and catalog UI are
+intentionally not implemented in this phase.
+
+## Public API
+
+External modules can register activity definitions during the registration hook:
+
+```js
+Hooks.on("sc-more-activities.registerActivities", (activities) => {
+  const result = activities.registerType({
+    moduleId: "my-module",
+    type: "my-module-ignite",
+    label: "MYMODULE.Activity.Ignite.Label",
+    hint: "MYMODULE.Activity.Ignite.Hint",
+    icon: "modules/my-module/icons/ignite.svg",
+    documentClass: MyIgniteActivity
+  });
+
+  if (!result.ok) {
+    console.warn("[my-module] activity registration failed", result);
+  }
+});
+```
+
+Registration is synchronous. The registry locks immediately after the
+registration hook completes. Late registrations return a structured failure with
+reason `registry-locked`.
+
+Duplicate registrations from another module are rejected. Duplicate
+registrations from the same module are idempotent only when the public summary is
+equivalent; conflicting definitions are rejected unless the module passes
+`updateExisting: true` during the same collection window.
+
+The public API separates module and API versioning:
+
+- `moduleVersion`: the module manifest version.
+- `apiVersion`: the public API contract version.
+
+The current registry stores and validates definitions, but Phase 2 does not
+flush activity types into `CONFIG.DND5E.activityTypes`. That behavior belongs to
+the Phase 3 `dnd5e` adapter.
+
+Current capabilities:
+
+- `registry: true`
+- `dnd5eAdapter: false`
+- `activityCreation: false`
+- `migration: false`
 
 ## Architecture Plan
 
