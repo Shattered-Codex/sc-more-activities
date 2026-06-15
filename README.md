@@ -25,6 +25,9 @@ removing their `dnd5e` registrations.
 - `dnd5e` adapter flush during `init`.
 - Built-in `sc-sound` activity.
 - Built-in `sc-macro` activity.
+- Built-in `sc-hook` developer activity.
+- Built-in `sc-chain` orchestration activity for explicit same-item activity
+  lists with loop protection.
 - Guarded activity create dialog grouping for D&D 5e, Shattered Codex, and
   registry/config metadata-provided external groups, replacing separate lists
   with group panels in a slightly top-offset icon rail.
@@ -114,6 +117,11 @@ Phase 4 manual smoke checks:
 - `sc-macro` executes a permitted world macro, reports missing or unauthorized
   macros cleanly, and runs inline code stored on the activity only for GM users
   when selected.
+- `sc-hook` emits a configured hook payload or calls a callback exposed through
+  `game.modules.get(moduleId).api.scMoreActivities.callbacks`.
+- `sc-chain` executes configured activity ids from the same item, stops on
+  loops/depth limits, and should be used when the native `forward` activity does
+  not express the desired sequence clearly.
 - `sc-macro` shows the world macro selector only in world mode and the code
   editor only in inline mode.
 - Activity creation groups D&D 5e (`fa-brands fa-d-and-d`), Shattered Codex

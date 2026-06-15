@@ -1,0 +1,45 @@
+<section class="tab activity-{{ tab.id }} {{ tab.cssClass }}" data-tab="{{ tab.id }}" data-group="{{ tab.group }}">
+  {{#if appliedEffects}}{{> "systems/dnd5e/templates/activity/parts/activity-effects.hbs" }}{{/if}}
+
+  <fieldset>
+    <legend>{{ localize "SCMOREACTIVITIES.Activities.ScHook.Sections.Configuration" }}</legend>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScHook.Fields.DispatchMode.Label" }}</label>
+      <div class="form-fields">
+        <select name="dispatch.mode">
+          {{ selectOptions dispatchModeOptions selected=dispatchMode valueAttr="value" labelAttr="label" }}
+        </select>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScHook.Fields.DispatchMode.Hint" }}</p>
+    </div>
+
+    {{#if isHookMode}}
+      <div class="form-group">
+        <label>{{ localize "SCMOREACTIVITIES.Activities.ScHook.Fields.HookName.Label" }}</label>
+        <div class="form-fields">
+          <input type="text" name="hook.name" value="{{ hookName }}" placeholder="{{ localize "SCMOREACTIVITIES.Activities.ScHook.Fields.HookName.Placeholder" }}">
+        </div>
+        <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScHook.Fields.HookName.Hint" }}</p>
+      </div>
+    {{/if}}
+
+    {{#if isCallbackMode}}
+      <div class="form-group">
+        <label>{{ localize "SCMOREACTIVITIES.Activities.ScHook.Fields.CallbackModule.Label" }}</label>
+        <div class="form-fields">
+          <input type="text" name="callback.moduleId" value="{{ callback.moduleId }}">
+        </div>
+        <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScHook.Fields.CallbackModule.Hint" }}</p>
+      </div>
+
+      <div class="form-group">
+        <label>{{ localize "SCMOREACTIVITIES.Activities.ScHook.Fields.CallbackId.Label" }}</label>
+        <div class="form-fields">
+          <input type="text" name="callback.id" value="{{ callback.id }}">
+        </div>
+        <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScHook.Fields.CallbackId.Hint" }}</p>
+      </div>
+    {{/if}}
+  </fieldset>
+</section>

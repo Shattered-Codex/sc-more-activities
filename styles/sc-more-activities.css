@@ -774,6 +774,38 @@
   width: 100%;
 }
 
+.sc-more-activities .sc-ma-chain-activity-list {
+  border: 1px solid var(--sc-ma-border-soft);
+  border-radius: 6px;
+  list-style: none;
+  margin: 0;
+  max-height: 8rem;
+  overflow: auto;
+  padding: 0;
+}
+
+.sc-more-activities .sc-ma-chain-activity-list li {
+  align-items: center;
+  border-bottom: 1px solid var(--sc-ma-border-soft);
+  display: grid;
+  gap: var(--sc-ma-space-2);
+  grid-template-columns: minmax(5rem, max-content) 1fr max-content;
+  min-height: 1.75rem;
+  padding: 0.25rem var(--sc-ma-space-2);
+}
+
+.sc-more-activities .sc-ma-chain-activity-list li:last-child {
+  border-bottom: 0;
+}
+
+.sc-more-activities .sc-ma-chain-activity-list code {
+  color: var(--sc-ma-text-strong);
+}
+
+.sc-more-activities .sc-ma-chain-activity-list small {
+  color: var(--sc-ma-text-dim);
+}
+
 .sc-ma-create-dialog,
 .sc-ma-create-dialog .window-content,
 .sc-ma-create-dialog .sc-ma-create-dialog-content {
