@@ -128,7 +128,7 @@
   gap: var(--sc-ma-space-3);
   height: 100%;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
   padding: var(--sc-ma-space-3);
   scrollbar-gutter: stable;
 }
@@ -238,6 +238,7 @@
 .sc-ma-catalog-summary-item,
 .sc-ma-catalog-lifecycle,
 .sc-ma-catalog-capabilities,
+.sc-ma-catalog-tabbed,
 .sc-ma-catalog-table-section,
 .sc-ma-catalog-diagnostics {
   background: var(--sc-ma-bg-panel);
@@ -339,6 +340,103 @@
   color: var(--sc-ma-danger);
 }
 
+.sc-ma-catalog-tabbed {
+  display: flex;
+  flex: 1 1 18rem;
+  flex-direction: column;
+  min-height: 12rem;
+  overflow: hidden;
+}
+
+.sc-ma-catalog-tab-list {
+  align-items: center;
+  background: color-mix(in srgb, var(--sc-ma-bg-card-soft) 86%, #0d1220 14%);
+  border-bottom: 1px solid var(--sc-ma-border-soft);
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--sc-ma-space-2);
+  overflow-x: auto;
+  padding: var(--sc-ma-space-2);
+  scrollbar-gutter: stable;
+}
+
+.sc-ma-catalog-tab {
+  align-items: center;
+  appearance: none;
+  background: color-mix(in srgb, var(--sc-ma-bg-base) 62%, var(--sc-ma-bg-card-soft) 38%);
+  border: 1px solid color-mix(in srgb, var(--sc-ma-border-soft) 82%, #8397c0 18%);
+  border-radius: 6px;
+  box-shadow: none;
+  color: var(--sc-ma-text-dim);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 0.45rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.65rem;
+  white-space: nowrap;
+}
+
+.sc-ma-catalog-tab i {
+  color: var(--sc-ma-accent-warm);
+  font-size: var(--font-size-13, 0.8125rem);
+}
+
+.sc-ma-catalog-tab span {
+  color: currentColor;
+  font-weight: 700;
+}
+
+.sc-ma-catalog-tab strong {
+  background: color-mix(in srgb, var(--sc-ma-bg-base) 72%, var(--sc-ma-bg-card-soft) 28%);
+  border: 1px solid color-mix(in srgb, currentColor 40%, transparent 60%);
+  border-radius: 999px;
+  color: var(--sc-ma-text-strong);
+  font-size: var(--font-size-11, 0.6875rem);
+  line-height: 1;
+  min-width: 1.35rem;
+  padding: 0.2rem 0.4rem;
+  text-align: center;
+}
+
+.sc-ma-catalog-tab:is(.is-active, :hover, :focus-visible) {
+  background: color-mix(in srgb, var(--sc-ma-accent-warm) 12%, var(--sc-ma-bg-card-soft) 88%);
+  border-color: color-mix(in srgb, var(--sc-ma-accent-warm) 54%, #f3d49a 46%);
+  color: var(--sc-ma-text-strong);
+  outline: none;
+}
+
+.sc-ma-catalog-tab:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--sc-ma-accent-warm) 34%, transparent 66%);
+}
+
+.sc-ma-catalog-tab.is-active {
+  box-shadow: inset 0 -2px 0 var(--sc-ma-accent-warm);
+}
+
+.sc-ma-catalog-tab-panels {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.sc-ma-catalog-tab-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.sc-ma-catalog-tab-panel[hidden],
+.sc-ma-catalog-tab-panel[aria-hidden="true"] {
+  display: none !important;
+}
+
+.sc-ma-catalog-tabbed .sc-ma-catalog-table-section {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .sc-ma-catalog-table-section {
   display: flex;
   flex-direction: column;
@@ -377,12 +475,23 @@
   max-height: clamp(10rem, 38vh, 22rem);
 }
 
+.sc-ma-catalog-tabbed .sc-ma-catalog-table-wrap,
+.sc-ma-catalog-tabbed .sc-ma-catalog-table-section--primary .sc-ma-catalog-table-wrap {
+  flex: 1 1 auto;
+  max-height: none;
+  min-height: 0;
+}
+
 .sc-ma-catalog-table {
   border-collapse: collapse;
   margin: 0;
-  min-width: 760px;
+  min-width: 900px;
   table-layout: fixed;
   width: 100%;
+}
+
+.sc-ma-catalog-table--diagnostics {
+  min-width: 720px;
 }
 
 .sc-ma-catalog-table th,
@@ -479,16 +588,89 @@
 }
 
 .sc-ma-status--flushed,
-.sc-ma-status--registered {
+.sc-ma-status--registered,
+.sc-ma-status--active {
   color: var(--sc-ma-accent);
 }
 
-.sc-ma-status--warning {
+.sc-ma-status--warning,
+.sc-ma-status--unavailable {
   color: var(--sc-ma-accent-warm);
 }
 
-.sc-ma-status--rejected {
+.sc-ma-status--rejected,
+.sc-ma-status--disabled {
   color: var(--sc-ma-danger);
+}
+
+.sc-ma-availability-switch {
+  align-items: center;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 0.45rem;
+  min-height: 1.35rem;
+  min-width: 0;
+  vertical-align: top;
+}
+
+.sc-ma-availability-switch input {
+  block-size: 1px;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  inline-size: 1px;
+  margin: -1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+}
+
+.sc-ma-availability-switch-track {
+  background: color-mix(in srgb, var(--sc-ma-danger) 18%, var(--sc-ma-bg-base) 82%);
+  border: 1px solid color-mix(in srgb, var(--sc-ma-danger) 58%, var(--sc-ma-border-soft) 42%);
+  border-radius: 999px;
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 2rem;
+  height: 1.1rem;
+  padding: 0.125rem;
+  transition: background-color 160ms ease, border-color 160ms ease;
+  width: 2rem;
+}
+
+.sc-ma-availability-switch-track span {
+  background: var(--sc-ma-text-strong);
+  border-radius: 999px;
+  display: block;
+  height: 0.75rem;
+  transform: translateX(0);
+  transition: transform 160ms ease;
+  width: 0.75rem;
+}
+
+.sc-ma-availability-switch input:checked + .sc-ma-availability-switch-track {
+  background: color-mix(in srgb, var(--sc-ma-accent) 20%, var(--sc-ma-bg-base) 80%);
+  border-color: color-mix(in srgb, var(--sc-ma-accent) 64%, var(--sc-ma-border-soft) 36%);
+}
+
+.sc-ma-availability-switch input:checked + .sc-ma-availability-switch-track span {
+  transform: translateX(0.85rem);
+}
+
+.sc-ma-availability-switch input:focus-visible + .sc-ma-availability-switch-track {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--sc-ma-accent) 36%, transparent 64%);
+}
+
+.sc-ma-availability-switch input:disabled + .sc-ma-availability-switch-track,
+.sc-ma-availability-switch input:disabled ~ .sc-ma-availability-label {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.sc-ma-availability-label {
+  color: var(--sc-ma-text-strong);
+  font-size: var(--font-size-12, 0.75rem);
+  font-weight: 700;
+  min-width: 0;
 }
 
 .sc-ma-catalog-warning-count {
@@ -545,6 +727,14 @@
 
   .sc-ma-catalog-lifecycle {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sc-ma-catalog-shell {
+    overflow-y: auto;
+  }
+
+  .sc-ma-catalog-tabbed {
+    flex-basis: 22rem;
   }
 }
 

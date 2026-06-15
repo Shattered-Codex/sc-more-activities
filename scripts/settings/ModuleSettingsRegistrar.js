@@ -1,4 +1,5 @@
 import { Constants } from "../constants/Constants.js";
+import { HOOKS } from "../constants/Hooks.js";
 import { SETTINGS_KEYS } from "../constants/SettingsKeys.js";
 import { ActivityCatalogApp } from "../applications/ActivityCatalogApp.js";
 import { DocumentationMenu } from "./DocumentationMenu.js";
@@ -14,6 +15,7 @@ export class ModuleSettingsRegistrar {
     this.#registered = true;
 
     this.#registerDebugLoggingSetting();
+    this.#registerDisabledActivityTypesSetting();
     this.#registerActivityCatalogMenu();
     this.#registerSupportMenu();
     this.#registerDocumentationMenu();
@@ -36,6 +38,27 @@ export class ModuleSettingsRegistrar {
       config: true,
       type: Boolean,
       default: false
+    });
+  }
+
+  #registerDisabledActivityTypesSetting() {
+    game.settings.register(Constants.MODULE_ID, SETTINGS_KEYS.DISABLED_ACTIVITY_TYPES, {
+      name: Constants.localize("SCMOREACTIVITIES.Settings.DisabledActivityTypes.Name", "Disabled activity types"),
+      hint: Constants.localize(
+        "SCMOREACTIVITIES.Settings.DisabledActivityTypes.Hint",
+        "Stores activity types disabled from creation and use by the GM."
+      ),
+      scope: "world",
+      config: false,
+      type: Object,
+      default: {},
+      onChange: (value) => {
+        const disabledTypes = Object.entries(value && typeof value === "object" ? value : {})
+          .filter(([_type, disabled]) => disabled === true)
+          .map(([type]) => type)
+          .sort();
+        Hooks.callAll(HOOKS.ACTIVITY_AVAILABILITY_CHANGED, Object.freeze({ disabledTypes }));
+      }
     });
   }
 

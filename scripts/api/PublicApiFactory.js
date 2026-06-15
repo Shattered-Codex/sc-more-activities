@@ -12,6 +12,7 @@ export class PublicApiFactory {
         dnd5eAdapter: true,
         activityCreation: true,
         activityCatalog: true,
+        activityAvailability: true,
         migration: false
       }),
       hooks: Object.freeze({ ...HOOKS }),

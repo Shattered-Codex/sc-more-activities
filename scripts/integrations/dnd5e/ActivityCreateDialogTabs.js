@@ -43,7 +43,14 @@ export class ActivityCreateDialogTabs {
 
     const items = Array.from(list.querySelectorAll("li"))
       .map((element) => ({ element, radio: element.querySelector('input[name="type"]') }))
-      .filter(({ radio }) => radio?.value);
+      .filter(({ radio }) => radio?.value)
+      .filter((item) => {
+        if (ActivityCreateDialogTabs.#isTypeEnabled(item.radio.value)) {
+          return true;
+        }
+        item.element.remove();
+        return false;
+      });
     if (items.length < 2) {
       return;
     }
@@ -184,7 +191,13 @@ export class ActivityCreateDialogTabs {
       return true;
     }
 
-    return Boolean(root.querySelector('input[name="type"][value="sc-macro"], input[name="type"][value="sc-sound"]'));
+    const registeredTypes = new Set(
+      (ActivityCreateDialogTabs.#activitiesApi?.listTypes?.() ?? [])
+        .map((summary) => summary.type)
+        .filter(Boolean)
+    );
+    return Array.from(root.querySelectorAll('input[name="type"]'))
+      .some((input) => registeredTypes.has(input.value));
   }
 
   static #buildGroups(items) {
@@ -195,6 +208,10 @@ export class ActivityCreateDialogTabs {
     const groups = new Map();
 
     for (const item of items) {
+      if (!ActivityCreateDialogTabs.#isTypeEnabled(item.radio.value)) {
+        continue;
+      }
+
       const summary = summaries.get(item.radio.value)
         ?? ActivityCreateDialogTabs.#getConfigSummary(item.radio.value);
       const group = ActivityCreateDialogTabs.#getGroup(summary);
@@ -231,6 +248,10 @@ export class ActivityCreateDialogTabs {
       ui,
       source: metadata.source ?? "external"
     };
+  }
+
+  static #isTypeEnabled(type) {
+    return ActivityCreateDialogTabs.#activitiesApi?.isTypeEnabled?.(type) !== false;
   }
 
   static #getGroup(summary) {

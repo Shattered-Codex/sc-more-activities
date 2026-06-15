@@ -1,3 +1,4 @@
+import { ActivityAvailability } from "../../availability/ActivityAvailability.js";
 import { ACTIVITY_TYPES } from "../ActivityTypes.js";
 import { ScMacroActivityData } from "./ScMacroActivityData.js";
 import { ScMacroActivityService } from "./ScMacroActivityService.js";
@@ -21,6 +22,10 @@ export class ScMacroActivity extends dnd5e.documents.activity.ActivityMixin(ScMa
   }
 
   async use(usage = {}, dialog = {}, message = {}) {
+    if (!ActivityAvailability.canUseType(ACTIVITY_TYPES.MACRO, "SCMOREACTIVITIES.Activities.ScMacro.Title")) {
+      return undefined;
+    }
+
     const results = await super.use(usage, dialog, message);
     if (results === undefined) {
       return results;

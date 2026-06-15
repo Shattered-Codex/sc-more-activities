@@ -1,3 +1,8 @@
+import { ActivityAvailability } from "../../availability/ActivityAvailability.js";
+import { Constants } from "../../constants/Constants.js";
+
+const AVAILABILITY_GUARD_ATTR = "__scMoreActivitiesAvailabilityGuard";
+
 export class Dnd5eActivityTypeRegistrar {
   get activityTypes() {
     return globalThis.CONFIG?.DND5E?.activityTypes ?? null;
@@ -25,8 +30,9 @@ export class Dnd5eActivityTypeRegistrar {
       return Dnd5eActivityTypeRegistrar.#failure(definition, "dnd5e-type-conflict", `CONFIG.DND5E.activityTypes already contains ${definition.type}.`);
     }
 
+    const guardedDocumentClass = Dnd5eActivityTypeRegistrar.#installAvailabilityGuard(definition);
     const config = {
-      documentClass: definition.documentClass,
+      documentClass: guardedDocumentClass,
       typeLabel: definition.label,
       configurable: definition.configurable !== false,
       scMoreActivities: {
@@ -36,15 +42,15 @@ export class Dnd5eActivityTypeRegistrar {
         ui: definition.ui ?? null
       }
     };
-    if (definition.sheetClass ?? definition.documentClass?.metadata?.sheetClass) {
-      config.sheetClass = definition.sheetClass ?? definition.documentClass.metadata.sheetClass;
+    if (definition.sheetClass ?? guardedDocumentClass?.metadata?.sheetClass) {
+      config.sheetClass = definition.sheetClass ?? guardedDocumentClass.metadata.sheetClass;
     }
     if (definition.dataModel) {
       config.dataModel = definition.dataModel;
     }
 
     try {
-      definition.documentClass.localize();
+      guardedDocumentClass.localize();
       activityTypes[definition.type] = config;
     } catch (error) {
       return Dnd5eActivityTypeRegistrar.#failure(
@@ -61,6 +67,96 @@ export class Dnd5eActivityTypeRegistrar {
       source: definition.source,
       status: "flushed"
     });
+  }
+
+  static #installAvailabilityGuard(definition) {
+    const documentClass = definition.documentClass;
+    if (documentClass?.[AVAILABILITY_GUARD_ATTR]?.type === definition.type) {
+      return documentClass;
+    }
+
+    const type = definition.type;
+    const originalAvailableForItem = documentClass.availableForItem;
+    const originalPreCreate = documentClass.prototype?._preCreate;
+    const originalCanConfigure = Dnd5eActivityTypeRegistrar.#getPropertyDescriptor(documentClass.prototype, "canConfigure");
+    const originalCanUse = Dnd5eActivityTypeRegistrar.#getPropertyDescriptor(documentClass.prototype, "canUse");
+
+    documentClass.availableForItem = function availableForItemWithScMoreActivitiesAvailability(...args) {
+      return ActivityAvailability.isTypeEnabled(type) && originalAvailableForItem.call(this, ...args);
+    };
+
+    if (documentClass.prototype) {
+      Object.defineProperty(documentClass.prototype, "canConfigure", {
+        configurable: true,
+        get() {
+          const original = Dnd5eActivityTypeRegistrar.#readDescriptor(originalCanConfigure, this, true);
+          if (!original) {
+            return false;
+          }
+          return ActivityAvailability.isTypeEnabled(type) || game?.user?.isGM === true;
+        }
+      });
+
+      Object.defineProperty(documentClass.prototype, "canUse", {
+        configurable: true,
+        get() {
+          return ActivityAvailability.isTypeEnabled(type)
+            && Dnd5eActivityTypeRegistrar.#readDescriptor(originalCanUse, this, true);
+        }
+      });
+
+      documentClass.prototype._preCreate = async function preCreateWithScMoreActivitiesAvailability(...args) {
+        if (!ActivityAvailability.isTypeEnabled(type)) {
+          ui?.notifications?.warn?.(Constants.format(
+            "SCMOREACTIVITIES.Warning.ActivityTypeDisabled",
+            { type: Constants.localize(definition.label, type) },
+            `${Constants.localize(definition.label, type)} is disabled by the GM.`
+          ));
+          return false;
+        }
+
+        return typeof originalPreCreate === "function"
+          ? originalPreCreate.call(this, ...args)
+          : true;
+      };
+    }
+
+    Object.defineProperty(documentClass, AVAILABILITY_GUARD_ATTR, {
+      configurable: true,
+      value: Object.freeze({
+        type,
+        originalAvailableForItem,
+        originalCanConfigure,
+        originalCanUse,
+        originalPreCreate
+      })
+    });
+    return documentClass;
+  }
+
+  static #getPropertyDescriptor(prototype, property) {
+    let cursor = prototype;
+    while (cursor) {
+      const descriptor = Object.getOwnPropertyDescriptor(cursor, property);
+      if (descriptor) {
+        return descriptor;
+      }
+      cursor = Object.getPrototypeOf(cursor);
+    }
+    return null;
+  }
+
+  static #readDescriptor(descriptor, target, fallback) {
+    if (typeof descriptor?.get === "function") {
+      return descriptor.get.call(target);
+    }
+    if (typeof descriptor?.value === "function") {
+      return descriptor.value.call(target);
+    }
+    if (descriptor && "value" in descriptor) {
+      return descriptor.value;
+    }
+    return fallback;
   }
 
   static #failure(definition, reason, message) {

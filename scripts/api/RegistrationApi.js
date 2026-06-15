@@ -1,3 +1,5 @@
+import { ActivityAvailability } from "../availability/ActivityAvailability.js";
+
 export class RegistrationApi {
   #registry;
 
@@ -19,6 +21,63 @@ export class RegistrationApi {
 
   hasType = (type) => {
     return this.#registry.hasType(type);
+  };
+
+  listTypeAvailability = () => {
+    const disabledMap = ActivityAvailability.getDisabledMap();
+    return Object.freeze(this.#registry.listTypes().map((summary) => Object.freeze({
+      type: summary.type,
+      label: summary.label,
+      moduleId: summary.moduleId,
+      category: summary.category,
+      scope: summary.ui?.scope ?? summary.scope ?? "external",
+      enabled: disabledMap[summary.type] !== true,
+      disabled: disabledMap[summary.type] === true
+    })));
+  };
+
+  getTypeAvailability = (type) => {
+    if (!this.#registry.hasType(type)) {
+      return RegistrationApi.#failure(type, "unregistered-type", `Activity type ${type} is not registered with sc-more-activities.`);
+    }
+
+    const enabled = ActivityAvailability.isTypeEnabled(type);
+    return Object.freeze({
+      ok: true,
+      type,
+      registered: true,
+      enabled,
+      disabled: !enabled,
+      status: enabled ? "enabled" : "disabled"
+    });
+  };
+
+  listEnabledTypes = () => {
+    return Object.freeze(this.#registry.listTypes()
+      .filter((summary) => ActivityAvailability.isTypeEnabled(summary.type)));
+  };
+
+  isTypeEnabled = (type) => {
+    if (!this.#registry.hasType(type)) {
+      return true;
+    }
+    return ActivityAvailability.isTypeEnabled(type);
+  };
+
+  setTypeEnabled = async (type, enabled = true) => {
+    if (!this.#registry.hasType(type)) {
+      return RegistrationApi.#failure(type, "unregistered-type", `Activity type ${type} is not registered with sc-more-activities.`);
+    }
+
+    return ActivityAvailability.setTypeEnabled(type, enabled === true);
+  };
+
+  enableType = async (type) => {
+    return this.setTypeEnabled(type, true);
+  };
+
+  disableType = async (type) => {
+    return this.setTypeEnabled(type, false);
   };
 
   getRegistrationReport = () => {
@@ -49,6 +108,10 @@ export class RegistrationApi {
 
     if (!this.#registry.hasType(type)) {
       return RegistrationApi.#failure(type, "unregistered-type", `Activity type ${type} is not registered with sc-more-activities.`);
+    }
+
+    if (!this.isTypeEnabled(type)) {
+      return RegistrationApi.#failure(type, "activity-type-disabled", `Activity type ${type} is disabled by the GM.`);
     }
 
     if (!globalThis.CONFIG?.DND5E?.activityTypes?.[type]) {
@@ -82,6 +145,13 @@ export class RegistrationApi {
       listTypes: this.listTypes,
       getType: this.getType,
       hasType: this.hasType,
+      listTypeAvailability: this.listTypeAvailability,
+      getTypeAvailability: this.getTypeAvailability,
+      listEnabledTypes: this.listEnabledTypes,
+      isTypeEnabled: this.isTypeEnabled,
+      setTypeEnabled: this.setTypeEnabled,
+      enableType: this.enableType,
+      disableType: this.disableType,
       getRegistrationReport: this.getRegistrationReport,
       getLifecycleState: this.getLifecycleState,
       isRegistryLocked: this.isRegistryLocked,

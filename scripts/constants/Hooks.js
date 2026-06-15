@@ -5,6 +5,7 @@ export const HOOKS = Object.freeze({
   REGISTRY_LOCKED: `${Constants.MODULE_ID}.registryLocked`,
   API_READY: `${Constants.MODULE_ID}.apiReady`,
   ACTIVITY_REGISTERED: `${Constants.MODULE_ID}.activityRegistered`,
+  ACTIVITY_AVAILABILITY_CHANGED: `${Constants.MODULE_ID}.activityAvailabilityChanged`,
   ACTIVITY_USE_START: `${Constants.MODULE_ID}.activityUseStart`,
   ACTIVITY_USE_COMPLETE: `${Constants.MODULE_ID}.activityUseComplete`,
   ACTIVITY_USE_ERROR: `${Constants.MODULE_ID}.activityUseError`

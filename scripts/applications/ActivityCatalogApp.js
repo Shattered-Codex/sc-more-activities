@@ -21,6 +21,8 @@ const FALLBACK_REPORT = Object.freeze({
 });
 
 export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2) {
+  #activeCatalogTab = "registered";
+
   static DEFAULT_OPTIONS = {
     id: `${Constants.MODULE_ID}-activity-catalog`,
     classes: ["sc-more-activities", "sc-ma-activity-catalog"],
@@ -78,7 +80,8 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
     const moduleApi = game.modules.get(Constants.MODULE_ID)?.api ?? null;
     const activitiesApi = moduleApi?.activities ?? null;
     const report = ActivityCatalogApp.#normalizeReport(activitiesApi?.getRegistrationReport?.());
-    const registered = ActivityCatalogApp.#buildRegisteredEntries(activitiesApi?.listTypes?.() ?? [], report);
+    const availability = ActivityCatalogApp.#buildAvailabilityMap(activitiesApi?.listTypeAvailability?.());
+    const registered = ActivityCatalogApp.#buildRegisteredEntries(activitiesApi?.listTypes?.() ?? [], report, availability);
     const rejected = ActivityCatalogApp.#buildDiagnosticEntries(report.rejected, "rejected");
     const warnings = ActivityCatalogApp.#buildDiagnosticEntries(report.warnings, "warning");
     const rows = [...registered, ...rejected, ...warnings];
@@ -95,9 +98,20 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
       registered,
       rejected,
       warnings,
+      tableTabs: ActivityCatalogApp.#buildTableTabs({
+        registered: registered.length,
+        rejected: rejected.length,
+        warnings: warnings.length
+      }, this.#activeCatalogTab),
+      tabStates: {
+        registered: this.#activeCatalogTab === "registered",
+        rejected: this.#activeCatalogTab === "rejected",
+        warnings: this.#activeCatalogTab === "warnings"
+      },
       filters: {
         categories: ActivityCatalogApp.#buildCategoryOptions(rows),
-        statuses: ActivityCatalogApp.#buildStatusOptions()
+        statuses: ActivityCatalogApp.#buildStatusOptions(),
+        availability: ActivityCatalogApp.#buildAvailabilityOptions()
       },
       diagnostics: {
         duplicates: report.duplicates.length,
@@ -134,6 +148,8 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
     });
 
     this.#bindFilters();
+    this.#bindCatalogTabs();
+    this.#bindAvailabilityToggles();
   }
 
   async #copyReport() {
@@ -157,6 +173,7 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
     const search = root?.querySelector('[name="sc-ma-catalog-search"]');
     const category = root?.querySelector('[name="sc-ma-catalog-category"]');
     const status = root?.querySelector('[name="sc-ma-catalog-status"]');
+    const availability = root?.querySelector('[name="sc-ma-catalog-availability"]');
     if (search) {
       search.value = "";
     }
@@ -165,6 +182,9 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
     }
     if (status) {
       status.value = "all";
+    }
+    if (availability) {
+      availability.value = "all";
     }
     this.#applyFilters();
   }
@@ -179,6 +199,50 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
     this.#applyFilters();
   }
 
+  #bindCatalogTabs() {
+    const root = this.element;
+    const tabs = Array.from(root?.querySelectorAll("[data-catalog-tab]") ?? []);
+    for (const [index, tab] of tabs.entries()) {
+      tab.addEventListener("click", (event) => {
+        event.preventDefault();
+        this.#activateCatalogTab(tab.dataset.catalogTab);
+      });
+      tab.addEventListener("keydown", (event) => {
+        const nextIndex = ActivityCatalogApp.#getTabKeyboardTargetIndex(event, tabs, index);
+        if (nextIndex === null) {
+          return;
+        }
+
+        event.preventDefault();
+        tabs[nextIndex].focus();
+        this.#activateCatalogTab(tabs[nextIndex].dataset.catalogTab);
+      });
+    }
+  }
+
+  #activateCatalogTab(tabKey) {
+    const root = this.element;
+    if (!root || !tabKey) {
+      return;
+    }
+
+    this.#activeCatalogTab = tabKey;
+    for (const tab of root.querySelectorAll("[data-catalog-tab]")) {
+      const active = tab.dataset.catalogTab === tabKey;
+      tab.classList.toggle("is-active", active);
+      tab.setAttribute("aria-selected", String(active));
+      tab.tabIndex = active ? 0 : -1;
+    }
+
+    for (const panel of root.querySelectorAll("[data-catalog-panel]")) {
+      const active = panel.dataset.catalogPanel === tabKey;
+      panel.classList.toggle("is-active", active);
+      panel.hidden = !active;
+      panel.setAttribute("aria-hidden", String(!active));
+    }
+    this.#applyFilters();
+  }
+
   #applyFilters() {
     const root = this.element;
     if (!root) {
@@ -188,18 +252,24 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
     const search = String(root.querySelector('[name="sc-ma-catalog-search"]')?.value ?? "").trim().toLowerCase();
     const category = root.querySelector('[name="sc-ma-catalog-category"]')?.value ?? "all";
     const status = root.querySelector('[name="sc-ma-catalog-status"]')?.value ?? "all";
+    const availability = root.querySelector('[name="sc-ma-catalog-availability"]')?.value ?? "all";
 
     for (const row of root.querySelectorAll("[data-catalog-row]")) {
       const rowSearch = row.dataset.search ?? row.textContent?.toLowerCase() ?? "";
       const rowCategory = row.dataset.category ?? "";
       const rowKind = row.dataset.kind ?? "";
       const rowStatus = row.dataset.status ?? "";
+      const rowAvailability = row.dataset.availability ?? "";
       const matchesSearch = !search || rowSearch.includes(search);
       const matchesCategory = category === "all" || rowCategory === category;
       const matchesStatus = status === "all"
+        || rowKind !== "registered"
         || rowStatus === status
         || (status === "registered" && rowKind === "registered");
-      row.hidden = !(matchesSearch && matchesCategory && matchesStatus);
+      const matchesAvailability = availability === "all"
+        || rowKind !== "registered"
+        || rowAvailability === availability;
+      row.hidden = !(matchesSearch && matchesCategory && matchesStatus && matchesAvailability);
     }
 
     for (const table of root.querySelectorAll("[data-catalog-table]")) {
@@ -226,15 +296,71 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
     };
   }
 
-  static #buildRegisteredEntries(types, report) {
+  #bindAvailabilityToggles() {
+    const root = this.element;
+    const controls = root?.querySelectorAll('[data-action="toggle-availability"]') ?? [];
+    for (const control of controls) {
+      control.addEventListener("change", async (event) => {
+        await this.#toggleAvailability(event.currentTarget);
+      });
+    }
+  }
+
+  async #toggleAvailability(control) {
+    const type = control?.dataset?.activityType;
+    const label = control?.dataset?.activityLabel ?? type;
+    const enabled = control?.checked === true;
+    const activitiesApi = game.modules.get(Constants.MODULE_ID)?.api?.activities;
+    if (!type || typeof activitiesApi?.setTypeEnabled !== "function") {
+      ui.notifications.warn(Constants.localize(
+        "SCMOREACTIVITIES.Catalog.Notifications.ActivityToggleFailed",
+        "Could not update activity availability."
+      ));
+      this.render(true);
+      return;
+    }
+
+    control.disabled = true;
+    let result;
+    try {
+      result = await activitiesApi.setTypeEnabled(type, enabled);
+    } catch (error) {
+      console.warn(`[${Constants.MODULE_ID}] Could not update activity availability.`, error);
+      ui.notifications.warn(Constants.localize(
+        "SCMOREACTIVITIES.Catalog.Notifications.ActivityToggleFailed",
+        "Could not update activity availability."
+      ));
+      this.render(true);
+      return;
+    }
+
+    if (!result?.ok) {
+      ui.notifications.warn(result?.message ?? Constants.localize(
+        "SCMOREACTIVITIES.Catalog.Notifications.ActivityToggleFailed",
+        "Could not update activity availability."
+      ));
+      this.render(true);
+      return;
+    }
+
+    const messageKey = enabled
+      ? "SCMOREACTIVITIES.Catalog.Notifications.ActivityEnabled"
+      : "SCMOREACTIVITIES.Catalog.Notifications.ActivityDisabled";
+    ui.notifications.info(Constants.format(messageKey, { label }, enabled
+      ? `${label} enabled for activity creation and use.`
+      : `${label} disabled for activity creation and use.`));
+    this.render(true);
+  }
+
+  static #buildRegisteredEntries(types, report, availability) {
     const flushedTypes = new Set(report.flushed.map((entry) => entry.type).filter(Boolean));
     const warningCounts = ActivityCatalogApp.#countByType(report.warnings);
     return Array.from(types ?? [])
-      .map((entry) => ActivityCatalogApp.#buildRegisteredEntry(entry, flushedTypes, warningCounts))
+      .map((entry) => ActivityCatalogApp.#buildRegisteredEntry(entry, flushedTypes, warningCounts, availability))
       .sort((left, right) => left.category.localeCompare(right.category, game.i18n.lang) || left.type.localeCompare(right.type, game.i18n.lang));
   }
 
-  static #buildRegisteredEntry(entry, flushedTypes, warningCounts) {
+  static #buildRegisteredEntry(entry, flushedTypes, warningCounts, availability) {
     const ui = entry.ui ?? {};
     const category = entry.category ?? "uncategorized";
     const status = flushedTypes.has(entry.type) ? "flushed" : "registered";
@@ -243,6 +369,11 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
     const groupLabel = ActivityCatalogApp.#resolveLabel(ui.groupLabel, ui.groupId ?? ui.scope ?? "");
     const icon = entry.icon ?? "fa-solid fa-puzzle-piece";
     const warningCount = warningCounts.get(entry.type) ?? 0;
+    const availabilityEntry = availability.get(entry.type);
+    const availabilityState = ActivityCatalogApp.#availabilityState(status, availabilityEntry);
+    const enabled = availabilityState === "active";
+    const availabilityLabel = ActivityCatalogApp.#availabilityLabel(availabilityState);
+    const availabilityHint = ActivityCatalogApp.#availabilityHint(availabilityState);
 
     return {
       type: entry.type,
@@ -257,10 +388,17 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
       status,
       statusLabel: ActivityCatalogApp.#statusLabel(status),
       statusClass: `sc-ma-status--${status}`,
+      availability: availabilityState,
+      availabilityLabel,
+      availabilityHint,
+      availabilityActionLabel: ActivityCatalogApp.#availabilityActionLabel(enabled, label),
+      availabilityClass: `sc-ma-status--${availabilityState}`,
+      canToggleAvailability: status === "flushed" && game.user?.isGM === true,
+      enabled,
       icon,
       iconIsPath: ActivityCatalogApp.#isIconPath(icon),
       warningCount,
-      searchText: ActivityCatalogApp.#searchText([entry.type, label, hint, entry.moduleId, category, ui.scope, groupLabel, entry.source])
+      searchText: ActivityCatalogApp.#searchText([entry.type, label, hint, entry.moduleId, category, ui.scope, groupLabel, entry.source, availabilityLabel])
     };
   }
 
@@ -323,6 +461,7 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
   static #capabilityLabel(key) {
     const labels = {
       activityCatalog: Constants.localize("SCMOREACTIVITIES.Catalog.Capabilities.ActivityCatalog", "Activity Catalog"),
+      activityAvailability: Constants.localize("SCMOREACTIVITIES.Catalog.Capabilities.ActivityAvailability", "Activity Availability"),
       activityCreation: Constants.localize("SCMOREACTIVITIES.Catalog.Capabilities.ActivityCreation", "Activity Creation"),
       dnd5eAdapter: Constants.localize("SCMOREACTIVITIES.Catalog.Capabilities.Dnd5eAdapter", "D&D 5e Adapter"),
       migration: Constants.localize("SCMOREACTIVITIES.Catalog.Capabilities.Migration", "Migration"),
@@ -345,9 +484,48 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
     return [
       { value: "all", label: Constants.localize("SCMOREACTIVITIES.Catalog.Filters.Status.All", "All statuses") },
       { value: "registered", label: Constants.localize("SCMOREACTIVITIES.Catalog.Filters.Status.Registered", "Registered") },
-      { value: "flushed", label: Constants.localize("SCMOREACTIVITIES.Catalog.Filters.Status.Flushed", "D&D ready") },
-      { value: "rejected", label: Constants.localize("SCMOREACTIVITIES.Catalog.Filters.Status.Rejected", "Rejected") },
-      { value: "warning", label: Constants.localize("SCMOREACTIVITIES.Catalog.Filters.Status.Warning", "Warning") }
+      { value: "flushed", label: Constants.localize("SCMOREACTIVITIES.Catalog.Filters.Status.Flushed", "D&D ready") }
+    ];
+  }
+
+  static #buildTableTabs(counts, activeTab) {
+    return [
+      {
+        key: "registered",
+        panelId: "sc-ma-catalog-panel-registered",
+        tabId: "sc-ma-catalog-tab-registered",
+        icon: "fa-solid fa-list-check",
+        label: Constants.localize("SCMOREACTIVITIES.Catalog.Sections.Registered", "Registered Activities"),
+        count: counts.registered,
+        active: activeTab === "registered"
+      },
+      {
+        key: "rejected",
+        panelId: "sc-ma-catalog-panel-rejected",
+        tabId: "sc-ma-catalog-tab-rejected",
+        icon: "fa-solid fa-triangle-exclamation",
+        label: Constants.localize("SCMOREACTIVITIES.Catalog.Sections.Rejected", "Rejected Registrations"),
+        count: counts.rejected,
+        active: activeTab === "rejected"
+      },
+      {
+        key: "warnings",
+        panelId: "sc-ma-catalog-panel-warnings",
+        tabId: "sc-ma-catalog-tab-warnings",
+        icon: "fa-solid fa-circle-exclamation",
+        label: Constants.localize("SCMOREACTIVITIES.Catalog.Sections.Warnings", "Warnings"),
+        count: counts.warnings,
+        active: activeTab === "warnings"
+      }
+    ];
+  }
+
+  static #buildAvailabilityOptions() {
+    return [
+      { value: "all", label: Constants.localize("SCMOREACTIVITIES.Catalog.Filters.Availability.All", "All availability") },
+      { value: "active", label: Constants.localize("SCMOREACTIVITIES.Catalog.Filters.Availability.Active", "Active") },
+      { value: "disabled", label: Constants.localize("SCMOREACTIVITIES.Catalog.Filters.Availability.Disabled", "Disabled") },
+      { value: "unavailable", label: Constants.localize("SCMOREACTIVITIES.Catalog.Filters.Availability.Unavailable", "Unavailable") }
     ];
   }
 
@@ -359,6 +537,45 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
       warning: Constants.localize("SCMOREACTIVITIES.Catalog.Status.Warning", "Warning")
     };
     return labels[status] ?? status;
+  }
+
+  static #availabilityState(status, availabilityEntry) {
+    if (status !== "flushed") {
+      return "unavailable";
+    }
+    return availabilityEntry?.enabled === false ? "disabled" : "active";
+  }
+
+  static #availabilityLabel(status) {
+    const labels = {
+      active: Constants.localize("SCMOREACTIVITIES.Catalog.Availability.Active", "Active"),
+      disabled: Constants.localize("SCMOREACTIVITIES.Catalog.Availability.Disabled", "Disabled"),
+      unavailable: Constants.localize("SCMOREACTIVITIES.Catalog.Availability.Unavailable", "Unavailable")
+    };
+    return labels[status] ?? status;
+  }
+
+  static #availabilityHint(status) {
+    const labels = {
+      active: Constants.localize("SCMOREACTIVITIES.Catalog.Availability.ActiveHint", "Available for activity creation and use."),
+      disabled: Constants.localize("SCMOREACTIVITIES.Catalog.Availability.DisabledHint", "Blocked from activity creation and use."),
+      unavailable: Constants.localize("SCMOREACTIVITIES.Catalog.Availability.UnavailableHint", "Only D&D-ready activity types can be enabled or disabled.")
+    };
+    return labels[status] ?? "";
+  }
+
+  static #availabilityActionLabel(enabled, label) {
+    return enabled
+      ? Constants.format("SCMOREACTIVITIES.Catalog.Availability.Disable", { label }, `Disable ${label}`)
+      : Constants.format("SCMOREACTIVITIES.Catalog.Availability.Enable", { label }, `Enable ${label}`);
+  }
+
+  static #buildAvailabilityMap(entries) {
+    return new Map(
+      ActivityCatalogApp.#cloneArray(entries)
+        .filter((entry) => entry.type)
+        .map((entry) => [entry.type, entry])
+    );
   }
 
   static #countByType(entries) {
@@ -397,6 +614,23 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
 
   static #isIconPath(icon) {
     return String(icon ?? "").includes("/") || /\.(?:avif|gif|jpe?g|png|svg|webp)$/i.test(String(icon ?? ""));
+  }
+
+  static #getTabKeyboardTargetIndex(event, tabs, currentIndex) {
+    switch (event.key) {
+      case "ArrowRight":
+      case "ArrowDown":
+        return (currentIndex + 1) % tabs.length;
+      case "ArrowLeft":
+      case "ArrowUp":
+        return (currentIndex - 1 + tabs.length) % tabs.length;
+      case "Home":
+        return 0;
+      case "End":
+        return tabs.length - 1;
+      default:
+        return null;
+    }
   }
 
   static #cloneArray(value) {

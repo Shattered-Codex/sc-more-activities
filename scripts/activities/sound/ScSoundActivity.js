@@ -1,3 +1,4 @@
+import { ActivityAvailability } from "../../availability/ActivityAvailability.js";
 import { ACTIVITY_TYPES } from "../ActivityTypes.js";
 import { ScSoundActivityData } from "./ScSoundActivityData.js";
 import { ScSoundActivityService } from "./ScSoundActivityService.js";
@@ -21,6 +22,10 @@ export class ScSoundActivity extends dnd5e.documents.activity.ActivityMixin(ScSo
   }
 
   async use(usage = {}, dialog = {}, message = {}) {
+    if (!ActivityAvailability.canUseType(ACTIVITY_TYPES.SOUND, "SCMOREACTIVITIES.Activities.ScSound.Title")) {
+      return undefined;
+    }
+
     const results = await super.use(usage, dialog, message);
     if (results === undefined) {
       return results;

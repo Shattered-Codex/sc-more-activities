@@ -7,6 +7,8 @@ This module is currently in Phase 5 of implementation. The current build is an
 installable module shell with localization, styles, settings, documentation and
 support launchers, lifecycle logging, an activity registration API, a `dnd5e`
 adapter, the first built-in activity types, and a GM-facing activity catalog.
+GMs can enable or disable registered activity types from the catalog without
+removing their `dnd5e` registrations.
 
 ## Current Scope
 
@@ -27,6 +29,7 @@ adapter, the first built-in activity types, and a GM-facing activity catalog.
   registry/config metadata-provided external groups, replacing separate lists
   with group panels in a slightly top-offset icon rail.
 - Activity catalog and diagnostics app available from module settings.
+- GM activity availability controls for creation and use.
 
 Migration tools, legacy type aliases, and richer activity creation catalog
 workflows are intentionally not implemented in this phase.
@@ -75,6 +78,7 @@ Current capabilities:
 - `dnd5eAdapter: true`
 - `activityCreation: true`
 - `activityCatalog: true`
+- `activityAvailability: true`
 - `migration: false`
 
 ## Architecture Plan
@@ -117,5 +121,8 @@ Phase 4 manual smoke checks:
   an icon-only `tabs-right` rail placed slightly below the dialog top.
 - Activity catalog opens from module settings and shows registered, rejected,
   warning, lifecycle, and capability diagnostics with search and filters.
+- Catalog availability switches hide disabled activity types from creation and
+  item use choices, hide disabled existing activities from player sheets, and
+  block direct creation/use with a localized warning.
 - With `sc-conditional-activities` active, a false condition blocks both
   activities before sound or macro execution.
