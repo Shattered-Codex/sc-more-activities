@@ -1,0 +1,16 @@
+{
+  "SCMOREACTIVITIES.Module.Title": "SC - More Activities",
+  "SCMOREACTIVITIES.Module.Description": "A Shattered Codex activity platform for the dnd5e system.",
+  "SCMOREACTIVITIES.Settings.DebugLogging.Name": "Debug logging",
+  "SCMOREACTIVITIES.Settings.DebugLogging.Hint": "Log SC - More Activities lifecycle and diagnostic messages to the browser console.",
+  "SCMOREACTIVITIES.Settings.SupportMenu.Name": "Support the developer",
+  "SCMOREACTIVITIES.Settings.SupportMenu.Label": "Patreon support",
+  "SCMOREACTIVITIES.Settings.SupportMenu.Hint": "Support Shattered Codex development on Patreon.",
+  "SCMOREACTIVITIES.Settings.DocumentationMenu.Name": "Documentation",
+  "SCMOREACTIVITIES.Settings.DocumentationMenu.Label": "Open wiki",
+  "SCMOREACTIVITIES.Settings.DocumentationMenu.Hint": "Open the SC - More Activities documentation wiki.",
+  "SCMOREACTIVITIES.Warning.UnsupportedSystem": "SC - More Activities only supports the dnd5e system.",
+  "SCMOREACTIVITIES.Diagnostics.Init": "Initializing module shell.",
+  "SCMOREACTIVITIES.Diagnostics.Setup": "Setup complete.",
+  "SCMOREACTIVITIES.Diagnostics.Ready": "Ready."
+}

@@ -1,0 +1,55 @@
+.sc-more-activities {
+  --sc-ma-bg-base: #0d1115;
+  --sc-ma-bg-panel: #161923;
+  --sc-ma-bg-panel-soft: #1d1f2b;
+  --sc-ma-bg-card: #232536;
+  --sc-ma-border: #3f4457;
+  --sc-ma-border-soft: #323749;
+  --sc-ma-accent: #39f08c;
+  --sc-ma-accent-warm: #d79a3f;
+  --sc-ma-danger: #ff5f79;
+  --sc-ma-text: #ddd8cd;
+  --sc-ma-text-dim: #aba494;
+  --sc-ma-text-strong: #f0ecde;
+  --sc-ma-space-1: 0.25rem;
+  --sc-ma-space-2: 0.5rem;
+  --sc-ma-space-3: 0.75rem;
+  --sc-ma-space-4: 1rem;
+  color: var(--sc-ma-text);
+}
+
+.sc-more-activities button,
+.sc-more-activities input,
+.sc-more-activities select,
+.sc-more-activities textarea {
+  font-family: inherit;
+}
+
+.sc-more-activities .sc-ma-panel {
+  background: var(--sc-ma-bg-panel);
+  border: 1px solid var(--sc-ma-border);
+  border-radius: 8px;
+}
+
+.sc-more-activities .sc-ma-muted {
+  color: var(--sc-ma-text-dim);
+}
+
+.sc-ma-support-button i,
+.sc-ma-docs-button i {
+  margin-inline-end: 0.35rem;
+}
+
+.sc-ma-docs-setting-row button,
+.sc-ma-support-button,
+.sc-ma-docs-button {
+  min-height: 1.75rem;
+}
+
+.sc-ma-support-button {
+  --button-hover-border-color: var(--color-warm-2, #bc4b5d);
+}
+
+.sc-ma-docs-button {
+  --button-hover-border-color: var(--color-level-success, #39f08c);
+}
