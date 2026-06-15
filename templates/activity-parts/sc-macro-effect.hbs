@@ -1,0 +1,67 @@
+<section class="tab activity-{{ tab.id }} {{ tab.cssClass }}" data-tab="{{ tab.id }}" data-group="{{ tab.group }}">
+  {{#if appliedEffects}}{{> "systems/dnd5e/templates/activity/parts/activity-effects.hbs" }}{{/if}}
+
+  <fieldset>
+    <legend>{{ localize "SCMOREACTIVITIES.Activities.ScMacro.Sections.Configuration" }}</legend>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScMacro.Fields.ExecutionMode.Label" }}</label>
+      <div class="form-fields">
+        <select name="execution.mode">
+          {{ selectOptions executionModeOptions selected=executionMode valueAttr="value" labelAttr="label" }}
+        </select>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScMacro.Fields.ExecutionMode.Hint" }}</p>
+    </div>
+
+    {{#if isWorldMode}}
+      <div class="form-group">
+        <label>{{ localize "SCMOREACTIVITIES.Activities.ScMacro.Fields.WorldMacro.Label" }}</label>
+        <div class="form-fields">
+          <select name="world.macroUuid">
+            <option value="">{{ localize "SCMOREACTIVITIES.Activities.ScMacro.Fields.WorldMacro.Placeholder" }}</option>
+            {{#each availableMacros as |macro|}}
+              <option value="{{ macro.uuid }}" {{#if macro.selected}}selected{{/if}}>{{ macro.name }} ({{ macro.type }})</option>
+            {{/each}}
+          </select>
+        </div>
+        <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScMacro.Fields.WorldMacro.Hint" }}</p>
+      </div>
+    {{/if}}
+
+    {{#if isInlineMode}}
+      <div class="form-group stacked">
+        <label>{{ localize "SCMOREACTIVITIES.Activities.ScMacro.Fields.InlineCode.Label" }}</label>
+        {{#if canEditInlineCode}}
+          {{#if hasCodeMirrorEditor}}
+            <code-mirror
+              class="sc-ma-code-editor"
+              name="inline.code"
+              language="javascript"
+              indent="2"
+              aria-label="{{ inlineCodeLabel }}"
+            >{{ inlineCode }}</code-mirror>
+          {{else}}
+            <textarea
+              class="sc-ma-code-editor"
+              name="inline.code"
+              rows="10"
+              spellcheck="false"
+              aria-label="{{ inlineCodeLabel }}"
+            >{{ inlineCode }}</textarea>
+          {{/if}}
+        {{else}}
+          <textarea
+            class="sc-ma-code-editor"
+            name="inline.code"
+            rows="10"
+            spellcheck="false"
+            aria-label="{{ inlineCodeLabel }}"
+            disabled
+          >{{ inlineCode }}</textarea>
+        {{/if}}
+        <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScMacro.Fields.InlineCode.Hint" }}</p>
+      </div>
+    {{/if}}
+  </fieldset>
+</section>

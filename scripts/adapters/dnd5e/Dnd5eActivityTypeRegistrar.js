@@ -28,7 +28,13 @@ export class Dnd5eActivityTypeRegistrar {
     const config = {
       documentClass: definition.documentClass,
       typeLabel: definition.label,
-      configurable: definition.configurable !== false
+      configurable: definition.configurable !== false,
+      scMoreActivities: {
+        moduleId: definition.moduleId,
+        source: definition.source,
+        category: definition.category,
+        ui: definition.ui ?? null
+      }
     };
     if (definition.sheetClass ?? definition.documentClass?.metadata?.sheetClass) {
       config.sheetClass = definition.sheetClass ?? definition.documentClass.metadata.sheetClass;

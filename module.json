@@ -15,6 +15,80 @@
     "minimum": "13",
     "verified": "14"
   },
+  "documentTypes": {
+    "Item": {
+      "weapon": {
+        "filePathFields": {
+          "activities.*.audio.source": [
+            "AUDIO"
+          ]
+        },
+        "gmOnlyFields": [
+          "activities.*.inline.code"
+        ]
+      },
+      "equipment": {
+        "filePathFields": {
+          "activities.*.audio.source": [
+            "AUDIO"
+          ]
+        },
+        "gmOnlyFields": [
+          "activities.*.inline.code"
+        ]
+      },
+      "consumable": {
+        "filePathFields": {
+          "activities.*.audio.source": [
+            "AUDIO"
+          ]
+        },
+        "gmOnlyFields": [
+          "activities.*.inline.code"
+        ]
+      },
+      "tool": {
+        "filePathFields": {
+          "activities.*.audio.source": [
+            "AUDIO"
+          ]
+        },
+        "gmOnlyFields": [
+          "activities.*.inline.code"
+        ]
+      },
+      "spell": {
+        "filePathFields": {
+          "activities.*.audio.source": [
+            "AUDIO"
+          ]
+        },
+        "gmOnlyFields": [
+          "activities.*.inline.code"
+        ]
+      },
+      "feat": {
+        "filePathFields": {
+          "activities.*.audio.source": [
+            "AUDIO"
+          ]
+        },
+        "gmOnlyFields": [
+          "activities.*.inline.code"
+        ]
+      },
+      "facility": {
+        "filePathFields": {
+          "activities.*.audio.source": [
+            "AUDIO"
+          ]
+        },
+        "gmOnlyFields": [
+          "activities.*.inline.code"
+        ]
+      }
+    }
+  },
   "languages": [
     {
       "lang": "en",

@@ -3,11 +3,10 @@
 SC - More Activities is a Shattered Codex activity platform for the `dnd5e`
 system in Foundry VTT.
 
-This module is currently in Phase 3 of implementation. The current build is an
+This module is currently in Phase 4 of implementation. The current build is an
 installable module shell with localization, styles, settings, documentation and
-support launchers, lifecycle logging, an early activity registration API, and a
-`dnd5e` adapter that flushes accepted registry entries into
-`CONFIG.DND5E.activityTypes`.
+support launchers, lifecycle logging, an activity registration API, a `dnd5e`
+adapter, and the first built-in activity types.
 
 ## Current Scope
 
@@ -22,8 +21,13 @@ support launchers, lifecycle logging, an early activity registration API, and a
   `sc-more-activities.registerActivities`.
 - Activity registry lifecycle lock after registration collection.
 - `dnd5e` adapter flush during `init`.
+- Built-in `sc-sound` activity.
+- Built-in `sc-macro` activity.
+- Guarded activity create dialog grouping for D&D 5e, Shattered Codex, and
+  registry/config metadata-provided external groups, replacing separate lists
+  with group panels in a slightly top-offset icon rail.
 
-Built-in activity types, migration tools, and catalog UI are intentionally not
+Migration tools, legacy type aliases, and full catalog UI are intentionally not
 implemented in this phase.
 
 ## Public API
@@ -61,7 +65,7 @@ The public API separates module and API versioning:
 - `moduleVersion`: the module manifest version.
 - `apiVersion`: the public API contract version.
 
-The registry stores and validates definitions, then the Phase 3 `dnd5e` adapter
+The registry stores and validates definitions, then the `dnd5e` adapter
 flushes accepted entries into `CONFIG.DND5E.activityTypes` during `init`.
 
 Current capabilities:
@@ -85,10 +89,29 @@ only inside the `dnd5e` adapter.
 
 - Foundry VTT: minimum v13, verified v14.
 - System: `dnd5e` minimum 5.0.0, locally verified against 5.3.0.
-- `lib-wrapper` is recommended for future integration patches, but not required
-  by the Phase 3 adapter.
+- `lib-wrapper` is recommended for integration patches, but not required by the
+  adapter.
 
 ## Development Notes
 
 Enable **Debug logging** in the module settings to see `init`, `setup`, and
 `ready` lifecycle messages.
+
+Phase 4 manual smoke checks:
+
+- `CONFIG.DND5E.activityTypes["sc-sound"]` and `["sc-macro"]` exist after load.
+- The registration report lists both types as registered and flushed.
+- Create both activities on an actor-owned item, save their sheets, reload the
+  world, and use the item.
+- `sc-sound` handles a missing audio file cleanly and plays valid audio locally;
+  GM broadcast uses the dnd5e/Foundry audio helper.
+- `sc-macro` executes a permitted world macro, reports missing or unauthorized
+  macros cleanly, and runs inline code stored on the activity only for GM users
+  when selected.
+- `sc-macro` shows the world macro selector only in world mode and the code
+  editor only in inline mode.
+- Activity creation groups D&D 5e (`fa-brands fa-d-and-d`), Shattered Codex
+  (`fa-solid fa-book-sparkles`), and metadata-provided external activities into
+  an icon-only `tabs-right` rail placed slightly below the dialog top.
+- With `sc-conditional-activities` active, a false condition blocks both
+  activities before sound or macro execution.

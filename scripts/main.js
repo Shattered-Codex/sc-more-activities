@@ -5,6 +5,8 @@ import { PublicApiFactory } from "./api/PublicApiFactory.js";
 import { RegistrationApi } from "./api/RegistrationApi.js";
 import { Dnd5eActivityAdapter } from "./adapters/dnd5e/Dnd5eActivityAdapter.js";
 import { ActivityRegistry } from "./registry/ActivityRegistry.js";
+import { registerBuiltInActivities } from "./activities/registerBuiltInActivities.js";
+import { ActivityCreateDialogTabs } from "./integrations/dnd5e/ActivityCreateDialogTabs.js";
 import { ModuleSettingsRegistrar } from "./settings/ModuleSettingsRegistrar.js";
 import { Logger } from "./support/Logger.js";
 
@@ -28,9 +30,11 @@ Hooks.once("init", () => {
     moduleVersion: game.modules.get(Constants.MODULE_ID)?.version
   }));
 
+  registerBuiltInActivities(publicApi.activities);
   Hooks.callAll(HOOKS.REGISTER_ACTIVITIES, publicApi.activities);
   const report = registry.flushWith(dnd5eActivityAdapter);
   Hooks.callAll(HOOKS.REGISTRY_LOCKED, report);
+  ActivityCreateDialogTabs.activate(publicApi.activities);
 });
 
 Hooks.once("setup", () => {

@@ -1,0 +1,33 @@
+<section class="tab activity-{{ tab.id }} {{ tab.cssClass }}" data-tab="{{ tab.id }}" data-group="{{ tab.group }}">
+  {{#if appliedEffects}}{{> "systems/dnd5e/templates/activity/parts/activity-effects.hbs" }}{{/if}}
+
+  <fieldset>
+    <legend>{{ localize "SCMOREACTIVITIES.Activities.ScSound.Sections.Configuration" }}</legend>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScSound.Fields.AudioSource.Label" }}</label>
+      <div class="form-fields">
+        <file-picker name="audio.source" type="audio" value="{{ audio.source }}"></file-picker>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScSound.Fields.AudioSource.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScSound.Fields.Audience.Label" }}</label>
+      <div class="form-fields">
+        <select name="playback.audience">
+          {{ selectOptions audienceOptions selected=playback.audience valueAttr="value" labelAttr="label" }}
+        </select>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScSound.Fields.Audience.Hint" }}</p>
+    </div>
+
+    <div class="form-group stacked">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScSound.Fields.Volume.Label" }}</label>
+      <div class="form-fields">
+        <range-picker class="sc-ma-sound-volume" name="audio.volume" value="{{ audio.volume }}" min="0" max="1" step="0.05"></range-picker>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScSound.Fields.Volume.Hint" }}</p>
+    </div>
+  </fieldset>
+</section>
