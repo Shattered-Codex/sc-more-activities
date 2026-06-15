@@ -3,10 +3,10 @@
 SC - More Activities is a Shattered Codex activity platform for the `dnd5e`
 system in Foundry VTT.
 
-This module is currently in Phase 4 of implementation. The current build is an
+This module is currently in Phase 5 of implementation. The current build is an
 installable module shell with localization, styles, settings, documentation and
 support launchers, lifecycle logging, an activity registration API, a `dnd5e`
-adapter, and the first built-in activity types.
+adapter, the first built-in activity types, and a GM-facing activity catalog.
 
 ## Current Scope
 
@@ -26,9 +26,10 @@ adapter, and the first built-in activity types.
 - Guarded activity create dialog grouping for D&D 5e, Shattered Codex, and
   registry/config metadata-provided external groups, replacing separate lists
   with group panels in a slightly top-offset icon rail.
+- Activity catalog and diagnostics app available from module settings.
 
-Migration tools, legacy type aliases, and full catalog UI are intentionally not
-implemented in this phase.
+Migration tools, legacy type aliases, and richer activity creation catalog
+workflows are intentionally not implemented in this phase.
 
 ## Public API
 
@@ -73,6 +74,7 @@ Current capabilities:
 - `registry: true`
 - `dnd5eAdapter: true`
 - `activityCreation: true`
+- `activityCatalog: true`
 - `migration: false`
 
 ## Architecture Plan
@@ -113,5 +115,7 @@ Phase 4 manual smoke checks:
 - Activity creation groups D&D 5e (`fa-brands fa-d-and-d`), Shattered Codex
   (`fa-solid fa-book-sparkles`), and metadata-provided external activities into
   an icon-only `tabs-right` rail placed slightly below the dialog top.
+- Activity catalog opens from module settings and shows registered, rejected,
+  warning, lifecycle, and capability diagnostics with search and filters.
 - With `sc-conditional-activities` active, a false condition blocks both
   activities before sound or macro execution.

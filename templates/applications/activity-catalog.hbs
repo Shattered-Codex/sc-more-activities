@@ -1,0 +1,209 @@
+<section class="sc-ma-catalog-shell">
+  <header class="sc-ma-catalog-toolbar">
+    <div class="sc-ma-catalog-filters" role="search">
+      <label class="sc-ma-catalog-search">
+        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+        <input
+          type="search"
+          name="sc-ma-catalog-search"
+          data-catalog-filter
+          placeholder="{{ localize "SCMOREACTIVITIES.Catalog.Filters.Search.Placeholder" }}"
+        >
+      </label>
+
+      <select name="sc-ma-catalog-category" data-catalog-filter aria-label="{{ localize "SCMOREACTIVITIES.Catalog.Filters.Category.Label" }}">
+        <option value="all">{{ localize "SCMOREACTIVITIES.Catalog.Filters.Category.All" }}</option>
+        {{#each filters.categories as |category|}}
+          <option value="{{ category.value }}">{{ category.label }}</option>
+        {{/each}}
+      </select>
+
+      <select name="sc-ma-catalog-status" data-catalog-filter aria-label="{{ localize "SCMOREACTIVITIES.Catalog.Filters.Status.Label" }}">
+        {{#each filters.statuses as |status|}}
+          <option value="{{ status.value }}">{{ status.label }}</option>
+        {{/each}}
+      </select>
+    </div>
+
+    <div class="sc-ma-catalog-actions">
+      <button type="button" data-action="clear-filters">
+        <i class="fa-solid fa-filter-circle-xmark" aria-hidden="true"></i>
+        <span>{{ localize "SCMOREACTIVITIES.Catalog.Actions.ClearFilters" }}</span>
+      </button>
+      <button type="button" data-action="copy-report">
+        <i class="fa-solid fa-copy" aria-hidden="true"></i>
+        <span>{{ localize "SCMOREACTIVITIES.Catalog.Actions.CopyReport" }}</span>
+      </button>
+      <button type="button" data-action="refresh">
+        <i class="fa-solid fa-rotate" aria-hidden="true"></i>
+        <span>{{ localize "SCMOREACTIVITIES.Catalog.Actions.Refresh" }}</span>
+      </button>
+    </div>
+  </header>
+
+  <section class="sc-ma-catalog-summary" aria-label="{{ localize "SCMOREACTIVITIES.Catalog.Summary.Label" }}">
+    {{#each summaries as |summary|}}
+      <div class="sc-ma-catalog-summary-item sc-ma-catalog-summary-item--{{ summary.key }}">
+        <i class="{{ summary.icon }}" aria-hidden="true"></i>
+        <span class="sc-ma-catalog-summary-value">{{ summary.value }}</span>
+        <span class="sc-ma-catalog-summary-label">{{ summary.label }}</span>
+      </div>
+    {{/each}}
+  </section>
+
+  <section class="sc-ma-catalog-lifecycle">
+    <div>
+      <span>{{ localize "SCMOREACTIVITIES.Catalog.Lifecycle.ModuleVersion" }}</span>
+      <strong>{{ api.moduleVersion }}</strong>
+    </div>
+    <div>
+      <span>{{ localize "SCMOREACTIVITIES.Catalog.Lifecycle.ApiVersion" }}</span>
+      <strong>{{ api.apiVersion }}</strong>
+    </div>
+    <div>
+      <span>{{ localize "SCMOREACTIVITIES.Catalog.Lifecycle.RegistryState" }}</span>
+      <strong>{{ api.lifecycleState }}</strong>
+    </div>
+    <div>
+      <span>{{ localize "SCMOREACTIVITIES.Catalog.Lifecycle.RegistryLocked" }}</span>
+      <strong>{{#if api.registryLocked}}{{ localize "SCMOREACTIVITIES.Common.Yes" }}{{else}}{{ localize "SCMOREACTIVITIES.Common.No" }}{{/if}}</strong>
+    </div>
+    <div>
+      <span>{{ localize "SCMOREACTIVITIES.Catalog.Lifecycle.NativeTypes" }}</span>
+      <strong>{{ diagnostics.nativeTypes }}</strong>
+    </div>
+  </section>
+
+  <section class="sc-ma-catalog-capabilities" aria-label="{{ localize "SCMOREACTIVITIES.Catalog.Capabilities.Label" }}">
+    {{#each api.capabilities as |capability|}}
+      <span class="sc-ma-catalog-capability {{#if capability.enabled}}is-enabled{{else}}is-disabled{{/if}}">
+        <i class="fa-solid {{#if capability.enabled}}fa-circle-check{{else}}fa-circle-xmark{{/if}}" aria-hidden="true"></i>
+        {{ capability.label }}
+      </span>
+    {{/each}}
+  </section>
+
+  <section class="sc-ma-catalog-table-section sc-ma-catalog-table-section--primary">
+    <header>
+      <h3>{{ localize "SCMOREACTIVITIES.Catalog.Sections.Registered" }}</h3>
+      <span>{{ registered.length }}</span>
+    </header>
+    <div class="sc-ma-catalog-table-wrap">
+      <table class="sc-ma-catalog-table" data-catalog-table>
+        <thead>
+          <tr>
+            <th>{{ localize "SCMOREACTIVITIES.Catalog.Columns.Type" }}</th>
+            <th>{{ localize "SCMOREACTIVITIES.Catalog.Columns.Label" }}</th>
+            <th>{{ localize "SCMOREACTIVITIES.Catalog.Columns.Module" }}</th>
+            <th>{{ localize "SCMOREACTIVITIES.Catalog.Columns.Category" }}</th>
+            <th>{{ localize "SCMOREACTIVITIES.Catalog.Columns.Scope" }}</th>
+            <th>{{ localize "SCMOREACTIVITIES.Catalog.Columns.Status" }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each registered as |entry|}}
+            <tr data-catalog-row data-kind="registered" data-status="{{ entry.status }}" data-category="{{ entry.category }}" data-search="{{ entry.searchText }}">
+              <td>
+                <span class="sc-ma-catalog-type">
+                  {{#if entry.iconIsPath}}
+                    <img src="{{ entry.icon }}" alt="">
+                  {{else}}
+                    <i class="{{ entry.icon }}" aria-hidden="true"></i>
+                  {{/if}}
+                  <code>{{ entry.type }}</code>
+                </span>
+              </td>
+              <td>
+                <strong>{{ entry.label }}</strong>
+                {{#if entry.hint}}<span>{{ entry.hint }}</span>{{/if}}
+              </td>
+              <td>{{ entry.moduleId }}</td>
+              <td>{{ entry.categoryLabel }}</td>
+              <td>{{ entry.scope }}</td>
+              <td>
+                <span class="sc-ma-status {{ entry.statusClass }}">{{ entry.statusLabel }}</span>
+                {{#if entry.warningCount}}
+                  <span class="sc-ma-catalog-warning-count">{{ entry.warningCount }}</span>
+                {{/if}}
+              </td>
+            </tr>
+          {{/each}}
+          <tr data-empty-row hidden>
+            <td colspan="6">{{ localize "SCMOREACTIVITIES.Catalog.Empty.Filtered" }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sc-ma-catalog-table-section">
+    <header>
+      <h3>{{ localize "SCMOREACTIVITIES.Catalog.Sections.Rejected" }}</h3>
+      <span>{{ rejected.length }}</span>
+    </header>
+    <div class="sc-ma-catalog-table-wrap">
+      <table class="sc-ma-catalog-table" data-catalog-table>
+        <thead>
+          <tr>
+            <th>{{ localize "SCMOREACTIVITIES.Catalog.Columns.Type" }}</th>
+            <th>{{ localize "SCMOREACTIVITIES.Catalog.Columns.Module" }}</th>
+            <th>{{ localize "SCMOREACTIVITIES.Catalog.Columns.Reason" }}</th>
+            <th>{{ localize "SCMOREACTIVITIES.Catalog.Columns.Message" }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each rejected as |entry|}}
+            <tr data-catalog-row data-kind="rejected" data-status="{{ entry.status }}" data-category="{{ entry.category }}" data-search="{{ entry.searchText }}">
+              <td><code>{{ entry.type }}</code></td>
+              <td>{{ entry.moduleId }}</td>
+              <td><span class="sc-ma-status {{ entry.statusClass }}">{{ entry.reason }}</span></td>
+              <td>{{ entry.message }}</td>
+            </tr>
+          {{/each}}
+          <tr data-empty-row hidden>
+            <td colspan="4">{{ localize "SCMOREACTIVITIES.Catalog.Empty.Filtered" }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sc-ma-catalog-table-section">
+    <header>
+      <h3>{{ localize "SCMOREACTIVITIES.Catalog.Sections.Warnings" }}</h3>
+      <span>{{ warnings.length }}</span>
+    </header>
+    <div class="sc-ma-catalog-table-wrap">
+      <table class="sc-ma-catalog-table" data-catalog-table>
+        <thead>
+          <tr>
+            <th>{{ localize "SCMOREACTIVITIES.Catalog.Columns.Type" }}</th>
+            <th>{{ localize "SCMOREACTIVITIES.Catalog.Columns.Module" }}</th>
+            <th>{{ localize "SCMOREACTIVITIES.Catalog.Columns.Reason" }}</th>
+            <th>{{ localize "SCMOREACTIVITIES.Catalog.Columns.Message" }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each warnings as |entry|}}
+            <tr data-catalog-row data-kind="warning" data-status="{{ entry.status }}" data-category="{{ entry.category }}" data-search="{{ entry.searchText }}">
+              <td><code>{{ entry.type }}</code></td>
+              <td>{{ entry.moduleId }}</td>
+              <td><span class="sc-ma-status {{ entry.statusClass }}">{{ entry.reason }}</span></td>
+              <td>{{ entry.message }}</td>
+            </tr>
+          {{/each}}
+          <tr data-empty-row hidden>
+            <td colspan="4">{{ localize "SCMOREACTIVITIES.Catalog.Empty.Filtered" }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sc-ma-catalog-diagnostics">
+    <span>{{ localize "SCMOREACTIVITIES.Catalog.Diagnostics.Duplicates" }}: <strong>{{ diagnostics.duplicates }}</strong></span>
+    <span>{{ localize "SCMOREACTIVITIES.Catalog.Diagnostics.LateRegistrations" }}: <strong>{{ diagnostics.lateRegistrations }}</strong></span>
+    <span>{{ localize "SCMOREACTIVITIES.Catalog.Diagnostics.NativeConflicts" }}: <strong>{{ diagnostics.nativeTypeConflicts }}</strong></span>
+    <span>{{ localize "SCMOREACTIVITIES.Catalog.Diagnostics.LegacyConflicts" }}: <strong>{{ diagnostics.legacyTypeConflicts }}</strong></span>
+  </section>
+</section>

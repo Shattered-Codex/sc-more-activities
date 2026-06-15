@@ -1,5 +1,6 @@
 import { Constants } from "../constants/Constants.js";
 import { SETTINGS_KEYS } from "../constants/SettingsKeys.js";
+import { ActivityCatalogApp } from "../applications/ActivityCatalogApp.js";
 import { DocumentationMenu } from "./DocumentationMenu.js";
 import { SupportMenu } from "./SupportMenu.js";
 
@@ -13,10 +14,12 @@ export class ModuleSettingsRegistrar {
     this.#registered = true;
 
     this.#registerDebugLoggingSetting();
+    this.#registerActivityCatalogMenu();
     this.#registerSupportMenu();
     this.#registerDocumentationMenu();
 
     Hooks.on("renderSettingsConfig", (_app, html) => {
+      ActivityCatalogApp.bindSettingsButton(html);
       SupportMenu.bindSettingsButton(html);
       DocumentationMenu.bindSettingsButton(html);
     });
@@ -33,6 +36,20 @@ export class ModuleSettingsRegistrar {
       config: true,
       type: Boolean,
       default: false
+    });
+  }
+
+  #registerActivityCatalogMenu() {
+    game.settings.registerMenu(Constants.MODULE_ID, SETTINGS_KEYS.ACTIVITY_CATALOG_MENU, {
+      name: Constants.localize("SCMOREACTIVITIES.Settings.ActivityCatalogMenu.Name", "Activity catalog"),
+      label: Constants.localize("SCMOREACTIVITIES.Settings.ActivityCatalogMenu.Label", "Open catalog"),
+      hint: Constants.localize(
+        "SCMOREACTIVITIES.Settings.ActivityCatalogMenu.Hint",
+        "Open the registered activity catalog and diagnostics."
+      ),
+      icon: "fa-solid fa-rectangle-list",
+      type: ActivityCatalogApp,
+      restricted: true
     });
   }
 
