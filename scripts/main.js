@@ -3,12 +3,14 @@ import { HOOKS } from "./constants/Hooks.js";
 import { ApiPublisher } from "./api/ApiPublisher.js";
 import { PublicApiFactory } from "./api/PublicApiFactory.js";
 import { RegistrationApi } from "./api/RegistrationApi.js";
+import { Dnd5eActivityAdapter } from "./adapters/dnd5e/Dnd5eActivityAdapter.js";
 import { ActivityRegistry } from "./registry/ActivityRegistry.js";
 import { ModuleSettingsRegistrar } from "./settings/ModuleSettingsRegistrar.js";
 import { Logger } from "./support/Logger.js";
 
 const registry = new ActivityRegistry();
 const registrationApi = new RegistrationApi({ registry });
+const dnd5eActivityAdapter = new Dnd5eActivityAdapter();
 const settingsRegistrar = new ModuleSettingsRegistrar();
 let publicApi = null;
 
@@ -27,7 +29,7 @@ Hooks.once("init", () => {
   }));
 
   Hooks.callAll(HOOKS.REGISTER_ACTIVITIES, publicApi.activities);
-  const report = registry.lock();
+  const report = registry.flushWith(dnd5eActivityAdapter);
   Hooks.callAll(HOOKS.REGISTRY_LOCKED, report);
 });
 

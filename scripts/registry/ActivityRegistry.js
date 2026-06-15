@@ -9,6 +9,8 @@ const LIFECYCLE_STATES = Object.freeze({
   LOCKED: "locked"
 });
 
+const REGISTRY_INTERNAL_ACCESS = Symbol("sc-more-activities.registry.internalAccess");
+
 export class ActivityRegistry {
   #definitions = new Map();
   #report = new ActivityRegistrationReport();
@@ -44,6 +46,54 @@ export class ActivityRegistry {
     this.#state = LIFECYCLE_STATES.FLUSHING;
     this.#state = LIFECYCLE_STATES.LOCKED;
     return this.getRegistrationReport();
+  }
+
+  flushWith(adapter) {
+    if (this.#state === LIFECYCLE_STATES.LOCKED) {
+      return this.getRegistrationReport();
+    }
+
+    if (this.#state !== LIFECYCLE_STATES.COLLECTING) {
+      return this.getRegistrationReport();
+    }
+
+    try {
+      this.#state = LIFECYCLE_STATES.FLUSHING;
+      const result = adapter?.flush?.(this) ?? { flushed: [], rejected: [], warnings: [] };
+      this.#recordFlushResult(result);
+    } catch (error) {
+      this.#report.addRejected({
+        ok: false,
+        type: null,
+        moduleId: null,
+        status: "rejected",
+        reason: "adapter-error",
+        message: error?.message ?? String(error),
+        details: {}
+      });
+    } finally {
+      this.#state = LIFECYCLE_STATES.LOCKED;
+    }
+
+    return this.getRegistrationReport();
+  }
+
+  #recordFlushResult(result) {
+    for (const entry of result.flushed ?? []) {
+      this.#report.addFlushed(entry);
+    }
+    for (const entry of result.rejected ?? []) {
+      this.#report.addRejected(entry);
+      if (entry.reason === "native-type-reserved" || entry.reason === "dnd5e-type-conflict") {
+        this.#report.addNativeTypeConflict(entry);
+      }
+      if (entry.reason === "legacy-type-reserved") {
+        this.#report.addLegacyTypeConflict(entry);
+      }
+    }
+    for (const entry of result.warnings ?? []) {
+      this.#report.addWarning(entry);
+    }
   }
 
   registerType(definition) {
@@ -143,6 +193,16 @@ export class ActivityRegistry {
     return this.#report.snapshot();
   }
 
+  getDefinitionsForAdapter(accessToken) {
+    if (accessToken !== REGISTRY_INTERNAL_ACCESS) {
+      throw new Error("Activity definitions are internal and are not exposed through the public API.");
+    }
+
+    return Object.freeze(Array.from(this.#definitions.values())
+      .map((definition) => ActivityRegistry.#freezeDefinitionCopy(definition))
+      .sort((left, right) => left.type.localeCompare(right.type)));
+  }
+
   assertCanRegister() {
     if (this.#state === LIFECYCLE_STATES.COLLECTING) {
       return Object.freeze({
@@ -237,6 +297,18 @@ export class ActivityRegistry {
     return ActivityRegistry.#deepFreeze(summary);
   }
 
+  static #freezeDefinitionCopy(definition) {
+    return ActivityRegistry.#deepFreeze({
+      ...definition,
+      ui: ActivityRegistry.#clonePlain(definition.ui),
+      tags: [...definition.tags],
+      compatibility: ActivityRegistry.#clonePlain(definition.compatibility),
+      templates: [...definition.templates],
+      migrations: [...definition.migrations],
+      ownership: ActivityRegistry.#clonePlain(definition.ownership)
+    });
+  }
+
   static #freezeWarnings(warnings) {
     return ActivityRegistry.#deepFreeze(ActivityRegistry.#clonePlain(warnings ?? []));
   }
@@ -258,4 +330,4 @@ export class ActivityRegistry {
   }
 }
 
-export { LIFECYCLE_STATES };
+export { LIFECYCLE_STATES, REGISTRY_INTERNAL_ACCESS };

@@ -91,12 +91,27 @@ export class ActivityDefinitionValidator {
       }
     }
 
-    if (type && ActivityDefinitionValidator.nativeTypes().includes(type) && !definition?.compatibility?.nativeBridge) {
-      errors.push(this.#failure(definition, "native-type-reserved", `Activity type ${type} collides with a native dnd5e activity type.`));
+    const nativeBridge = Boolean(definition?.compatibility?.nativeBridge);
+    const legacyAlias = Boolean(definition?.compatibility?.legacyAlias);
+
+    if (type && ActivityDefinitionValidator.nativeTypes().includes(type)) {
+      errors.push(this.#failure(
+        definition,
+        nativeBridge ? "native-bridge-unsupported" : "native-type-reserved",
+        nativeBridge
+          ? `Activity type ${type} requests native bridge mode, which is not supported yet.`
+          : `Activity type ${type} collides with a native dnd5e activity type.`
+      ));
     }
 
-    if (type && LEGACY_MORE_ACTIVITIES_TYPES.includes(type) && !definition?.compatibility?.legacyAlias) {
-      errors.push(this.#failure(definition, "legacy-type-reserved", `Activity type ${type} collides with a legacy More Activities type.`));
+    if (type && LEGACY_MORE_ACTIVITIES_TYPES.includes(type)) {
+      errors.push(this.#failure(
+        definition,
+        legacyAlias ? "legacy-alias-unsupported" : "legacy-type-reserved",
+        legacyAlias
+          ? `Activity type ${type} requests legacy alias mode, which is not supported yet.`
+          : `Activity type ${type} collides with a legacy More Activities type.`
+      ));
     }
 
     if (!definition?.label) {

@@ -4,6 +4,7 @@ export class ActivityRegistrationReport {
   #warnings = [];
   #duplicates = [];
   #lateRegistrations = [];
+  #flushed = [];
   #nativeTypes = [];
   #nativeTypeConflicts = [];
   #legacyTypeConflicts = [];
@@ -28,6 +29,10 @@ export class ActivityRegistrationReport {
     this.#lateRegistrations.push(ActivityRegistrationReport.#clonePlain(entry));
   }
 
+  addFlushed(entry) {
+    this.#flushed.push(ActivityRegistrationReport.#clonePlain(entry));
+  }
+
   setNativeTypes(types) {
     this.#nativeTypes = Array.from(new Set(types ?? [])).sort();
   }
@@ -47,6 +52,7 @@ export class ActivityRegistrationReport {
       warnings: ActivityRegistrationReport.#clonePlain(this.#warnings),
       duplicates: ActivityRegistrationReport.#clonePlain(this.#duplicates),
       lateRegistrations: ActivityRegistrationReport.#clonePlain(this.#lateRegistrations),
+      flushed: ActivityRegistrationReport.#clonePlain(this.#flushed),
       nativeTypes: ActivityRegistrationReport.#clonePlain(this.#nativeTypes),
       nativeTypeConflicts: ActivityRegistrationReport.#clonePlain(this.#nativeTypeConflicts),
       legacyTypeConflicts: ActivityRegistrationReport.#clonePlain(this.#legacyTypeConflicts)

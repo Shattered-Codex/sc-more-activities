@@ -60,13 +60,16 @@ export class RegistrationApi {
     }
 
     try {
-      const created = await resolvedItem.createActivity(type, data, options);
+      const activityId = data._id ?? RegistrationApi.#randomId();
+      const createData = { ...data, _id: activityId };
+      await resolvedItem.createActivity(type, createData, { ...options, renderSheet: false });
+      const activity = resolvedItem.system.activities?.get?.(activityId) ?? null;
       return Object.freeze({
         ok: true,
         type,
         status: "created",
         item: resolvedItem,
-        activity: created ?? null
+        activity
       });
     } catch (error) {
       return RegistrationApi.#failure(type, "create-activity-failed", error?.message ?? String(error));
@@ -105,5 +108,11 @@ export class RegistrationApi {
       reason,
       message
     });
+  }
+
+  static #randomId() {
+    return globalThis.foundry?.utils?.randomID?.()
+      ?? globalThis.crypto?.randomUUID?.().replaceAll("-", "").slice(0, 16)
+      ?? Math.random().toString(36).slice(2, 18);
   }
 }

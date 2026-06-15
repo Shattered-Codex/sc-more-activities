@@ -3,9 +3,11 @@
 SC - More Activities is a Shattered Codex activity platform for the `dnd5e`
 system in Foundry VTT.
 
-This module is currently in Phase 2 of implementation. The current build is an
+This module is currently in Phase 3 of implementation. The current build is an
 installable module shell with localization, styles, settings, documentation and
-support launchers, lifecycle logging, and an early activity registration API.
+support launchers, lifecycle logging, an early activity registration API, and a
+`dnd5e` adapter that flushes accepted registry entries into
+`CONFIG.DND5E.activityTypes`.
 
 ## Current Scope
 
@@ -19,9 +21,10 @@ support launchers, lifecycle logging, and an early activity registration API.
 - Synchronous registration hook:
   `sc-more-activities.registerActivities`.
 - Activity registry lifecycle lock after registration collection.
+- `dnd5e` adapter flush during `init`.
 
-The `dnd5e` adapter, activity types, migration tools, and catalog UI are
-intentionally not implemented in this phase.
+Built-in activity types, migration tools, and catalog UI are intentionally not
+implemented in this phase.
 
 ## Public API
 
@@ -58,15 +61,14 @@ The public API separates module and API versioning:
 - `moduleVersion`: the module manifest version.
 - `apiVersion`: the public API contract version.
 
-The current registry stores and validates definitions, but Phase 2 does not
-flush activity types into `CONFIG.DND5E.activityTypes`. That behavior belongs to
-the Phase 3 `dnd5e` adapter.
+The registry stores and validates definitions, then the Phase 3 `dnd5e` adapter
+flushes accepted entries into `CONFIG.DND5E.activityTypes` during `init`.
 
 Current capabilities:
 
 - `registry: true`
-- `dnd5eAdapter: false`
-- `activityCreation: false`
+- `dnd5eAdapter: true`
+- `activityCreation: true`
 - `migration: false`
 
 ## Architecture Plan
@@ -76,15 +78,15 @@ The implementation roadmap lives in:
 - `../plans/sc-more-activities-architecture/README.md`
 - `../plans/sc-more-activities-architecture/06-sdd-implementation-roadmap.md`
 
-Follow the plan phase by phase. Do not add activity registration or direct
-`CONFIG.DND5E.activityTypes` writes during the skeleton phase.
+Follow the plan phase by phase. Direct `CONFIG.DND5E.activityTypes` writes belong
+only inside the `dnd5e` adapter.
 
 ## Compatibility
 
 - Foundry VTT: minimum v13, verified v14.
 - System: `dnd5e` minimum 5.0.0, locally verified against 5.3.0.
 - `lib-wrapper` is recommended for future integration patches, but not required
-  by the Phase 1 skeleton.
+  by the Phase 3 adapter.
 
 ## Development Notes
 

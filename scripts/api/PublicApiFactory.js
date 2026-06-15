@@ -9,8 +9,8 @@ export class PublicApiFactory {
       apiVersion: 1,
       capabilities: Object.freeze({
         registry: true,
-        dnd5eAdapter: false,
-        activityCreation: false,
+        dnd5eAdapter: true,
+        activityCreation: true,
         migration: false
       }),
       hooks: Object.freeze({ ...HOOKS }),
