@@ -1,0 +1,49 @@
+<section class="tab activity-{{ tab.id }} {{ tab.cssClass }}" data-tab="{{ tab.id }}" data-group="{{ tab.group }}">
+  {{#if appliedEffects}}{{> "systems/dnd5e/templates/activity/parts/activity-effects.hbs" }}{{/if}}
+
+  <fieldset>
+    <legend>{{ localize "SCMOREACTIVITIES.Activities.ScContest.Sections.Configuration" }}</legend>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScContest.Fields.TargetSource.Label" }}</label>
+      <div class="form-fields">
+        <select name="contest.targetSource">
+          {{ selectOptions targetSourceOptions selected=contest.targetSource valueAttr="value" labelAttr="label" }}
+        </select>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScContest.Fields.TargetSource.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScContest.Fields.TiePolicy.Label" }}</label>
+      <div class="form-fields">
+        <select name="contest.tiePolicy">
+          {{ selectOptions tiePolicyOptions selected=contest.tiePolicy valueAttr="value" labelAttr="label" }}
+        </select>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScContest.Fields.TiePolicy.Hint" }}</p>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ localize "SCMOREACTIVITIES.Activities.ScContest.Sections.Initiator" }}</legend>
+    {{> "modules/sc-more-activities/templates/activity-parts/sc-contest-participant.hbs"
+      path="contest.initiator"
+      participant=contest.initiator
+      rollTypeOptions=rollTypeOptions
+      abilityOptions=abilityOptions
+      skillOptions=skillOptions
+    }}
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ localize "SCMOREACTIVITIES.Activities.ScContest.Sections.Defender" }}</legend>
+    {{> "modules/sc-more-activities/templates/activity-parts/sc-contest-participant.hbs"
+      path="contest.defender"
+      participant=contest.defender
+      rollTypeOptions=rollTypeOptions
+      abilityOptions=abilityOptions
+      skillOptions=skillOptions
+    }}
+  </fieldset>
+</section>

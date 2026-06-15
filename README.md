@@ -3,7 +3,7 @@
 SC - More Activities is a Shattered Codex activity platform for the `dnd5e`
 system in Foundry VTT.
 
-This module is currently in Phase 5 of implementation. The current build is an
+This module is currently in Phase 7 of implementation. The current build is an
 installable module shell with localization, styles, settings, documentation and
 support launchers, lifecycle logging, an activity registration API, a `dnd5e`
 adapter, the first built-in activity types, and a GM-facing activity catalog.
@@ -28,14 +28,17 @@ removing their `dnd5e` registrations.
 - Built-in `sc-hook` developer activity.
 - Built-in `sc-chain` orchestration activity for explicit same-item activity
   lists with loop protection.
+- Built-in `sc-contest` activity for a simple contested d20 workflow between
+  the activity actor and one selected defender.
 - Guarded activity create dialog grouping for D&D 5e, Shattered Codex, and
   registry/config metadata-provided external groups, replacing separate lists
   with group panels in a slightly top-offset icon rail.
 - Activity catalog and diagnostics app available from module settings.
 - GM activity availability controls for creation and use.
 
-Migration tools, legacy type aliases, and richer activity creation catalog
-workflows are intentionally not implemented in this phase.
+Direct defender-owner socket/query mediation, migration tools, legacy type
+aliases, and richer activity creation catalog workflows are intentionally not
+implemented in this phase.
 
 ## Public API
 
@@ -122,6 +125,13 @@ Phase 4 manual smoke checks:
 - `sc-chain` executes configured activity ids from the same item, stops on
   loops/depth limits, and should be used when the native `forward` activity does
   not express the desired sequence clearly.
+- `sc-contest` supports ability checks, saving throws, skills, and custom
+  formulas for both sides, requires exactly one selected target unless configured
+  for the same actor, handles cancellations/invalid formulas with localized
+  warnings, and creates a compact chat summary without applying effects.
+- `sc-contest` can request GM-mediated resolution when a player cannot roll for
+  the defender. Direct requests to the defender owner are reserved for a later
+  socket/query refinement.
 - `sc-macro` shows the world macro selector only in world mode and the code
   editor only in inline mode.
 - Activity creation groups D&D 5e (`fa-brands fa-d-and-d`), Shattered Codex

@@ -7,6 +7,7 @@ import { Dnd5eActivityAdapter } from "./adapters/dnd5e/Dnd5eActivityAdapter.js";
 import { ActivityRegistry } from "./registry/ActivityRegistry.js";
 import { registerBuiltInActivities } from "./activities/registerBuiltInActivities.js";
 import { ActivityCreateDialogTabs } from "./integrations/dnd5e/ActivityCreateDialogTabs.js";
+import { ScContestActivityService } from "./activities/contest/ScContestActivityService.js";
 import { ModuleSettingsRegistrar } from "./settings/ModuleSettingsRegistrar.js";
 import { Logger } from "./support/Logger.js";
 
@@ -24,6 +25,7 @@ Hooks.once("init", () => {
     return;
   }
 
+  ScContestActivityService.registerQueries();
   registry.beginCollection();
   publicApi = ApiPublisher.publish(PublicApiFactory.create({
     activities: registrationApi.asPublicObject(),

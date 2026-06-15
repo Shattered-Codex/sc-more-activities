@@ -806,6 +806,126 @@
   color: var(--sc-ma-text-dim);
 }
 
+.sc-more-activities.sc-ma-contest-card {
+  background: color-mix(in srgb, var(--sc-ma-bg-panel) 88%, black 12%);
+  border: 1px solid var(--sc-ma-border);
+  border-radius: 8px;
+  color: var(--sc-ma-text);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sc-ma-space-2);
+  padding: var(--sc-ma-space-3);
+}
+
+.sc-more-activities.sc-ma-contest-card header {
+  align-items: center;
+  display: flex;
+  gap: var(--sc-ma-space-2);
+}
+
+.sc-more-activities.sc-ma-contest-card header i {
+  color: var(--sc-ma-accent-warm);
+}
+
+.sc-more-activities.sc-ma-contest-card h3 {
+  color: var(--sc-ma-text-strong);
+  font-size: var(--font-size-15, 0.9375rem);
+  margin: 0;
+}
+
+.sc-more-activities.sc-ma-contest-card .sc-ma-contest-participants {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sc-ma-space-2);
+}
+
+.sc-more-activities.sc-ma-contest-card .sc-ma-contest-participant {
+  align-items: start;
+  display: grid;
+  gap: var(--sc-ma-space-2);
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  min-width: 0;
+}
+
+.sc-more-activities.sc-ma-contest-card .sc-ma-contest-participant img {
+  aspect-ratio: 1;
+  background: color-mix(in srgb, var(--sc-ma-bg-card-soft) 80%, black 20%);
+  border: 1px solid var(--sc-ma-border-soft);
+  border-radius: 6px;
+  height: 2.5rem;
+  object-fit: cover;
+  width: 2.5rem;
+}
+
+.sc-more-activities.sc-ma-contest-card .sc-ma-contest-participant-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+  min-width: 0;
+}
+
+.sc-more-activities.sc-ma-contest-card .sc-ma-contest-participant-main span,
+.sc-more-activities.sc-ma-contest-card .sc-ma-contest-outcome span {
+  color: var(--sc-ma-text-dim);
+  font-size: var(--font-size-12, 0.75rem);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.sc-more-activities.sc-ma-contest-card .sc-ma-contest-participant-main strong,
+.sc-more-activities.sc-ma-contest-card .sc-ma-contest-outcome strong {
+  color: var(--sc-ma-text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-more-activities.sc-ma-contest-card .sc-ma-contest-participant-main small {
+  color: var(--sc-ma-text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-more-activities.sc-ma-contest-card .sc-ma-contest-dice-roll {
+  grid-column: 1 / -1;
+  margin-top: 0.1rem;
+  min-width: 0;
+}
+
+.sc-more-activities.sc-ma-contest-card .sc-ma-contest-dice-roll .dice-formula {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-more-activities.sc-ma-contest-card .sc-ma-contest-outcome {
+  border-top: 1px solid var(--sc-ma-border-soft);
+  display: grid;
+  gap: var(--sc-ma-space-2);
+  grid-template-columns: minmax(5rem, max-content) minmax(0, 1fr);
+  padding-top: var(--sc-ma-space-2);
+}
+
+.sc-more-activities.sc-ma-contest-roll-prompt {
+  display: grid;
+  gap: var(--sc-ma-space-2);
+}
+
+.sc-more-activities.sc-ma-contest-roll-prompt p {
+  margin: 0;
+}
+
+.sc-more-activities.sc-ma-contest-roll-prompt code {
+  background: color-mix(in srgb, var(--sc-ma-bg-card-soft) 82%, black 18%);
+  border: 1px solid var(--sc-ma-border-soft);
+  border-radius: 6px;
+  color: var(--sc-ma-text-strong);
+  display: block;
+  overflow-wrap: anywhere;
+  padding: var(--sc-ma-space-2);
+}
+
 .sc-ma-create-dialog,
 .sc-ma-create-dialog .window-content,
 .sc-ma-create-dialog .sc-ma-create-dialog-content {

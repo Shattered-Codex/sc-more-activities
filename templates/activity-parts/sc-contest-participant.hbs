@@ -1,0 +1,41 @@
+<div class="form-group">
+  <label>{{ localize "SCMOREACTIVITIES.Activities.ScContest.Fields.RollType.Label" }}</label>
+  <div class="form-fields">
+    <select name="{{ path }}.rollType">
+      {{ selectOptions rollTypeOptions selected=participant.rollType valueAttr="value" labelAttr="label" }}
+    </select>
+  </div>
+  <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScContest.Fields.RollType.Hint" }}</p>
+</div>
+
+{{#if participant.usesAbility}}
+  <div class="form-group">
+    <label>{{ localize "SCMOREACTIVITIES.Activities.ScContest.Fields.Ability.Label" }}</label>
+    <div class="form-fields">
+      <select name="{{ path }}.ability">
+        {{ selectOptions abilityOptions selected=participant.ability valueAttr="value" labelAttr="label" }}
+      </select>
+    </div>
+    <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScContest.Fields.Ability.Hint" }}</p>
+  </div>
+{{/if}}
+
+{{#if participant.usesSkill}}
+  <div class="form-group">
+    <label>{{ localize "SCMOREACTIVITIES.Activities.ScContest.Fields.Skill.Label" }}</label>
+    <div class="form-fields">
+      <select name="{{ path }}.skill">
+        {{ selectOptions skillOptions selected=participant.skill valueAttr="value" labelAttr="label" }}
+      </select>
+    </div>
+    <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScContest.Fields.Skill.Hint" }}</p>
+  </div>
+{{/if}}
+
+{{#if participant.usesFormula}}
+  <div class="form-group stacked">
+    <label>{{ localize "SCMOREACTIVITIES.Activities.ScContest.Fields.Formula.Label" }}</label>
+    <input type="text" name="{{ path }}.formula" value="{{ participant.formula }}" placeholder="1d20 + @abilities.str.mod" spellcheck="false">
+    <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScContest.Fields.Formula.Hint" }}</p>
+  </div>
+{{/if}}

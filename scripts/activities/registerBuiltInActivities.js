@@ -1,4 +1,5 @@
 import { registerScChainActivity } from "./chain/registerScChainActivity.js";
+import { registerScContestActivity } from "./contest/registerScContestActivity.js";
 import { registerScHookActivity } from "./hook/registerScHookActivity.js";
 import { registerScMacroActivity } from "./macro/registerScMacroActivity.js";
 import { registerScSoundActivity } from "./sound/registerScSoundActivity.js";
@@ -8,6 +9,7 @@ export function registerBuiltInActivities(activitiesApi) {
     registerScSoundActivity(activitiesApi),
     registerScMacroActivity(activitiesApi),
     registerScHookActivity(activitiesApi),
-    registerScChainActivity(activitiesApi)
+    registerScChainActivity(activitiesApi),
+    registerScContestActivity(activitiesApi)
   ]);
 }
