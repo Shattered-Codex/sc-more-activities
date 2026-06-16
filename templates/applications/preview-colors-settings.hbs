@@ -1,0 +1,218 @@
+<div class="sc-ma-preview-colors-shell">
+  <header class="sc-ma-preview-colors-header">
+    <div class="sc-ma-preview-colors-copy">
+      <h4>{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Name" }}</h4>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Description" }}</p>
+    </div>
+
+    <div class="sc-ma-preview-colors-header-controls">
+      <div class="form-group sc-ma-preview-colors-header-field">
+        <label for="sc-ma-preview-scope">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Scope.Label" }}</label>
+        <div class="form-fields">
+          <select id="sc-ma-preview-scope" name="selectedScope" class="sc-ma-preview-colors-select">
+            {{#each scopeOptions}}
+              <option value="{{ this.value }}" {{#if this.selected}}selected{{/if}}>{{ this.label }}</option>
+            {{/each}}
+          </select>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="sc-ma-preview-colors-layout">
+    <section class="sc-ma-preview-colors-preview-panel">
+      <h4>{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Preview.Title" }}</h4>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Preview.Hint" }}</p>
+
+      <div class="sc-ma-preview-single">
+        {{#if isTeleportScope}}
+          <article class="sc-ma-preview-card sc-ma-preview-card--teleport">
+            <div class="sc-ma-preview-card-label">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Sections.Teleport" }}</div>
+            <div class="sc-ma-preview-stage sc-ma-preview-stage--teleport">
+              <div class="sc-ma-preview-range"></div>
+              <div class="sc-ma-preview-origin"></div>
+              <div class="sc-ma-preview-destination"></div>
+            </div>
+          </article>
+        {{/if}}
+
+        {{#if isMovementScope}}
+          <article class="sc-ma-preview-card sc-ma-preview-card--movement">
+            <div class="sc-ma-preview-card-label">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Sections.Movement" }}</div>
+            <div class="sc-ma-preview-stage sc-ma-preview-stage--movement">
+              <div class="sc-ma-preview-range"></div>
+              <div class="sc-ma-preview-origin"></div>
+              <div class="sc-ma-preview-path"></div>
+              <div class="sc-ma-preview-start"></div>
+              <div class="sc-ma-preview-end"></div>
+            </div>
+          </article>
+        {{/if}}
+
+        {{#if isWallScope}}
+          <article class="sc-ma-preview-card sc-ma-preview-card--wall">
+            <div class="sc-ma-preview-card-label">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Sections.Wall" }}</div>
+            <div class="sc-ma-preview-stage sc-ma-preview-stage--wall">
+              <div class="sc-ma-preview-range"></div>
+              <div class="sc-ma-preview-origin"></div>
+              <div class="sc-ma-preview-wall-line sc-ma-preview-wall-line--one"></div>
+              <div class="sc-ma-preview-wall-line sc-ma-preview-wall-line--two"></div>
+            </div>
+          </article>
+        {{/if}}
+      </div>
+    </section>
+
+    <section class="sc-ma-preview-colors-section sc-ma-preview-colors-section--active">
+      <div class="sc-ma-preview-colors-settings">
+        <div class="sc-ma-preview-colors-settings-section">
+          {{#if isTeleportScope}}
+            <h4>{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Sections.Teleport" }}</h4>
+            <div class="sc-ma-preview-colors-field-list">
+              <div class="sc-ma-preview-colors-form-group form-group" data-field-type="color">
+                <label for="sc-ma-teleport-range-fill">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Fields.Fill.Label" }}</label>
+                <div class="form-fields">
+                  <div class="sc-ma-color-control" data-color-control="teleportRangeFill">
+                    <input
+                      type="text"
+                      class="sc-ma-hex-input"
+                      data-hex-for="teleportRangeFill"
+                      value="{{ colors.teleportRangeFill }}"
+                      maxlength="7"
+                      spellcheck="false"
+                      autocomplete="off"
+                      aria-label="Hex value"
+                    />
+                    <input id="sc-ma-teleport-range-fill" type="color" name="teleportRangeFill" class="sc-ma-color-picker" value="{{ colors.teleportRangeFill }}">
+                  </div>
+                </div>
+              </div>
+
+              <div class="sc-ma-preview-colors-form-group form-group" data-field-type="color">
+                <label for="sc-ma-teleport-range-border">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Fields.Border.Label" }}</label>
+                <div class="form-fields">
+                  <div class="sc-ma-color-control" data-color-control="teleportRangeBorder">
+                    <input
+                      type="text"
+                      class="sc-ma-hex-input"
+                      data-hex-for="teleportRangeBorder"
+                      value="{{ colors.teleportRangeBorder }}"
+                      maxlength="7"
+                      spellcheck="false"
+                      autocomplete="off"
+                      aria-label="Hex value"
+                    />
+                    <input id="sc-ma-teleport-range-border" type="color" name="teleportRangeBorder" class="sc-ma-color-picker" value="{{ colors.teleportRangeBorder }}">
+                  </div>
+                </div>
+              </div>
+            </div>
+          {{/if}}
+
+          {{#if isMovementScope}}
+            <h4>{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Sections.Movement" }}</h4>
+            <div class="sc-ma-preview-colors-field-list">
+              <div class="sc-ma-preview-colors-form-group form-group" data-field-type="color">
+                <label for="sc-ma-movement-range-fill">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Fields.Fill.Label" }}</label>
+                <div class="form-fields">
+                  <div class="sc-ma-color-control" data-color-control="movementRangeFill">
+                    <input
+                      type="text"
+                      class="sc-ma-hex-input"
+                      data-hex-for="movementRangeFill"
+                      value="{{ colors.movementRangeFill }}"
+                      maxlength="7"
+                      spellcheck="false"
+                      autocomplete="off"
+                      aria-label="Hex value"
+                    />
+                    <input id="sc-ma-movement-range-fill" type="color" name="movementRangeFill" class="sc-ma-color-picker" value="{{ colors.movementRangeFill }}">
+                  </div>
+                </div>
+              </div>
+
+              <div class="sc-ma-preview-colors-form-group form-group" data-field-type="color">
+                <label for="sc-ma-movement-range-border">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Fields.Border.Label" }}</label>
+                <div class="form-fields">
+                  <div class="sc-ma-color-control" data-color-control="movementRangeBorder">
+                    <input
+                      type="text"
+                      class="sc-ma-hex-input"
+                      data-hex-for="movementRangeBorder"
+                      value="{{ colors.movementRangeBorder }}"
+                      maxlength="7"
+                      spellcheck="false"
+                      autocomplete="off"
+                      aria-label="Hex value"
+                    />
+                    <input id="sc-ma-movement-range-border" type="color" name="movementRangeBorder" class="sc-ma-color-picker" value="{{ colors.movementRangeBorder }}">
+                  </div>
+                </div>
+              </div>
+            </div>
+          {{/if}}
+
+          {{#if isWallScope}}
+            <h4>{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Sections.Wall" }}</h4>
+            <div class="sc-ma-preview-colors-field-list">
+              <div class="sc-ma-preview-colors-form-group form-group" data-field-type="color">
+                <label for="sc-ma-wall-range-fill">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Fields.Fill.Label" }}</label>
+                <div class="form-fields">
+                  <div class="sc-ma-color-control" data-color-control="wallRangeFill">
+                    <input
+                      type="text"
+                      class="sc-ma-hex-input"
+                      data-hex-for="wallRangeFill"
+                      value="{{ colors.wallRangeFill }}"
+                      maxlength="7"
+                      spellcheck="false"
+                      autocomplete="off"
+                      aria-label="Hex value"
+                    />
+                    <input id="sc-ma-wall-range-fill" type="color" name="wallRangeFill" class="sc-ma-color-picker" value="{{ colors.wallRangeFill }}">
+                  </div>
+                </div>
+              </div>
+
+              <div class="sc-ma-preview-colors-form-group form-group" data-field-type="color">
+                <label for="sc-ma-wall-range-border">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Fields.Border.Label" }}</label>
+                <div class="form-fields">
+                  <div class="sc-ma-color-control" data-color-control="wallRangeBorder">
+                    <input
+                      type="text"
+                      class="sc-ma-hex-input"
+                      data-hex-for="wallRangeBorder"
+                      value="{{ colors.wallRangeBorder }}"
+                      maxlength="7"
+                      spellcheck="false"
+                      autocomplete="off"
+                      aria-label="Hex value"
+                    />
+                    <input id="sc-ma-wall-range-border" type="color" name="wallRangeBorder" class="sc-ma-color-picker" value="{{ colors.wallRangeBorder }}">
+                  </div>
+                </div>
+              </div>
+            </div>
+          {{/if}}
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="form-footer sc-ma-preview-colors-footer" data-application-part="footer">
+    <div class="sc-ma-preview-colors-footer-tools">
+      <button type="button" data-action="reset">
+        <i class="fas fa-rotate-left"></i>
+        {{ localize "SCMOREACTIVITIES.Actions.ResetDefaults" }}
+      </button>
+    </div>
+    <button type="button" class="sc-ma-preview-colors-save" data-action="save">
+      <i class="fas fa-save"></i>
+      {{ localize "SCMOREACTIVITIES.Actions.Save" }}
+    </button>
+    <button type="button" class="sc-ma-preview-colors-cancel" data-action="cancel">
+      <i class="fas fa-times"></i>
+      {{ localize "SCMOREACTIVITIES.Actions.Cancel" }}
+    </button>
+  </footer>
+</div>

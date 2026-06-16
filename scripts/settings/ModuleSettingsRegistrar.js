@@ -1,8 +1,10 @@
 import { Constants } from "../constants/Constants.js";
 import { HOOKS } from "../constants/Hooks.js";
 import { SETTINGS_KEYS } from "../constants/SettingsKeys.js";
+import { ModuleSettings } from "./ModuleSettings.js";
 import { ActivityCatalogApp } from "../applications/ActivityCatalogApp.js";
 import { DocumentationMenu } from "./DocumentationMenu.js";
+import { PreviewColorMenu } from "./PreviewColorMenu.js";
 import { SupportMenu } from "./SupportMenu.js";
 
 export class ModuleSettingsRegistrar {
@@ -16,7 +18,9 @@ export class ModuleSettingsRegistrar {
 
     this.#registerDebugLoggingSetting();
     this.#registerDisabledActivityTypesSetting();
+    this.#registerPreviewColorsSetting();
     this.#registerActivityCatalogMenu();
+    this.#registerPreviewColorsMenu();
     this.#registerSupportMenu();
     this.#registerDocumentationMenu();
 
@@ -62,6 +66,20 @@ export class ModuleSettingsRegistrar {
     });
   }
 
+  #registerPreviewColorsSetting() {
+    game.settings.register(Constants.MODULE_ID, SETTINGS_KEYS.PREVIEW_COLORS, {
+      name: Constants.localize("SCMOREACTIVITIES.Settings.PreviewColors.Name", "Preview colors"),
+      hint: Constants.localize(
+        "SCMOREACTIVITIES.Settings.PreviewColors.Hint",
+        "Stores this user's preview colors for teleport, movement, and wall overlays."
+      ),
+      scope: "client",
+      config: false,
+      type: Object,
+      default: ModuleSettings.DEFAULT_PREVIEW_COLORS
+    });
+  }
+
   #registerActivityCatalogMenu() {
     game.settings.registerMenu(Constants.MODULE_ID, SETTINGS_KEYS.ACTIVITY_CATALOG_MENU, {
       name: Constants.localize("SCMOREACTIVITIES.Settings.ActivityCatalogMenu.Name", "Activity catalog"),
@@ -73,6 +91,20 @@ export class ModuleSettingsRegistrar {
       icon: "fa-solid fa-rectangle-list",
       type: ActivityCatalogApp,
       restricted: true
+    });
+  }
+
+  #registerPreviewColorsMenu() {
+    game.settings.registerMenu(Constants.MODULE_ID, SETTINGS_KEYS.PREVIEW_COLORS_MENU, {
+      name: Constants.localize("SCMOREACTIVITIES.Settings.PreviewColorsMenu.Name", "Preview colors"),
+      label: Constants.localize("SCMOREACTIVITIES.Settings.PreviewColorsMenu.Label", "Configure colors"),
+      hint: Constants.localize(
+        "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Hint",
+        "Choose the colors used by teleport, movement, and wall previews for this user."
+      ),
+      icon: "fas fa-palette",
+      type: PreviewColorMenu,
+      restricted: false
     });
   }
 

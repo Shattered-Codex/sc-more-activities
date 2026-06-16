@@ -1,0 +1,75 @@
+<section class="tab activity-{{ tab.id }} {{ tab.cssClass }}" data-tab="{{ tab.id }}" data-group="{{ tab.group }}">
+  {{#if appliedEffects}}{{> "systems/dnd5e/templates/activity/parts/activity-effects.hbs" }}{{/if}}
+
+  <fieldset>
+    <legend>{{ localize "SCMOREACTIVITIES.Activities.ScTeleport.Sections.Configuration" }}</legend>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.MaxTargets.Label" }}</label>
+      <div class="form-fields">
+        <input type="number" name="teleport.maxTargets" value="{{ teleport.maxTargets }}" min="1" step="1">
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.MaxTargets.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScTeleport.Fields.TargetSelf.Label" }}</label>
+      <div class="form-fields">
+        <input type="checkbox" name="teleport.targetSelf" {{#if teleport.targetSelf}}checked{{/if}}>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScTeleport.Fields.TargetSelf.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScTeleport.Fields.OnlyTargetSelf.Label" }}</label>
+      <div class="form-fields">
+        <input type="checkbox" name="teleport.onlyTargetSelf" {{#if teleport.onlyTargetSelf}}checked{{/if}}>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScTeleport.Fields.OnlyTargetSelf.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScTeleport.Fields.TargetRadius.Label" }}</label>
+      <div class="form-fields">
+        <input type="number" name="teleport.targetRadius" value="{{ teleport.targetRadius }}" min="0" step="1">
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScTeleport.Fields.TargetRadius.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScTeleport.Fields.TeleportDistance.Label" }}</label>
+      <div class="form-fields">
+        <input type="number" name="teleport.teleportDistance" value="{{ teleport.teleportDistance }}" min="0" step="1">
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScTeleport.Fields.TeleportDistance.Hint" }}</p>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ localize "SCMOREACTIVITIES.Activities.ScTeleport.Sections.Placement" }}</legend>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScTeleport.Fields.KeepArrangement.Label" }}</label>
+      <div class="form-fields">
+        <input type="checkbox" name="teleport.keepArrangement" {{#if teleport.keepArrangement}}checked{{/if}}>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScTeleport.Fields.KeepArrangement.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScTeleport.Fields.ClusterRadius.Label" }}</label>
+      <div class="form-fields">
+        <input type="number" name="teleport.clusterRadius" value="{{ teleport.clusterRadius }}" min="0" step="1">
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScTeleport.Fields.ClusterRadius.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.SnapToGrid.Label" }}</label>
+      <div class="form-fields">
+        <input type="checkbox" name="teleport.snapToGrid" {{#if teleport.snapToGrid}}checked{{/if}}>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.SnapToGrid.Hint" }}</p>
+    </div>
+  </fieldset>
+</section>

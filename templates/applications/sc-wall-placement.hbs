@@ -1,0 +1,83 @@
+<div class="sc-ma-placement sc-ma-wall-placement">
+  <div class="sc-ma-placement-summary">
+    {{#if isMultipleWalls}}
+      <span>{{ localize "SCMOREACTIVITIES.Activities.ScWall.App.Walls" }}: {{ completedWalls }} / {{ maxWalls }}</span>
+      <span>{{ localize "SCMOREACTIVITIES.Activities.ScWall.App.Total" }}: {{ totalLength }} / {{ maxLength }}</span>
+    {{/if}}
+    <span>{{ lengthLabel }}: {{ currentLength }}{{#unless isMultipleWalls}} / {{ maxLength }}{{/unless}}</span>
+    <span>{{ localize "SCMOREACTIVITIES.Activities.ScWall.App.Points" }}: {{ placedPoints }}</span>
+    <span>{{ wallTypeLabel }}</span>
+  </div>
+
+  {{#if canChooseFacing}}
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.Facing.Label" }}</label>
+      <div class="form-fields">
+        <select class="sc-ma-wall-facing" {{#if isSubmitting}}disabled{{/if}}>
+          {{#each facingOptions as |option|}}
+            <option value="{{ option.value }}" {{#if option.selected}}selected{{/if}}>{{ option.label }}</option>
+          {{/each}}
+        </select>
+      </div>
+    </div>
+  {{/if}}
+
+  <div class="sc-ma-placement-controls">
+    <button type="button" class="sc-ma-wall-place {{#if isPlacing}}placing{{/if}}" {{#if (or isSubmitting (and (not isPlacing) (or lengthLimitReached wallLimitReached)))}}disabled{{/if}}>
+      <i class="fas fa-crosshairs"></i>
+      {{#if isPlacing}}{{ localize "SCMOREACTIVITIES.Activities.ScWall.App.StopPlacement" }}{{else}}{{ localize "SCMOREACTIVITIES.Activities.ScWall.App.StartPlacement" }}{{/if}}
+    </button>
+
+    <button type="button" class="sc-ma-wall-clear" {{#if isSubmitting}}disabled{{/if}}>
+      <i class="fas fa-eraser"></i>
+      {{ localize "SCMOREACTIVITIES.Activities.ScWall.App.ClearPoints" }}
+    </button>
+  </div>
+
+  <p class="hint">
+    {{#if (eq wallType "circular")}}
+      {{ localize "SCMOREACTIVITIES.Activities.ScWall.App.Instructions.Circular" }}
+    {{else if (eq wallType "panels")}}
+      {{ localize "SCMOREACTIVITIES.Activities.ScWall.App.Instructions.Panels" panelSize=panelSize maxPanels=maxPanels }}
+    {{else}}
+      {{ localize "SCMOREACTIVITIES.Activities.ScWall.App.Instructions.Continuous" }}
+    {{/if}}
+  </p>
+
+  {{#if hasCompletedWalls}}
+    <div class="sc-ma-placement-list">
+      {{#each completedWallsData as |wall|}}
+        <div class="sc-ma-placement-row">
+          <span>{{ localize "SCMOREACTIVITIES.Activities.ScWall.App.Wall" }} {{ wall.displayIndex }}</span>
+          <span>{{ localize "SCMOREACTIVITIES.Activities.ScWall.App.Points" }}: {{ wall.pointCount }} · {{ wall.measurementLabel }}: {{ wall.length }}</span>
+          <button type="button" class="sc-ma-wall-delete" data-wall-index="{{ wall.index }}" title="{{ localize "SCMOREACTIVITIES.Activities.ScWall.App.DeleteWall" }}" {{#if ../isSubmitting}}disabled{{/if}}>
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      {{/each}}
+    </div>
+  {{/if}}
+
+  <div class="sc-ma-placement-controls">
+    {{#if canAddMoreWalls}}
+      <button type="button" class="sc-ma-wall-next" {{#if (or isSubmitting (not canFinish))}}disabled{{/if}}>
+        <i class="fas fa-plus"></i>
+        {{ localize "SCMOREACTIVITIES.Activities.ScWall.App.NextWall" }}
+      </button>
+    {{/if}}
+
+    <button type="button" class="sc-ma-wall-finish" {{#if (or isSubmitting (not (or canFinish hasCompletedWalls)))}}disabled{{/if}}>
+      <i class="fas fa-check"></i>
+      {{ localize "SCMOREACTIVITIES.Activities.ScWall.App.CreateWalls" }}
+    </button>
+
+    <button type="button" class="sc-ma-wall-cancel" {{#if isSubmitting}}disabled{{/if}}>
+      <i class="fas fa-times"></i>
+      {{ localize "SCMOREACTIVITIES.Actions.Cancel" }}
+    </button>
+  </div>
+
+  {{#if isPlacing}}
+    <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScWall.App.PlacingStatus" }}</p>
+  {{/if}}
+</div>

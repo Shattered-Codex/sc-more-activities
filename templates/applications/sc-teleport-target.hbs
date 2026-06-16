@@ -1,0 +1,49 @@
+<div class="sc-ma-placement sc-ma-teleport-targets">
+  <div class="sc-ma-placement-summary">
+    <span>{{ localize "SCMOREACTIVITIES.Activities.ScTeleport.App.Targets.MaxTargets" }}: {{ config.maxTargets }}</span>
+    <span>{{ localize "SCMOREACTIVITIES.Activities.ScTeleport.App.Targets.Range" }}: {{ config.targetRadius }}</span>
+    {{#if originName}}<span>{{ localize "SCMOREACTIVITIES.Activities.ScTeleport.App.Targets.Origin" }}: {{ originName }}</span>{{/if}}
+  </div>
+
+  <div class="form-group">
+    <label>{{ localize "SCMOREACTIVITIES.Activities.ScTeleport.App.Targets.Add" }}</label>
+    <div class="form-fields">
+      <select name="targetId">
+        <option value="">{{ localize "SCMOREACTIVITIES.Activities.ScTeleport.App.Targets.Select" }}</option>
+        {{#if tokenGroups.selfTokens.length}}
+          <optgroup label="{{ localize "SCMOREACTIVITIES.Activities.ScTeleport.App.Targets.Self" }}">
+            {{#each tokenGroups.selfTokens as |token|}}
+              <option value="{{ token.id }}">{{ token.name }} ({{ token.distance }})</option>
+            {{/each}}
+          </optgroup>
+        {{/if}}
+        {{#if tokenGroups.otherTokens.length}}
+          <optgroup label="{{ localize "SCMOREACTIVITIES.Activities.ScTeleport.App.Targets.Other" }}">
+            {{#each tokenGroups.otherTokens as |token|}}
+              <option value="{{ token.id }}">{{ token.name }} ({{ token.distance }})</option>
+            {{/each}}
+          </optgroup>
+        {{/if}}
+      </select>
+    </div>
+  </div>
+
+  <div class="sc-ma-placement-list">
+    {{#each selectedTargets as |target|}}
+      <div class="sc-ma-placement-row">
+        <span>{{ target.name }}</span>
+        <span>{{ target.distance }}</span>
+        <button type="button" class="sc-ma-target-delete" data-index="{{ target.index }}" title="{{ localize "SCMOREACTIVITIES.Activities.ScTeleport.App.Targets.Remove" }}">
+          <i class="fas fa-trash"></i>
+        </button>
+      </div>
+    {{else}}
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScTeleport.App.Targets.Empty" }}</p>
+    {{/each}}
+  </div>
+
+  <button type="button" class="sc-ma-teleport-start">
+    <i class="fas fa-crosshairs"></i>
+    {{ localize "SCMOREACTIVITIES.Activities.ScTeleport.App.Targets.Start" }}
+  </button>
+</div>

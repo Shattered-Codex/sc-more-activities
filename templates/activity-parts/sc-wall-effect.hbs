@@ -1,0 +1,117 @@
+<section class="tab activity-{{ tab.id }} {{ tab.cssClass }}" data-tab="{{ tab.id }}" data-group="{{ tab.group }}">
+  {{#if appliedEffects}}{{> "systems/dnd5e/templates/activity/parts/activity-effects.hbs" }}{{/if}}
+
+  <fieldset>
+    <legend>{{ localize "SCMOREACTIVITIES.Activities.ScWall.Sections.Configuration" }}</legend>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.MaxWalls.Label" }}</label>
+      <div class="form-fields">
+        <input type="text" name="wall.maxWalls" value="{{ wall.maxWalls }}">
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.MaxWalls.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.WallType.Label" }}</label>
+      <div class="form-fields">
+        <select name="wall.wallType">
+          {{ selectOptions wallTypeOptions selected=wall.wallType valueAttr="value" labelAttr="label" }}
+        </select>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.WallType.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.MaxLength.Label" }}</label>
+      <div class="form-fields">
+        <input type="text" name="wall.maxLength" value="{{ wall.maxLength }}">
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.MaxLength.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.Facing.Label" }}</label>
+      <div class="form-fields">
+        <select name="wall.facing">
+          {{ selectOptions facingOptions selected=wall.facing valueAttr="value" labelAttr="label" }}
+        </select>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.Facing.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.ReferenceRange.Label" }}</label>
+      <div class="form-fields">
+        <input type="text" name="wall.referenceRange" value="{{ wall.referenceRange }}">
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.ReferenceRange.Hint" }}</p>
+    </div>
+  </fieldset>
+
+  {{#if (eq wall.wallType "panels")}}
+    <fieldset>
+      <legend>{{ localize "SCMOREACTIVITIES.Activities.ScWall.Sections.Panels" }}</legend>
+
+      <div class="form-group">
+        <label>{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.PanelSize.Label" }}</label>
+        <div class="form-fields">
+          <input type="text" name="wall.panelSize" value="{{ wall.panelSize }}">
+        </div>
+        <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.PanelSize.Hint" }}</p>
+      </div>
+
+      <div class="form-group">
+        <label>{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.PanelSpacing.Label" }}</label>
+        <div class="form-fields">
+          <input type="text" name="wall.panelSpacing" value="{{ wall.panelSpacing }}">
+        </div>
+        <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.PanelSpacing.Hint" }}</p>
+      </div>
+
+      <div class="form-group">
+        <label>{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.MaxPanels.Label" }}</label>
+        <div class="form-fields">
+          <input type="text" name="wall.maxPanels" value="{{ wall.maxPanels }}">
+        </div>
+        <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.MaxPanels.Hint" }}</p>
+      </div>
+    </fieldset>
+  {{/if}}
+
+  <fieldset>
+    <legend>{{ localize "SCMOREACTIVITIES.Activities.ScWall.Sections.Properties" }}</legend>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.BlocksMovement.Label" }}</label>
+      <div class="form-fields">
+        <input type="checkbox" name="wall.blocksMovement" {{#if wall.blocksMovement}}checked{{/if}}>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.BlocksMovement.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.BlocksSight.Label" }}</label>
+      <div class="form-fields">
+        <input type="checkbox" name="wall.blocksSight" {{#if wall.blocksSight}}checked{{/if}}>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.BlocksSight.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.BlocksSound.Label" }}</label>
+      <div class="form-fields">
+        <input type="checkbox" name="wall.blocksSound" {{#if wall.blocksSound}}checked{{/if}}>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.BlocksSound.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.AllowPlayerRequests.Label" }}</label>
+      <div class="form-fields">
+        <input type="checkbox" name="wall.allowPlayerRequests" {{#if wall.allowPlayerRequests}}checked{{/if}}>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScWall.Fields.AllowPlayerRequests.Hint" }}</p>
+    </div>
+  </fieldset>
+</section>

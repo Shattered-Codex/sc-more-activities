@@ -3,5 +3,8 @@ export const ACTIVITY_TYPES = Object.freeze({
   CONTEST: "sc-contest",
   HOOK: "sc-hook",
   MACRO: "sc-macro",
-  SOUND: "sc-sound"
+  MOVEMENT: "sc-movement",
+  SOUND: "sc-sound",
+  TELEPORT: "sc-teleport",
+  WALL: "sc-wall"
 });

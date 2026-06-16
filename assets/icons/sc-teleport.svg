@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SC Teleport">
+  <defs>
+    <linearGradient id="sc-teleport-a" x1="8" x2="56" y1="56" y2="8" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#39f08c"/>
+      <stop offset="1" stop-color="#7fb5ff"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#sc-teleport-a)" d="M32 6c9.4 0 17 5.5 17 12.4 0 3.8-2.4 7.3-6.1 9.5l-3.2-4.9c2.1-1.2 3.3-2.8 3.3-4.6C43 14.8 38.1 12 32 12s-11 2.8-11 6.4c0 1.8 1.3 3.5 3.4 4.7L21.2 28c-3.8-2.2-6.2-5.7-6.2-9.6C15 11.5 22.6 6 32 6Z"/>
+  <path fill="#dfe7f4" d="M32 18 45 39H34v19L19 35h11L32 18Z"/>
+  <path fill="#39f08c" d="M15.5 39.1c-5 2.1-8.5 5.2-8.5 9 0 6.1 10.8 10.9 25 10.9s25-4.8 25-10.9c0-3.8-3.4-6.9-8.5-9l-2.7 4.9c3.4 1.1 5.2 2.6 5.2 4.1 0 2.3-7.8 5-19 5s-19-2.7-19-5c0-1.5 1.8-3 5.2-4.1l-2.7-4.9Z"/>
+</svg>
