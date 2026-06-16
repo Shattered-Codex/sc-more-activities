@@ -3,8 +3,8 @@ import { Logger } from "../../support/Logger.js";
 
 export class ScGrantActivityService {
   static async execute(activity) {
-    const actor = activity?.actor ?? activity?.item?.actor ?? null;
-    if (!actor) {
+    const sourceActor = activity?.actor ?? activity?.item?.actor ?? null;
+    if (!sourceActor) {
       ui.notifications?.warn?.(Constants.localize(
         "SCMOREACTIVITIES.Activities.ScGrant.Warning.MissingActor",
         "This grant activity needs an actor."
@@ -12,12 +12,17 @@ export class ScGrantActivityService {
       return { canceled: true, reason: "missing-actor" };
     }
 
-    if (!actor.isOwner) {
+    const recipientActor = ScGrantActivityService.#resolveRecipientActor(activity, sourceActor);
+    if (!recipientActor) {
+      return { canceled: true, reason: "missing-recipient" };
+    }
+
+    if (!recipientActor.isOwner) {
       ui.notifications?.warn?.(Constants.localize(
         "SCMOREACTIVITIES.Activities.ScGrant.Warning.ActorPermission",
         "You do not have permission to grant items to this actor."
       ));
-      return { canceled: true, reason: "actor-permission" };
+      return { canceled: true, reason: "recipient-permission" };
     }
 
     const entries = ScGrantActivityService.#normalizeEntries(activity?.grants ?? []);
@@ -36,7 +41,7 @@ export class ScGrantActivityService {
       let totalGranted = 0;
 
       for (const { entry, item } of sources) {
-        const existingStack = ScGrantActivityService.#findExistingStack(actor, item, activity);
+        const existingStack = ScGrantActivityService.#findExistingStack(recipientActor, item, activity);
         const documents = ScGrantActivityService.#createDocumentsForEntry(entry, item, activity, existingStack);
         createData.push(...documents);
         if (existingStack && ScGrantActivityService.#supportsQuantity(existingStack.toObject())) {
@@ -57,21 +62,21 @@ export class ScGrantActivityService {
       }
 
       const updated = quantityUpdates.length
-        ? await actor.updateEmbeddedDocuments("Item", quantityUpdates)
+        ? await recipientActor.updateEmbeddedDocuments("Item", quantityUpdates)
         : [];
 
       const created = createData.length
-        ? await actor.createEmbeddedDocuments("Item", createData)
+        ? await recipientActor.createEmbeddedDocuments("Item", createData)
         : [];
       ui.notifications?.info?.(Constants.format(
         "SCMOREACTIVITIES.Activities.ScGrant.Info.GrantedItems",
-        { count: totalGranted, actor: actor.name ?? "" },
+        { count: totalGranted, actor: recipientActor.name ?? "" },
         `Granted ${totalGranted} item(s).`
       ));
 
       return {
         canceled: false,
-        actor,
+        actor: recipientActor,
         updated,
         created
       };
@@ -93,6 +98,33 @@ export class ScGrantActivityService {
         quantity: Math.max(1, Number(entry?.quantity) || 1)
       }))
       .filter((entry) => entry.uuid);
+  }
+
+  static #resolveRecipientActor(activity, sourceActor) {
+    const recipient = String(activity?.recipient ?? "self").trim().toLowerCase();
+    if (recipient !== "target") {
+      return sourceActor;
+    }
+
+    const targets = Array.from(game?.user?.targets ?? []);
+    if (targets.length !== 1) {
+      ui.notifications?.warn?.(Constants.localize(
+        "SCMOREACTIVITIES.Activities.ScGrant.Warning.TargetRequired",
+        "Target exactly one token to receive granted items."
+      ));
+      return null;
+    }
+
+    const targetActor = targets[0]?.actor ?? null;
+    if (!targetActor) {
+      ui.notifications?.warn?.(Constants.localize(
+        "SCMOREACTIVITIES.Activities.ScGrant.Warning.TargetActorMissing",
+        "The selected target token does not have a valid actor."
+      ));
+      return null;
+    }
+
+    return targetActor;
   }
 
   static async #resolveSources(entries) {

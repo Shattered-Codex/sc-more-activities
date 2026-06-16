@@ -15,6 +15,17 @@ export class ScGrantActivitySheet extends dnd5e.applications.activity.ActivitySh
 
   async _prepareEffectContext(context, options) {
     context = await super._prepareEffectContext(context, options);
+    context.recipient = this.activity?.recipient ?? "self";
+    context.recipientOptions = [
+      {
+        value: "self",
+        label: game.i18n.localize("SCMOREACTIVITIES.Activities.ScGrant.Fields.Recipient.Choices.Self")
+      },
+      {
+        value: "target",
+        label: game.i18n.localize("SCMOREACTIVITIES.Activities.ScGrant.Fields.Recipient.Choices.Target")
+      }
+    ];
     context.grants = await Promise.all(
       (this.activity?.grants ?? []).map(async(entry, index) => {
         const uuid = String(entry?.uuid ?? "").trim();
