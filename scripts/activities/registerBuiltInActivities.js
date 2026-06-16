@@ -1,3 +1,4 @@
+import { registerScAdvancementActivity } from "./advancement/registerScAdvancementActivity.js";
 import { registerScChainActivity } from "./chain/registerScChainActivity.js";
 import { registerScContestActivity } from "./contest/registerScContestActivity.js";
 import { registerScGrantActivity } from "./grant/registerScGrantActivity.js";
@@ -10,6 +11,7 @@ import { registerScWallActivity } from "./wall/registerScWallActivity.js";
 
 export function registerBuiltInActivities(activitiesApi) {
   return Object.freeze([
+    registerScAdvancementActivity(activitiesApi),
     registerScSoundActivity(activitiesApi),
     registerScMacroActivity(activitiesApi),
     registerScHookActivity(activitiesApi),

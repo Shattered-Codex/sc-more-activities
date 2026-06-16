@@ -1,0 +1,70 @@
+<section class="tab activity-{{ tab.id }} {{ tab.cssClass }}" data-tab="{{ tab.id }}" data-group="{{ tab.group }}">
+  {{#if appliedEffects}}{{> "systems/dnd5e/templates/activity/parts/activity-effects.hbs" }}{{/if}}
+
+  <fieldset>
+    <legend>{{ localize "SCMOREACTIVITIES.Activities.ScAdvancement.Sections.Configuration" }}</legend>
+
+    <div class="form-group stacked">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScAdvancement.Fields.SourceItem.Label" }}</label>
+      <div class="form-fields">
+        <input
+          type="text"
+          name="sourceItemUuid"
+          value="{{ sourceItemUuid }}"
+          placeholder="{{ localize "SCMOREACTIVITIES.Activities.ScAdvancement.Fields.SourceItem.Placeholder" }}"
+          data-advancement-source-input
+        >
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScAdvancement.Fields.SourceItem.Hint" }}</p>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ localize "SCMOREACTIVITIES.Activities.ScAdvancement.Sections.Advancements" }}</legend>
+
+    {{#each selectedSelections}}
+      <input type="hidden" name="selections.{{ this.index }}.advancementId" value="{{ this.advancementId }}">
+      <input type="hidden" name="selections.{{ this.index }}.level" value="{{ this.level }}">
+    {{/each}}
+
+    {{#if sourceItem}}
+      <div class="sc-ma-advancement-source">
+        <img src="{{ sourceItem.img }}" alt="{{ sourceItem.name }}">
+        <div class="sc-ma-advancement-source-meta">
+          <div class="sc-ma-advancement-source-name">{{ sourceItem.name }}</div>
+          <div class="sc-ma-advancement-source-details">
+            {{ sourceItem.type }} • {{ localize "SCMOREACTIVITIES.Activities.ScAdvancement.Fields.SourceItem.Count" count=sourceItem.count }}
+          </div>
+          <div class="sc-ma-advancement-source-uuid">{{ sourceItem.uuid }}</div>
+        </div>
+      </div>
+    {{else if sourceItemMissing}}
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScAdvancement.Fields.SourceItem.Missing" }}</p>
+    {{/if}}
+
+    {{#if availableSelections.length}}
+      <div class="sc-ma-advancement-list">
+        {{#each availableSelections}}
+          <label class="sc-ma-advancement-row">
+            <input
+              type="checkbox"
+              data-advancement-checkbox
+              data-advancement-id="{{ this.advancementId }}"
+              data-level="{{ this.level }}"
+              {{#if this.selected}}checked{{/if}}
+            >
+            <div class="sc-ma-advancement-meta">
+              <div class="sc-ma-advancement-name">{{ this.title }}</div>
+              <div class="sc-ma-advancement-details">
+                {{ localize "SCMOREACTIVITIES.Activities.ScAdvancement.Fields.Advancement.Level" level=this.level }}
+                • {{ this.type }}
+              </div>
+            </div>
+          </label>
+        {{/each}}
+      </div>
+    {{else}}
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScAdvancement.Fields.Advancement.Empty" }}</p>
+    {{/if}}
+  </fieldset>
+</section>
