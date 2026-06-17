@@ -3,7 +3,7 @@
 SC - More Activities is a Shattered Codex activity platform for the `dnd5e`
 system in Foundry VTT.
 
-This module is currently in Phase 7 of implementation. The current build is an
+This module is currently in Phase 9A of implementation. The current build is an
 installable module shell with localization, styles, settings, documentation and
 support launchers, lifecycle logging, an activity registration API, a `dnd5e`
 adapter, the first built-in activity types, and a GM-facing activity catalog.
@@ -30,15 +30,17 @@ removing their `dnd5e` registrations.
   lists with loop protection.
 - Built-in `sc-contest` activity for a simple contested d20 workflow between
   the activity actor and one selected defender.
+- Built-in `sc-teleport`, `sc-movement`, and `sc-wall` canvas activities with
+  GM-mediated scene operations.
+- Built-in `sc-grant` and `sc-advancement` inventory/progression activities.
 - Guarded activity create dialog grouping for D&D 5e, Shattered Codex, and
-  registry/config metadata-provided external groups, replacing separate lists
-  with group panels in a slightly top-offset icon rail.
+  registry/config metadata-provided external groups while keeping the native
+  dialog presentation and original theme.
 - Activity catalog and diagnostics app available from module settings.
 - GM activity availability controls for creation and use.
 
-Direct defender-owner socket/query mediation, migration tools, legacy type
-aliases, and richer activity creation catalog workflows are intentionally not
-implemented in this phase.
+Migration tools, legacy type aliases, and richer activity creation catalog
+workflows are intentionally not implemented in this phase.
 
 ## Public API
 
@@ -132,11 +134,14 @@ Phase 4 manual smoke checks:
 - `sc-contest` can request GM-mediated resolution when a player cannot roll for
   the defender. Direct requests to the defender owner are reserved for a later
   socket/query refinement.
+- third-party modules can register their own activities through the public
+  registration hook, including module-scoped integrations such as
+  `sc-simple-sockets`.
 - `sc-macro` shows the world macro selector only in world mode and the code
   editor only in inline mode.
 - Activity creation groups D&D 5e (`fa-brands fa-d-and-d`), Shattered Codex
-  (`fa-solid fa-book-sparkles`), and metadata-provided external activities into
-  an icon-only `tabs-right` rail placed slightly below the dialog top.
+  (`fa-solid fa-book-sparkles`), and metadata-provided external activities
+  without adding module-specific visual chrome beyond the native dialog theme.
 - Activity catalog opens from module settings and shows registered, rejected,
   warning, lifecycle, and capability diagnostics with search and filters.
 - Catalog availability switches hide disabled activity types from creation and

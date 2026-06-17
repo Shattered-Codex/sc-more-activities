@@ -265,7 +265,9 @@ export class ActivityCreateDialogTabs {
     }
 
     const ui = summary.ui ?? {};
-    if (ui.scope === "shattered-codex" || summary.moduleId === Constants.MODULE_ID) {
+    const isShatteredCodexScope = ui.scope === "shattered-codex"
+      || (summary.moduleId === Constants.MODULE_ID && !ui.scope);
+    if (isShatteredCodexScope) {
       return {
         key: ui.groupId ?? "shattered-codex",
         label: ActivityCreateDialogTabs.#resolveLabel(

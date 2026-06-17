@@ -32,7 +32,10 @@ export class RegistrationApi {
       category: summary.category,
       scope: summary.ui?.scope ?? summary.scope ?? "external",
       enabled: disabledMap[summary.type] !== true,
-      disabled: disabledMap[summary.type] === true
+      disabled: disabledMap[summary.type] === true,
+      unavailable: false,
+      registered: true,
+      status: disabledMap[summary.type] === true ? "disabled" : "enabled"
     })));
   };
 
@@ -48,6 +51,7 @@ export class RegistrationApi {
       registered: true,
       enabled,
       disabled: !enabled,
+      unavailable: false,
       status: enabled ? "enabled" : "disabled"
     });
   };

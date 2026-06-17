@@ -393,7 +393,7 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
       availabilityHint,
       availabilityActionLabel: ActivityCatalogApp.#availabilityActionLabel(enabled, label),
       availabilityClass: `sc-ma-status--${availabilityState}`,
-      canToggleAvailability: status === "flushed" && game.user?.isGM === true,
+      canToggleAvailability: status === "flushed" && availabilityState !== "unavailable" && game.user?.isGM === true,
       enabled,
       icon,
       iconIsPath: ActivityCatalogApp.#isIconPath(icon),
@@ -541,6 +541,9 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
 
   static #availabilityState(status, availabilityEntry) {
     if (status !== "flushed") {
+      return "unavailable";
+    }
+    if (availabilityEntry?.unavailable === true) {
       return "unavailable";
     }
     return availabilityEntry?.enabled === false ? "disabled" : "active";
