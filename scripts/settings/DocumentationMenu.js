@@ -15,7 +15,7 @@ export class DocumentationMenu extends ApplicationV2 {
     window: {
       title: Constants.localize("SCMOREACTIVITIES.Settings.DocumentationMenu.Name", "Documentation"),
       resizable: false,
-      icon: "fas fa-book-open"
+      icon: "fas fa-hat-wizard"
     },
     position: {
       width: 420,

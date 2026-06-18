@@ -3,6 +3,16 @@
   "title": "SC - More Activities",
   "description": "A Shattered Codex activity platform for the dnd5e system.",
   "version": "1.0.0",
+  "media": [
+    {
+      "type": "setup",
+      "url": "https://i.imgur.com/hjOHnPm.png"
+    },
+    {
+      "type": "cover",
+      "url": "https://i.imgur.com/hjOHnPm.png"
+    }
+  ],
   "authors": [
     {
       "name": "Gustavo Bacelar",

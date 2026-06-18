@@ -1,5 +1,6 @@
 import { Constants } from "../constants/Constants.js";
 import { SETTINGS_KEYS } from "../constants/SettingsKeys.js";
+import { MoreActivitiesMigrationApp } from "./MoreActivitiesMigrationApp.js";
 
 const api = foundry?.applications?.api ?? {};
 const { ApplicationV2, HandlebarsApplicationMixin } = api;
@@ -145,6 +146,12 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
     clearButton?.addEventListener("click", (event) => {
       event.preventDefault();
       this.#clearFilters();
+    });
+
+    const migrationButton = root.querySelector('[data-action="open-migration"]');
+    migrationButton?.addEventListener("click", (event) => {
+      event.preventDefault();
+      MoreActivitiesMigrationApp.open();
     });
 
     this.#bindFilters();

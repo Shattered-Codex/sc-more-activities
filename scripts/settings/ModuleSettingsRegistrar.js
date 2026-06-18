@@ -3,6 +3,7 @@ import { HOOKS } from "../constants/Hooks.js";
 import { SETTINGS_KEYS } from "../constants/SettingsKeys.js";
 import { ModuleSettings } from "./ModuleSettings.js";
 import { ActivityCatalogApp } from "../applications/ActivityCatalogApp.js";
+import { MoreActivitiesMigrationApp } from "../applications/MoreActivitiesMigrationApp.js";
 import { DocumentationMenu } from "./DocumentationMenu.js";
 import { PreviewColorMenu } from "./PreviewColorMenu.js";
 import { SupportMenu } from "./SupportMenu.js";
@@ -19,15 +20,19 @@ export class ModuleSettingsRegistrar {
     this.#registerDebugLoggingSetting();
     this.#registerDisabledActivityTypesSetting();
     this.#registerPreviewColorsSetting();
-    this.#registerActivityCatalogMenu();
-    this.#registerPreviewColorsMenu();
+    this.#registerMigrationBackupsSetting();
+    this.#registerMigrationBackupRetentionSetting();
     this.#registerSupportMenu();
     this.#registerDocumentationMenu();
+    this.#registerActivityCatalogMenu();
+    this.#registerMigrationMenu();
+    this.#registerPreviewColorsMenu();
 
     Hooks.on("renderSettingsConfig", (_app, html) => {
       ActivityCatalogApp.bindSettingsButton(html);
       SupportMenu.bindSettingsButton(html);
       DocumentationMenu.bindSettingsButton(html);
+      ModuleSettingsRegistrar.#prioritizeSpecialMenus(html);
     });
   }
 
@@ -80,6 +85,40 @@ export class ModuleSettingsRegistrar {
     });
   }
 
+  #registerMigrationBackupsSetting() {
+    game.settings.register(Constants.MODULE_ID, SETTINGS_KEYS.MIGRATION_BACKUPS, {
+      name: Constants.localize("SCMOREACTIVITIES.Settings.MigrationBackups.Name", "Migration backups"),
+      hint: Constants.localize(
+        "SCMOREACTIVITIES.Settings.MigrationBackups.Hint",
+        "Stores more-activities migration backups for restore."
+      ),
+      scope: "world",
+      config: false,
+      type: Object,
+      default: []
+    });
+  }
+
+  #registerMigrationBackupRetentionSetting() {
+    game.settings.register(Constants.MODULE_ID, SETTINGS_KEYS.MIGRATION_BACKUP_RETENTION, {
+      name: Constants.localize("SCMOREACTIVITIES.Settings.MigrationBackupRetention.Name", "Migration backup retention"),
+      hint: Constants.localize(
+        "SCMOREACTIVITIES.Settings.MigrationBackupRetention.Hint",
+        "How many more-activities migration backups to keep in world settings."
+      ),
+      scope: "world",
+      config: true,
+      restricted: true,
+      type: Number,
+      default: 3,
+      range: {
+        min: 1,
+        max: 10,
+        step: 1
+      }
+    });
+  }
+
   #registerActivityCatalogMenu() {
     game.settings.registerMenu(Constants.MODULE_ID, SETTINGS_KEYS.ACTIVITY_CATALOG_MENU, {
       name: Constants.localize("SCMOREACTIVITIES.Settings.ActivityCatalogMenu.Name", "Activity catalog"),
@@ -90,6 +129,20 @@ export class ModuleSettingsRegistrar {
       ),
       icon: "fa-solid fa-rectangle-list",
       type: ActivityCatalogApp,
+      restricted: true
+    });
+  }
+
+  #registerMigrationMenu() {
+    game.settings.registerMenu(Constants.MODULE_ID, SETTINGS_KEYS.MIGRATION_MENU, {
+      name: Constants.localize("SCMOREACTIVITIES.Settings.MigrationMenu.Name", "More Activities migration"),
+      label: Constants.localize("SCMOREACTIVITIES.Settings.MigrationMenu.Label", "Open migration tools"),
+      hint: Constants.localize(
+        "SCMOREACTIVITIES.Settings.MigrationMenu.Hint",
+        "Preview, apply, export, and restore explicit migrations from the legacy more-activities module."
+      ),
+      icon: "fa-solid fa-arrows-rotate",
+      type: MoreActivitiesMigrationApp,
       restricted: true
     });
   }
@@ -130,9 +183,55 @@ export class ModuleSettingsRegistrar {
         "SCMOREACTIVITIES.Settings.DocumentationMenu.Hint",
         "Open the SC - More Activities documentation wiki."
       ),
-      icon: "fas fa-book-open",
+      icon: "fas fa-hat-wizard",
       type: DocumentationMenu,
       restricted: true
     });
+  }
+
+  static #prioritizeSpecialMenus(html) {
+    const root = ModuleSettingsRegistrar.#resolveRoot(html);
+    if (!root) {
+      return;
+    }
+
+    const supportKey = `${Constants.MODULE_ID}.${SETTINGS_KEYS.SUPPORT_MENU}`;
+    const docsKey = `${Constants.MODULE_ID}.${SETTINGS_KEYS.DOCUMENTATION_MENU}`;
+    const supportRow = ModuleSettingsRegistrar.#findSettingsRow(root, supportKey);
+    const docsRow = ModuleSettingsRegistrar.#findSettingsRow(root, docsKey);
+    const anchor = supportRow ?? docsRow;
+    const parent = anchor?.parentElement ?? null;
+    if (!parent) {
+      return;
+    }
+
+    if (docsRow && docsRow.parentElement === parent) {
+      parent.prepend(docsRow);
+    }
+    if (supportRow && supportRow.parentElement === parent) {
+      parent.prepend(supportRow);
+    }
+  }
+
+  static #findSettingsRow(root, key) {
+    return root.querySelector([
+      `[data-setting-id="${key}"]`,
+      `[data-menu-id="${key}"]`,
+      `[data-key="${key}"]`,
+      `[data-setting="${key}"]`
+    ].join(",")) ?? null;
+  }
+
+  static #resolveRoot(html) {
+    if (!html) {
+      return null;
+    }
+    if (html.jquery || typeof html.get === "function") {
+      return html[0] ?? html.get(0) ?? null;
+    }
+    if (html instanceof Element || html?.querySelector) {
+      return html;
+    }
+    return null;
   }
 }

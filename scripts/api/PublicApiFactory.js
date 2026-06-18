@@ -2,7 +2,7 @@ import { Constants } from "../constants/Constants.js";
 import { HOOKS } from "../constants/Hooks.js";
 
 export class PublicApiFactory {
-  static create({ activities, moduleVersion }) {
+  static create({ activities, migration, moduleVersion }) {
     return Object.freeze({
       moduleId: Constants.MODULE_ID,
       moduleVersion: moduleVersion ?? "0.0.0",
@@ -13,11 +13,11 @@ export class PublicApiFactory {
         activityCreation: true,
         activityCatalog: true,
         activityAvailability: true,
-        migration: false
+        migration: true
       }),
       hooks: Object.freeze({ ...HOOKS }),
       activities,
-      migration: Object.freeze({})
+      migration: migration ?? Object.freeze({})
     });
   }
 }

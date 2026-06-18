@@ -10,12 +10,14 @@ import { ActivityCreateDialogTabs } from "./integrations/dnd5e/ActivityCreateDia
 import { ScCanvasActivityService } from "./activities/canvas/ScCanvasActivityService.js";
 import { ScContestActivityService } from "./activities/contest/ScContestActivityService.js";
 import { ModuleSettingsRegistrar } from "./settings/ModuleSettingsRegistrar.js";
+import { MoreActivitiesMigrationService } from "./migration/MoreActivitiesMigrationService.js";
 import { Logger } from "./support/Logger.js";
 
 const registry = new ActivityRegistry();
 const registrationApi = new RegistrationApi({ registry });
 const dnd5eActivityAdapter = new Dnd5eActivityAdapter();
 const settingsRegistrar = new ModuleSettingsRegistrar();
+const migrationService = new MoreActivitiesMigrationService();
 let publicApi = null;
 
 Hooks.once("init", () => {
@@ -31,6 +33,7 @@ Hooks.once("init", () => {
   registry.beginCollection();
   publicApi = ApiPublisher.publish(PublicApiFactory.create({
     activities: registrationApi.asPublicObject(),
+    migration: migrationService.asPublicObject(),
     moduleVersion: game.modules.get(Constants.MODULE_ID)?.version
   }));
 

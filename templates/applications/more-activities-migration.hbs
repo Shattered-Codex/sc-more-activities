@@ -1,0 +1,316 @@
+<section class="sc-ma-migration-shell">
+  {{#unless isGm}}
+    <p class="sc-ma-muted">{{ localize "SCMOREACTIVITIES.Migration.Error.GmOnly" }}</p>
+  {{else}}
+    <header class="sc-ma-migration-toolbar">
+      <div class="sc-ma-migration-actions">
+        <button type="button" data-action="run-preview" {{#if busy}}disabled{{/if}}>
+          <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+          <span>{{ localize "SCMOREACTIVITIES.Migration.Actions.RunPreview" }}</span>
+        </button>
+        <button type="button" data-action="apply-migration" {{#unless canApply}}disabled{{/unless}} {{#if busy}}disabled{{/if}}>
+          <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
+          <span>{{ localize "SCMOREACTIVITIES.Migration.Actions.Apply" }}</span>
+        </button>
+        <button type="button" data-action="restore-latest" {{#unless backupCount}}disabled{{/unless}} {{#if busy}}disabled{{/if}}>
+          <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
+          <span>{{ localize "SCMOREACTIVITIES.Migration.Actions.RestoreLatest" }}</span>
+        </button>
+      </div>
+      <div class="sc-ma-migration-actions">
+        <button type="button" data-action="export-preview" {{#unless canExportPreview}}disabled{{/unless}}>
+          <i class="fa-solid fa-file-export" aria-hidden="true"></i>
+          <span>{{ localize "SCMOREACTIVITIES.Migration.Actions.ExportPreview" }}</span>
+        </button>
+        <button type="button" data-action="export-report" {{#unless canExportReport}}disabled{{/unless}}>
+          <i class="fa-solid fa-file-arrow-down" aria-hidden="true"></i>
+          <span>{{ localize "SCMOREACTIVITIES.Migration.Actions.ExportReport" }}</span>
+        </button>
+      </div>
+    </header>
+
+    <section class="sc-ma-migration-summary">
+      <div class="sc-ma-migration-card">
+        <span>{{ localize "SCMOREACTIVITIES.Migration.Summary.Backups" }}</span>
+        <strong>{{ backupCount }}</strong>
+      </div>
+      <div class="sc-ma-migration-card">
+        <span>{{ localize "SCMOREACTIVITIES.Migration.Summary.PreviewItems" }}</span>
+        <strong>{{ previewItemCount }}</strong>
+      </div>
+      <div class="sc-ma-migration-card">
+        <span>{{ localize "SCMOREACTIVITIES.Migration.Summary.Convertible" }}</span>
+        <strong>{{ preview.convertible }}</strong>
+      </div>
+      <div class="sc-ma-migration-card">
+        <span>{{ localize "SCMOREACTIVITIES.Migration.Summary.Blocked" }}</span>
+        <strong>{{ preview.blocked }}</strong>
+      </div>
+      <div class="sc-ma-migration-card">
+        <span>{{ localize "SCMOREACTIVITIES.Migration.Summary.UpdatedItems" }}</span>
+        <strong>{{ report.updatedItems }}</strong>
+      </div>
+      <div class="sc-ma-migration-card">
+        <span>{{ localize "SCMOREACTIVITIES.Migration.Summary.RestoredItems" }}</span>
+        <strong>{{ restoreReport.restoredItems }}</strong>
+      </div>
+    </section>
+
+    <section class="sc-ma-migration-tabbed">
+      <nav class="sc-ma-catalog-tab-list" role="tablist" aria-label="{{ localize "SCMOREACTIVITIES.Migration.Tabs.Label" }}">
+        {{#each tableTabs as |tab|}}
+          <button
+            type="button"
+            id="{{ tab.tabId }}"
+            class="sc-ma-catalog-tab {{#if tab.active}}is-active{{/if}}"
+            role="tab"
+            data-migration-tab="{{ tab.key }}"
+            aria-controls="{{ tab.panelId }}"
+            aria-selected="{{#if tab.active}}true{{else}}false{{/if}}"
+            tabindex="{{#if tab.active}}0{{else}}-1{{/if}}"
+          >
+            <i class="{{ tab.icon }}" aria-hidden="true"></i>
+            <span>{{ tab.label }}</span>
+            <strong>{{ tab.count }}</strong>
+          </button>
+        {{/each}}
+      </nav>
+
+      <div class="sc-ma-catalog-tab-panels">
+        <section
+          id="sc-ma-migration-panel-overview"
+          class="sc-ma-catalog-tab-panel sc-ma-migration-panel-stack {{#if tabStates.overview}}is-active{{/if}}"
+          data-migration-panel="overview"
+          role="tabpanel"
+          aria-labelledby="sc-ma-migration-tab-overview"
+          aria-hidden="{{#if tabStates.overview}}false{{else}}true{{/if}}"
+          {{#unless tabStates.overview}}hidden{{/unless}}
+        >
+          <div class="sc-ma-migration-panel-scroll">
+            {{#if latestBackup}}
+              <section class="sc-ma-migration-panel">
+                <header>
+                  <h3>{{ localize "SCMOREACTIVITIES.Migration.Sections.LatestBackup" }}</h3>
+                </header>
+                <p class="sc-ma-muted">
+                  {{ latestBackup.createdAtLabel }} · {{ latestBackup.itemCount }} {{ localize "SCMOREACTIVITIES.Migration.Fields.Items" }} · {{ latestBackup.previewId }}
+                </p>
+              </section>
+            {{/if}}
+
+            {{#if preview.warnings.length}}
+              <section class="sc-ma-migration-panel">
+                <header>
+                  <h3>{{ localize "SCMOREACTIVITIES.Migration.Sections.PreviewWarnings" }}</h3>
+                </header>
+                <ul class="sc-ma-migration-list">
+                  {{#each preview.warnings as |warning|}}
+                    <li>{{ warning }}</li>
+                  {{/each}}
+                </ul>
+              </section>
+            {{/if}}
+
+            <section class="sc-ma-migration-panel">
+              <header>
+                <h3>{{ localize "SCMOREACTIVITIES.Migration.Sections.Backups" }}</h3>
+              </header>
+              <div class="sc-ma-catalog-table-wrap">
+                <table class="sc-ma-catalog-table sc-ma-migration-table">
+                  <thead>
+                    <tr>
+                      <th>{{ localize "SCMOREACTIVITIES.Migration.Columns.CreatedAt" }}</th>
+                      <th>{{ localize "SCMOREACTIVITIES.Migration.Columns.ItemsCount" }}</th>
+                      <th>{{ localize "SCMOREACTIVITIES.Migration.Columns.PreviewId" }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {{#if backups.length}}
+                      {{#each backups as |entry|}}
+                        <tr>
+                          <td>{{ entry.createdAtLabel }}</td>
+                          <td>{{ entry.itemCount }}</td>
+                          <td><code>{{ entry.previewId }}</code></td>
+                        </tr>
+                      {{/each}}
+                    {{else}}
+                      <tr>
+                        <td colspan="3">{{ localize "SCMOREACTIVITIES.Migration.Empty.Backups" }}</td>
+                      </tr>
+                    {{/if}}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section
+          id="sc-ma-migration-panel-preview"
+          class="sc-ma-catalog-tab-panel sc-ma-catalog-table-section sc-ma-catalog-table-section--primary {{#if tabStates.preview}}is-active{{/if}}"
+          data-migration-panel="preview"
+          role="tabpanel"
+          aria-labelledby="sc-ma-migration-tab-preview"
+          aria-hidden="{{#if tabStates.preview}}false{{else}}true{{/if}}"
+          {{#unless tabStates.preview}}hidden{{/unless}}
+        >
+          <header>
+            <h3>{{ localize "SCMOREACTIVITIES.Migration.Sections.PreviewResults" }}</h3>
+            <span>{{ previewEntries.length }}</span>
+          </header>
+          <div class="sc-ma-catalog-table-wrap">
+            <table class="sc-ma-catalog-table sc-ma-migration-table">
+              <thead>
+                <tr>
+                  <th>{{ localize "SCMOREACTIVITIES.Migration.Columns.Item" }}</th>
+                  <th>{{ localize "SCMOREACTIVITIES.Migration.Columns.Source" }}</th>
+                  <th>{{ localize "SCMOREACTIVITIES.Migration.Columns.Activity" }}</th>
+                  <th>{{ localize "SCMOREACTIVITIES.Migration.Columns.LegacyType" }}</th>
+                  <th>{{ localize "SCMOREACTIVITIES.Migration.Columns.TargetType" }}</th>
+                  <th>{{ localize "SCMOREACTIVITIES.Migration.Columns.Status" }}</th>
+                  <th>{{ localize "SCMOREACTIVITIES.Migration.Columns.Details" }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {{#if previewEntries.length}}
+                  {{#each previewEntries as |entry|}}
+                    <tr>
+                      <td><strong>{{ entry.itemName }}</strong></td>
+                      <td>{{ entry.sourceLabel }}</td>
+                      <td>{{ entry.activityName }}</td>
+                      <td><code>{{ entry.legacyType }}</code></td>
+                      <td><code>{{ entry.targetType }}</code></td>
+                      <td><span class="sc-ma-status {{ entry.statusClass }}">{{ entry.statusLabel }}</span></td>
+                      <td>{{#if entry.warnings}}{{ entry.warnings }}{{else}}{{ entry.reason }}{{/if}}</td>
+                    </tr>
+                  {{/each}}
+                {{else}}
+                  <tr>
+                    <td colspan="7">{{ localize "SCMOREACTIVITIES.Migration.Empty.Preview" }}</td>
+                  </tr>
+                {{/if}}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section
+          id="sc-ma-migration-panel-apply"
+          class="sc-ma-catalog-tab-panel sc-ma-catalog-table-section {{#if tabStates.apply}}is-active{{/if}}"
+          data-migration-panel="apply"
+          role="tabpanel"
+          aria-labelledby="sc-ma-migration-tab-apply"
+          aria-hidden="{{#if tabStates.apply}}false{{else}}true{{/if}}"
+          {{#unless tabStates.apply}}hidden{{/unless}}
+        >
+          <header>
+            <h3>{{ localize "SCMOREACTIVITIES.Migration.Sections.ApplyReport" }}</h3>
+            <span>{{ reportItems.length }}</span>
+          </header>
+          <div class="sc-ma-catalog-table-wrap">
+            <table class="sc-ma-catalog-table sc-ma-migration-table">
+              <thead>
+                <tr>
+                  <th>{{ localize "SCMOREACTIVITIES.Migration.Columns.Item" }}</th>
+                  <th>{{ localize "SCMOREACTIVITIES.Migration.Columns.Status" }}</th>
+                  <th>{{ localize "SCMOREACTIVITIES.Migration.Columns.Details" }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {{#if reportItems.length}}
+                  {{#each reportItems as |entry|}}
+                    <tr>
+                      <td>{{ entry.itemName }}</td>
+                      <td><span class="sc-ma-status {{ entry.statusClass }}">{{ entry.status }}</span></td>
+                      <td>{{ entry.reason }}</td>
+                    </tr>
+                  {{/each}}
+                {{else}}
+                  <tr>
+                    <td colspan="3">{{ localize "SCMOREACTIVITIES.Migration.Empty.Apply" }}</td>
+                  </tr>
+                {{/if}}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section
+          id="sc-ma-migration-panel-backups"
+          class="sc-ma-catalog-tab-panel sc-ma-migration-panel-stack {{#if tabStates.backups}}is-active{{/if}}"
+          data-migration-panel="backups"
+          role="tabpanel"
+          aria-labelledby="sc-ma-migration-tab-backups"
+          aria-hidden="{{#if tabStates.backups}}false{{else}}true{{/if}}"
+          {{#unless tabStates.backups}}hidden{{/unless}}
+        >
+          <div class="sc-ma-migration-panel-scroll">
+            <section class="sc-ma-migration-panel">
+              <header>
+                <h3>{{ localize "SCMOREACTIVITIES.Migration.Sections.Backups" }}</h3>
+              </header>
+              <div class="sc-ma-catalog-table-wrap">
+                <table class="sc-ma-catalog-table sc-ma-migration-table">
+                  <thead>
+                    <tr>
+                      <th>{{ localize "SCMOREACTIVITIES.Migration.Columns.CreatedAt" }}</th>
+                      <th>{{ localize "SCMOREACTIVITIES.Migration.Columns.ItemsCount" }}</th>
+                      <th>{{ localize "SCMOREACTIVITIES.Migration.Columns.PreviewId" }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {{#if backups.length}}
+                      {{#each backups as |entry|}}
+                        <tr>
+                          <td>{{ entry.createdAtLabel }}</td>
+                          <td>{{ entry.itemCount }}</td>
+                          <td><code>{{ entry.previewId }}</code></td>
+                        </tr>
+                      {{/each}}
+                    {{else}}
+                      <tr>
+                        <td colspan="3">{{ localize "SCMOREACTIVITIES.Migration.Empty.Backups" }}</td>
+                      </tr>
+                    {{/if}}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="sc-ma-migration-panel">
+              <header>
+                <h3>{{ localize "SCMOREACTIVITIES.Migration.Sections.RestoreReport" }}</h3>
+              </header>
+              <div class="sc-ma-catalog-table-wrap">
+                <table class="sc-ma-catalog-table sc-ma-migration-table">
+                  <thead>
+                    <tr>
+                      <th>{{ localize "SCMOREACTIVITIES.Migration.Columns.Item" }}</th>
+                      <th>{{ localize "SCMOREACTIVITIES.Migration.Columns.Status" }}</th>
+                      <th>{{ localize "SCMOREACTIVITIES.Migration.Columns.Details" }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {{#if restoreItems.length}}
+                      {{#each restoreItems as |entry|}}
+                        <tr>
+                          <td>{{ entry.itemName }}</td>
+                          <td><span class="sc-ma-status {{ entry.statusClass }}">{{ entry.status }}</span></td>
+                          <td>{{ entry.reason }}</td>
+                        </tr>
+                      {{/each}}
+                    {{else}}
+                      <tr>
+                        <td colspan="3">{{ localize "SCMOREACTIVITIES.Migration.Empty.Restore" }}</td>
+                      </tr>
+                    {{/if}}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+      </div>
+    </section>
+  {{/unless}}
+</section>
