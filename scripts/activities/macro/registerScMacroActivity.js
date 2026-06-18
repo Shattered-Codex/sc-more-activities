@@ -10,7 +10,7 @@ export function registerScMacroActivity(activitiesApi) {
     type: ACTIVITY_TYPES.MACRO,
     label: "SCMOREACTIVITIES.Activities.ScMacro.Title",
     hint: "SCMOREACTIVITIES.Activities.ScMacro.Hint",
-    icon: "modules/sc-more-activities/assets/icons/sc-macro.svg",
+    icon: "modules/sc-more-activities/assets/icons/game-icons-net/sc-macro.svg",
     documentClass: ScMacroActivity,
     dataModel: ScMacroActivityData,
     sheetClass: ScMacroActivitySheet,

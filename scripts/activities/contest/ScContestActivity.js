@@ -10,7 +10,7 @@ export class ScContestActivity extends dnd5e.documents.activity.ActivityMixin(Sc
   static metadata = Object.freeze(
     foundry.utils.mergeObject(super.metadata, {
       type: ACTIVITY_TYPES.CONTEST,
-      img: "modules/sc-more-activities/assets/icons/sc-contest.svg",
+      img: "modules/sc-more-activities/assets/icons/game-icons-net/sc-contest.svg",
       title: "SCMOREACTIVITIES.Activities.ScContest.Title",
       hint: "SCMOREACTIVITIES.Activities.ScContest.Hint",
       sheetClass: ScContestActivitySheet

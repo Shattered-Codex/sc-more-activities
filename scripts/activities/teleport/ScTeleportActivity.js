@@ -10,7 +10,7 @@ export class ScTeleportActivity extends dnd5e.documents.activity.ActivityMixin(S
   static metadata = Object.freeze(
     foundry.utils.mergeObject(super.metadata, {
       type: ACTIVITY_TYPES.TELEPORT,
-      img: "modules/sc-more-activities/assets/icons/sc-teleport.svg",
+      img: "modules/sc-more-activities/assets/icons/game-icons-net/sc-teleport.svg",
       title: "SCMOREACTIVITIES.Activities.ScTeleport.Title",
       hint: "SCMOREACTIVITIES.Activities.ScTeleport.Hint",
       sheetClass: ScTeleportActivitySheet

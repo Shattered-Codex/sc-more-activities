@@ -10,7 +10,7 @@ export class ScChainActivity extends dnd5e.documents.activity.ActivityMixin(ScCh
   static metadata = Object.freeze(
     foundry.utils.mergeObject(super.metadata, {
       type: ACTIVITY_TYPES.CHAIN,
-      img: "modules/sc-more-activities/assets/icons/sc-chain.svg",
+      img: "modules/sc-more-activities/assets/icons/game-icons-net/sc-chain.svg",
       title: "SCMOREACTIVITIES.Activities.ScChain.Title",
       hint: "SCMOREACTIVITIES.Activities.ScChain.Hint",
       sheetClass: ScChainActivitySheet

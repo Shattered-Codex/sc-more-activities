@@ -10,7 +10,7 @@ export function registerScSoundActivity(activitiesApi) {
     type: ACTIVITY_TYPES.SOUND,
     label: "SCMOREACTIVITIES.Activities.ScSound.Title",
     hint: "SCMOREACTIVITIES.Activities.ScSound.Hint",
-    icon: "modules/sc-more-activities/assets/icons/sc-sound.svg",
+    icon: "modules/sc-more-activities/assets/icons/game-icons-net/sc-sound.svg",
     documentClass: ScSoundActivity,
     dataModel: ScSoundActivityData,
     sheetClass: ScSoundActivitySheet,

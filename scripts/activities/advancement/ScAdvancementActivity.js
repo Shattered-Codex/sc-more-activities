@@ -10,7 +10,7 @@ export class ScAdvancementActivity extends dnd5e.documents.activity.ActivityMixi
   static metadata = Object.freeze(
     foundry.utils.mergeObject(super.metadata, {
       type: ACTIVITY_TYPES.ADVANCEMENT,
-      img: "modules/sc-more-activities/assets/icons/sc-advancement.svg",
+      img: "modules/sc-more-activities/assets/icons/game-icons-net/sc-advancement.svg",
       title: "SCMOREACTIVITIES.Activities.ScAdvancement.Title",
       hint: "SCMOREACTIVITIES.Activities.ScAdvancement.Hint",
       sheetClass: ScAdvancementActivitySheet

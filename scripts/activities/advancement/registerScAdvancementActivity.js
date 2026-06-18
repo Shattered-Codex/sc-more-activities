@@ -10,7 +10,7 @@ export function registerScAdvancementActivity(activitiesApi) {
     type: ACTIVITY_TYPES.ADVANCEMENT,
     label: "SCMOREACTIVITIES.Activities.ScAdvancement.Title",
     hint: "SCMOREACTIVITIES.Activities.ScAdvancement.Hint",
-    icon: "modules/sc-more-activities/assets/icons/sc-advancement.svg",
+    icon: "modules/sc-more-activities/assets/icons/game-icons-net/sc-advancement.svg",
     documentClass: ScAdvancementActivity,
     dataModel: ScAdvancementActivityData,
     sheetClass: ScAdvancementActivitySheet,

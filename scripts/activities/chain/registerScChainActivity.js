@@ -10,7 +10,7 @@ export function registerScChainActivity(activitiesApi) {
     type: ACTIVITY_TYPES.CHAIN,
     label: "SCMOREACTIVITIES.Activities.ScChain.Title",
     hint: "SCMOREACTIVITIES.Activities.ScChain.Hint",
-    icon: "modules/sc-more-activities/assets/icons/sc-chain.svg",
+    icon: "modules/sc-more-activities/assets/icons/game-icons-net/sc-chain.svg",
     documentClass: ScChainActivity,
     dataModel: ScChainActivityData,
     sheetClass: ScChainActivitySheet,

@@ -10,7 +10,7 @@ export function registerScWallActivity(activitiesApi) {
     type: ACTIVITY_TYPES.WALL,
     label: "SCMOREACTIVITIES.Activities.ScWall.Title",
     hint: "SCMOREACTIVITIES.Activities.ScWall.Hint",
-    icon: "modules/sc-more-activities/assets/icons/sc-wall.svg",
+    icon: "modules/sc-more-activities/assets/icons/game-icons-net/sc-wall.svg",
     documentClass: ScWallActivity,
     dataModel: ScWallActivityData,
     sheetClass: ScWallActivitySheet,

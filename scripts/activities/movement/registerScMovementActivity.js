@@ -10,7 +10,7 @@ export function registerScMovementActivity(activitiesApi) {
     type: ACTIVITY_TYPES.MOVEMENT,
     label: "SCMOREACTIVITIES.Activities.ScMovement.Title",
     hint: "SCMOREACTIVITIES.Activities.ScMovement.Hint",
-    icon: "modules/sc-more-activities/assets/icons/sc-movement.svg",
+    icon: "modules/sc-more-activities/assets/icons/game-icons-net/sc-movement.svg",
     documentClass: ScMovementActivity,
     dataModel: ScMovementActivityData,
     sheetClass: ScMovementActivitySheet,

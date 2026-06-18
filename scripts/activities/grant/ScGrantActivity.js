@@ -10,7 +10,7 @@ export class ScGrantActivity extends dnd5e.documents.activity.ActivityMixin(ScGr
   static metadata = Object.freeze(
     foundry.utils.mergeObject(super.metadata, {
       type: ACTIVITY_TYPES.GRANT,
-      img: "modules/sc-more-activities/assets/icons/sc-grant.svg",
+      img: "modules/sc-more-activities/assets/icons/game-icons-net/sc-grant.svg",
       title: "SCMOREACTIVITIES.Activities.ScGrant.Title",
       hint: "SCMOREACTIVITIES.Activities.ScGrant.Hint",
       sheetClass: ScGrantActivitySheet

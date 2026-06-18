@@ -10,7 +10,7 @@ export class ScHookActivity extends dnd5e.documents.activity.ActivityMixin(ScHoo
   static metadata = Object.freeze(
     foundry.utils.mergeObject(super.metadata, {
       type: ACTIVITY_TYPES.HOOK,
-      img: "modules/sc-more-activities/assets/icons/sc-hook.svg",
+      img: "modules/sc-more-activities/assets/icons/game-icons-net/sc-hook.svg",
       title: "SCMOREACTIVITIES.Activities.ScHook.Title",
       hint: "SCMOREACTIVITIES.Activities.ScHook.Hint",
       sheetClass: ScHookActivitySheet

@@ -10,7 +10,7 @@ export function registerScContestActivity(activitiesApi) {
     type: ACTIVITY_TYPES.CONTEST,
     label: "SCMOREACTIVITIES.Activities.ScContest.Title",
     hint: "SCMOREACTIVITIES.Activities.ScContest.Hint",
-    icon: "modules/sc-more-activities/assets/icons/sc-contest.svg",
+    icon: "modules/sc-more-activities/assets/icons/game-icons-net/sc-contest.svg",
     documentClass: ScContestActivity,
     dataModel: ScContestActivityData,
     sheetClass: ScContestActivitySheet,

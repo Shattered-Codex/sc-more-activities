@@ -11,7 +11,7 @@ export class ScWallActivity extends dnd5e.documents.activity.ActivityMixin(ScWal
   static metadata = Object.freeze(
     foundry.utils.mergeObject(super.metadata, {
       type: ACTIVITY_TYPES.WALL,
-      img: "modules/sc-more-activities/assets/icons/sc-wall.svg",
+      img: "modules/sc-more-activities/assets/icons/game-icons-net/sc-wall.svg",
       title: "SCMOREACTIVITIES.Activities.ScWall.Title",
       hint: "SCMOREACTIVITIES.Activities.ScWall.Hint",
       sheetClass: ScWallActivitySheet

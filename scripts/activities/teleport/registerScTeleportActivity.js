@@ -10,7 +10,7 @@ export function registerScTeleportActivity(activitiesApi) {
     type: ACTIVITY_TYPES.TELEPORT,
     label: "SCMOREACTIVITIES.Activities.ScTeleport.Title",
     hint: "SCMOREACTIVITIES.Activities.ScTeleport.Hint",
-    icon: "modules/sc-more-activities/assets/icons/sc-teleport.svg",
+    icon: "modules/sc-more-activities/assets/icons/game-icons-net/sc-teleport.svg",
     documentClass: ScTeleportActivity,
     dataModel: ScTeleportActivityData,
     sheetClass: ScTeleportActivitySheet,

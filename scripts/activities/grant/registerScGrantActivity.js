@@ -10,7 +10,7 @@ export function registerScGrantActivity(activitiesApi) {
     type: ACTIVITY_TYPES.GRANT,
     label: "SCMOREACTIVITIES.Activities.ScGrant.Title",
     hint: "SCMOREACTIVITIES.Activities.ScGrant.Hint",
-    icon: "modules/sc-more-activities/assets/icons/sc-grant.svg",
+    icon: "modules/sc-more-activities/assets/icons/game-icons-net/sc-grant.svg",
     documentClass: ScGrantActivity,
     dataModel: ScGrantActivityData,
     sheetClass: ScGrantActivitySheet,

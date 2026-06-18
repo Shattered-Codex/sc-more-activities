@@ -10,7 +10,7 @@ export class ScMacroActivity extends dnd5e.documents.activity.ActivityMixin(ScMa
   static metadata = Object.freeze(
     foundry.utils.mergeObject(super.metadata, {
       type: ACTIVITY_TYPES.MACRO,
-      img: "modules/sc-more-activities/assets/icons/sc-macro.svg",
+      img: "modules/sc-more-activities/assets/icons/game-icons-net/sc-macro.svg",
       title: "SCMOREACTIVITIES.Activities.ScMacro.Title",
       hint: "SCMOREACTIVITIES.Activities.ScMacro.Hint",
       sheetClass: ScMacroActivitySheet

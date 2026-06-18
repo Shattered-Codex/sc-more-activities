@@ -10,7 +10,7 @@ export class ScSoundActivity extends dnd5e.documents.activity.ActivityMixin(ScSo
   static metadata = Object.freeze(
     foundry.utils.mergeObject(super.metadata, {
       type: ACTIVITY_TYPES.SOUND,
-      img: "modules/sc-more-activities/assets/icons/sc-sound.svg",
+      img: "modules/sc-more-activities/assets/icons/game-icons-net/sc-sound.svg",
       title: "SCMOREACTIVITIES.Activities.ScSound.Title",
       hint: "SCMOREACTIVITIES.Activities.ScSound.Hint",
       sheetClass: ScSoundActivitySheet

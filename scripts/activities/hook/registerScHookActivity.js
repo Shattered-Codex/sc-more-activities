@@ -10,7 +10,7 @@ export function registerScHookActivity(activitiesApi) {
     type: ACTIVITY_TYPES.HOOK,
     label: "SCMOREACTIVITIES.Activities.ScHook.Title",
     hint: "SCMOREACTIVITIES.Activities.ScHook.Hint",
-    icon: "modules/sc-more-activities/assets/icons/sc-hook.svg",
+    icon: "modules/sc-more-activities/assets/icons/game-icons-net/sc-hook.svg",
     documentClass: ScHookActivity,
     dataModel: ScHookActivityData,
     sheetClass: ScHookActivitySheet,
