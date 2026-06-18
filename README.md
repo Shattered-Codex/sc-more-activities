@@ -21,6 +21,16 @@ It is built for two use cases:
 - GMs who want more item activities without maintaining custom patches
 - module authors who want to register their own `dnd5e` activity types through a stable SC-owned registry
 
+## Project Positioning
+
+SC - More Activities is inspired by the original `More Activities` module, and this project exists with a lot of respect for the work and ideas behind it.
+
+Many thanks to TTimeGaming, creator of [`fvtt-more-activities`](https://github.com/TTimeGaming/fvtt-more-activities/), for helping show how valuable richer activity workflows can be inside `dnd5e` and Foundry VTT.
+
+At the same time, this module is not a copy of `More Activities`. It is a Shattered Codex reinterpretation of that idea, built to give tighter control over the implementation, release flow, integrations, and long-term behavior needed by the growing SC module ecosystem, including Patreon-supported modules and module-to-module activity integrations.
+
+The goal is to preserve the value of richer activity workflows while shaping them around the specific needs of the Shattered Codex ecosystem we are building.
+
 [Report an issue or request a feature](https://github.com/Shattered-Codex/sc-more-activities/issues)  
 [Official Wiki](https://wiki.shattered-codex.com/modules/sc-more-activities)
 

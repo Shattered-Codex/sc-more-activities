@@ -1,0 +1,316 @@
+# .github/workflows/release.yml
+# ==========================================================
+# Release workflow for SC - More Activities
+# Features:
+#   - Detect merged branch name from PR (major/minor/patch)
+#   - Automatic semantic version bump
+#   - Updates module.json manifest
+#   - Packages module files into ZIP
+#   - Publishes GitHub Release
+#   - Optional R2 upload when secrets are configured
+#   - Optional Foundry Package API publish when token is configured
+# ==========================================================
+
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set MODULE_ID
+        run: echo "MODULE_ID=${GITHUB_REPOSITORY##*/}" >> "$GITHUB_ENV"
+
+      - name: Detect merged branch from PR
+        id: merged_branch
+        shell: bash
+        run: |
+          echo "Fetching merged branch via GitHub CLI..."
+          MERGED_BRANCH=$(gh pr list \
+            --state merged \
+            --base main \
+            --limit 1 \
+            --json number,headRefName \
+            -q '.[0].headRefName')
+
+          if [[ -z "$MERGED_BRANCH" ]]; then
+            echo "Cannot detect merged branch, defaulting to patch/unknown"
+            MERGED_BRANCH="patch/unknown"
+          fi
+
+          PREFIX=$(echo "$MERGED_BRANCH" | cut -d'/' -f1)
+          if [[ "$PREFIX" != "major" && "$PREFIX" != "minor" && "$PREFIX" != "patch" ]]; then
+            PREFIX="patch"
+          fi
+
+          echo "Merged branch: $MERGED_BRANCH"
+          echo "BUMP_TYPE=$PREFIX" >> "$GITHUB_ENV"
+          echo "MERGED_BRANCH=$MERGED_BRANCH" >> "$GITHUB_ENV"
+
+      - name: Bump semantic version
+        id: tag_version
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ github.token }}
+          default_bump: ${{ env.BUMP_TYPE }}
+
+      - name: Update module manifest
+        uses: microsoft/variable-substitution@v1
+        with:
+          files: "module.json"
+        env:
+          version: ${{ steps.tag_version.outputs.new_version }}
+          id: ${{ env.MODULE_ID }}
+          url: https://github.com/${{ github.repository }}
+          download: https://github.com/${{ github.repository }}/releases/download/${{ steps.tag_version.outputs.new_tag }}/${{ env.MODULE_ID }}.zip
+          manifest: https://github.com/${{ github.repository }}/releases/latest/download/module.json
+          flags.hotReload: false
+
+      - name: Commit module manifest update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add module.json
+          if git diff --cached --quiet; then
+            echo "Manifest already up to date; nothing to commit."
+            exit 0
+          fi
+          git commit -m "chore: sync module manifest to ${{ steps.tag_version.outputs.new_version }}"
+          git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }} HEAD:${GITHUB_REF#refs/heads/}
+
+      - name: Ensure CHANGELOG.md exists
+        run: |
+          if [ ! -f CHANGELOG.md ]; then
+            echo "No changelog yet." > CHANGELOG.md
+          fi
+
+      - name: Generate CHANGELOG.md
+        shell: bash
+        run: |
+          echo "Generating CHANGELOG.md from commits..."
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            git log --pretty=format:"* %s" > CHANGELOG.md
+          else
+            git log "$LAST_TAG"..HEAD --pretty=format:"* %s" > CHANGELOG.md
+          fi
+
+      - name: Create ZIP archive
+        shell: bash
+        run: |
+          FILES=(module.json)
+
+          if [[ -f module-tiers.json ]]; then
+            FILES+=(module-tiers.json)
+          fi
+
+          for path in assets lang packs scripts styles templates; do
+            if [[ -e "$path" ]]; then
+              FILES+=("$path")
+            fi
+          done
+
+          for path in README.md LICENSE CHANGELOG.md; do
+            if [[ -f "$path" ]]; then
+              FILES+=("$path")
+            fi
+          done
+
+          printf 'Packaging files:\n'
+          printf ' - %s\n' "${FILES[@]}"
+
+          zip -r "./${MODULE_ID}.zip" "${FILES[@]}"
+
+      - name: Prepare release artifacts
+        shell: bash
+        run: |
+          ARTIFACTS="./module.json, ./${MODULE_ID}.zip, ./CHANGELOG.md"
+          if [[ -f module-tiers.json ]]; then
+            ARTIFACTS="${ARTIFACTS}, ./module-tiers.json"
+          fi
+          echo "RELEASE_ARTIFACTS=${ARTIFACTS}" >> "$GITHUB_ENV"
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.tag_version.outputs.new_tag }}
+          name: Release ${{ steps.tag_version.outputs.new_tag }}
+          bodyFile: CHANGELOG.md
+          allowUpdates: true
+          artifacts: ${{ env.RELEASE_ARTIFACTS }}
+          token: ${{ github.token }}
+
+      - name: Notify Discord
+        if: ${{ success() }}
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          VERSION: ${{ steps.tag_version.outputs.new_version }}
+        shell: bash
+        run: |
+          if [ -z "${DISCORD_WEBHOOK_URL}" ]; then
+            echo "DISCORD_WEBHOOK_URL is not configured. Skipping Discord notification."
+            exit 0
+          fi
+
+          MODULE_TITLE=$(jq -r '.title // .id // env.MODULE_ID' module.json)
+          DOWNLOAD_HUB_URL="https://app.shattered-codex.com/"
+          RAW_COMMIT_MESSAGE=$(git log -1 --pretty=%B "${GITHUB_SHA}" 2>/dev/null || true)
+          COMMIT_MESSAGE=$(printf '%s' "${RAW_COMMIT_MESSAGE}")
+
+          if printf '%s\n' "${COMMIT_MESSAGE}" | head -n 1 | grep -q '^Merge pull request #'; then
+            MERGE_BODY=$(printf '%s\n' "${COMMIT_MESSAGE}" | sed '1,/^$/d')
+            if [ -n "${MERGE_BODY}" ]; then
+              COMMIT_MESSAGE="${MERGE_BODY}"
+            fi
+          fi
+
+          if [ -z "${COMMIT_MESSAGE//[$'\t\r\n ']}" ]; then
+            COMMIT_MESSAGE=$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
+              --jq '.[0].title // empty' 2>/dev/null || true)
+          fi
+
+          if [ -z "${COMMIT_MESSAGE}" ]; then
+            COMMIT_MESSAGE="Release published"
+          fi
+
+          COMMIT_BODY=$(printf '%s' "${COMMIT_MESSAGE}" | head -c 3800)
+          if [ "${#COMMIT_MESSAGE}" -gt "${#COMMIT_BODY}" ]; then
+            COMMIT_BODY=$(printf '%s\n\n[truncated]' "${COMMIT_BODY}")
+          fi
+
+          DESCRIPTION=$(printf '%s\n\n**Version:** `%s`\n\n```text\n%s\n```' \
+            '**A new release has been published.**' \
+            "${VERSION}" \
+            "${COMMIT_BODY}")
+
+          payload=$(jq -n \
+            --arg content "@everyone" \
+            --arg title "${MODULE_TITLE} v${VERSION}" \
+            --arg url "${DOWNLOAD_HUB_URL}" \
+            --arg description "${DESCRIPTION}" \
+            '{
+              content: $content,
+              allowed_mentions: { parse: ["everyone"] },
+              embeds: [
+                {
+                  title: $title,
+                  url: $url,
+                  description: $description,
+                  color: 3447003,
+                  image: { url: "attachment://cover.webp" }
+                }
+              ]
+            }')
+
+          COVER_IMAGE=""
+          if [ -f "assets/img/cover.webp" ]; then
+            COVER_IMAGE="assets/img/cover.webp"
+          elif [ -f "assets/imgs/cover.webp" ]; then
+            COVER_IMAGE="assets/imgs/cover.webp"
+          fi
+
+          if [ -n "${COVER_IMAGE}" ]; then
+            curl -sSf \
+              -F "payload_json=${payload}" \
+              -F "files[0]=@${COVER_IMAGE};filename=cover.webp;type=image/webp" \
+              "${DISCORD_WEBHOOK_URL}"
+          else
+            payload=$(printf '%s' "${payload}" | jq 'del(.embeds[0].image)')
+            curl -sSf \
+              -H "Content-Type: application/json" \
+              -d "${payload}" \
+              "${DISCORD_WEBHOOK_URL}"
+          fi
+
+      - name: Upload artifacts to R2
+        if: ${{ success() }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_EC2_METADATA_DISABLED: true
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          MODULE_ID: ${{ env.MODULE_ID }}
+          TAG: ${{ steps.tag_version.outputs.new_tag }}
+        shell: bash
+        run: |
+          if [ -z "${AWS_ACCESS_KEY_ID}" ] || [ -z "${AWS_SECRET_ACCESS_KEY}" ] || [ -z "${R2_ACCOUNT_ID}" ] || [ -z "${R2_BUCKET}" ] || [ -z "${TAG}" ]; then
+            echo "R2 secrets not fully configured; skipping upload."
+            exit 0
+          fi
+
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          TARGET="s3://${R2_BUCKET}/modules/${MODULE_ID}/${TAG}"
+
+          echo "Uploading module.json to ${TARGET}/module.json"
+          aws s3 cp module.json "${TARGET}/module.json" --endpoint-url "${ENDPOINT}"
+
+          if [[ -f module-tiers.json ]]; then
+            echo "Uploading module tiers to ${TARGET}/module-tiers.json"
+            aws s3 cp module-tiers.json "${TARGET}/module-tiers.json" --endpoint-url "${ENDPOINT}"
+          fi
+
+          echo "Uploading bundle to ${TARGET}/${MODULE_ID}.zip"
+          aws s3 cp "./${MODULE_ID}.zip" "${TARGET}/${MODULE_ID}.zip" --endpoint-url "${ENDPOINT}"
+
+      - name: Publish to Foundry Package API
+        if: ${{ success() }}
+        env:
+          RELEASE_TOKEN: ${{ secrets.FOUNDRY_RELEASE_TOKEN }}
+          VERSION: ${{ steps.tag_version.outputs.new_version }}
+          TAG: ${{ steps.tag_version.outputs.new_tag }}
+        shell: bash
+        run: |
+          if [ -z "${RELEASE_TOKEN}" ]; then
+            echo "FOUNDRY_RELEASE_TOKEN is not configured. Skipping Foundry publish."
+            exit 0
+          fi
+
+          MANIFEST_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/module.json"
+          NOTES_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
+
+          COMPAT_MIN=$(jq -r '.compatibility.minimum // empty' module.json)
+          COMPAT_VERIFIED=$(jq -r '.compatibility.verified // empty' module.json)
+          COMPAT_MAX=$(jq -r '.compatibility.maximum // empty' module.json)
+
+          if [ -z "${COMPAT_MIN}" ] || [ -z "${COMPAT_VERIFIED}" ]; then
+            echo "Compatibility data is missing from module.json. Skipping Foundry publish."
+            exit 0
+          fi
+
+          payload=$(jq -n \
+            --arg id "${MODULE_ID}" \
+            --arg version "${VERSION}" \
+            --arg manifest "${MANIFEST_URL}" \
+            --arg notes "${NOTES_URL}" \
+            --arg min "${COMPAT_MIN}" \
+            --arg verified "${COMPAT_VERIFIED}" \
+            --arg max "${COMPAT_MAX}" \
+            '{id:$id, release:{version:$version, manifest:$manifest, notes:$notes, compatibility:{minimum:$min, verified:$verified, maximum:$max}}}')
+
+          curl -sSf -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: ${RELEASE_TOKEN}" \
+            -d "${payload}" \
+            https://foundryvtt.com/_api/packages/release_version/
