@@ -2,7 +2,7 @@
     "id": "sc-more-activities",
     "title": "SC - More Activities",
     "description": "A Shattered Codex activity platform for the dnd5e system.",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "media": [
         {
             "type": "setup",
@@ -70,5 +70,5 @@
     },
     "url": "https://github.com/Shattered-Codex/sc-more-activities",
     "manifest": "https://github.com/Shattered-Codex/sc-more-activities/releases/latest/download/module.json",
-    "download": "https://github.com/Shattered-Codex/sc-more-activities/releases/download/v0.0.2/sc-more-activities.zip"
+    "download": "https://github.com/Shattered-Codex/sc-more-activities/releases/download/v0.0.3/sc-more-activities.zip"
 }
