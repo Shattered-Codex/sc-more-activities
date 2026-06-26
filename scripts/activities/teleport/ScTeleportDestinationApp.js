@@ -104,8 +104,7 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
       return;
     }
 
-    const originalEvent = event?.data?.originalEvent ?? event;
-    const rawPosition = canvas?.canvasCoordinatesFromClient?.(originalEvent);
+    const rawPosition = this.#eventCanvasPosition(event);
     const destination = this.#config().snapToGrid
       ? ScCanvasActivityService.snapCenterPoint(rawPosition)
       : rawPosition;
@@ -125,11 +124,16 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     }
 
     this.#stopDestinationSelection();
-    await ScCanvasActivityService.executeTeleportPlacement(this.activity, {
+    const result = await ScCanvasActivityService.executeTeleportPlacement(this.activity, {
       tokenIds: this.selectedTargets.map((target) => target.id),
       destination
     });
-    await this.close();
+    if (result?.ok) {
+      await this.close();
+      return;
+    }
+
+    await this.#startDestinationSelection();
   }
 
   #config() {
@@ -138,5 +142,25 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
       teleportDistance: Math.max(0, Number(config.teleportDistance ?? 30) || 0),
       snapToGrid: config.snapToGrid !== false
     };
+  }
+
+  #eventCanvasPosition(event) {
+    const button = event?.button ?? event?.data?.originalEvent?.button;
+    if (button !== undefined && button !== 0) {
+      return null;
+    }
+
+    const localPosition = event?.data?.getLocalPosition?.(canvas?.stage);
+    if (Number.isFinite(localPosition?.x) && Number.isFinite(localPosition?.y)) {
+      return localPosition;
+    }
+
+    const originalEvent = event?.data?.originalEvent ?? event;
+    const clientPosition = canvas?.canvasCoordinatesFromClient?.(originalEvent);
+    if (Number.isFinite(clientPosition?.x) && Number.isFinite(clientPosition?.y)) {
+      return clientPosition;
+    }
+
+    return null;
   }
 }
