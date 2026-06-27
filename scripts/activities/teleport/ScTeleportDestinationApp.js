@@ -30,6 +30,8 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     this.activity = activity;
     this.selectedTargets = selectedTargets;
     this.canvasClickHandler = null;
+    this.canvasPointerDownHandler = null;
+    this.pendingPointerEvent = null;
     this.previewTemplate = null;
   }
 
@@ -86,16 +88,33 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     }
 
     this.canvasClickHandler = this.#onCanvasClick.bind(this);
+    this.canvasPointerDownHandler = this.#onCanvasPointerDown.bind(this);
     canvas?.stage?.on?.("mouseup", this.canvasClickHandler);
+    canvas?.app?.view?.addEventListener?.("pointerdown", this.canvasPointerDownHandler, true);
   }
 
   #stopDestinationSelection() {
     if (!this.canvasClickHandler) {
+      this.pendingPointerEvent = null;
+    } else {
+      canvas?.stage?.off?.("mouseup", this.canvasClickHandler);
+      this.canvasClickHandler = null;
+    }
+
+    if (this.canvasPointerDownHandler) {
+      canvas?.app?.view?.removeEventListener?.("pointerdown", this.canvasPointerDownHandler, true);
+      this.canvasPointerDownHandler = null;
+    }
+
+    this.pendingPointerEvent = null;
+  }
+
+  #onCanvasPointerDown(event) {
+    if (Number(event?.button ?? 0) !== 0) {
       return;
     }
 
-    canvas?.stage?.off?.("mouseup", this.canvasClickHandler);
-    this.canvasClickHandler = null;
+    this.pendingPointerEvent = event;
   }
 
   async #onCanvasClick(event) {
@@ -104,7 +123,7 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
       return;
     }
 
-    const rawPosition = this.#eventCanvasPosition(event);
+    const rawPosition = this.#eventCanvasPosition(event, this.pendingPointerEvent);
     const destination = this.#config().snapToGrid
       ? ScCanvasActivityService.snapCenterPoint(rawPosition)
       : rawPosition;
@@ -144,8 +163,8 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     };
   }
 
-  #eventCanvasPosition(event) {
-    const button = event?.button ?? event?.data?.originalEvent?.button;
+  #eventCanvasPosition(event, pointerEvent = null) {
+    const button = pointerEvent?.button ?? event?.button ?? event?.data?.originalEvent?.button;
     if (button !== undefined && button !== 0) {
       return null;
     }
@@ -155,7 +174,7 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
       return localPosition;
     }
 
-    const originalEvent = event?.data?.originalEvent ?? event;
+    const originalEvent = pointerEvent ?? event?.data?.originalEvent ?? event;
     const clientPosition = canvas?.canvasCoordinatesFromClient?.(originalEvent);
     if (Number.isFinite(clientPosition?.x) && Number.isFinite(clientPosition?.y)) {
       return clientPosition;
