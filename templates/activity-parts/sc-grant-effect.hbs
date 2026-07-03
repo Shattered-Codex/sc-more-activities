@@ -13,57 +13,93 @@
       </div>
       <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Recipient.Hint" }}</p>
     </div>
-
-    <div class="form-group stacked">
-      <label>{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.AddItem.Label" }}</label>
-      <div class="form-fields sc-ma-grant-add-row">
-        <input type="text" data-grant-uuid-input placeholder="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.AddItem.Placeholder" }}">
-        <button type="button" class="button icon" data-action="add-grant">
-          <i class="fas fa-plus"></i>
-        </button>
-      </div>
-      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.AddItem.Hint" }}</p>
-    </div>
   </fieldset>
 
-  <fieldset>
-    <legend>{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Sections.Items" }}</legend>
+  <fieldset data-grant-list>
+    <legend>
+      <span>{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Sections.Items" }}</span>
+      <i class="fa-solid fa-circle-info sc-ma-info-icon"
+         data-tooltip="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Quantity.Tooltip" }}"></i>
+      <button type="button" class="unbutton control-button" data-action="add-grant"
+              data-tooltip aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Source.Add" }}">
+        <i class="fas fa-plus" inert></i>
+      </button>
+    </legend>
 
-    {{#if grants.length}}
-      <div class="sc-ma-grant-list">
-        {{#each grants}}
-          <div class="sc-ma-grant-row {{#if this.missing}}is-missing{{/if}}">
-            <div class="sc-ma-grant-item">
-              <img src="{{ this.img }}" alt="{{ this.name }}">
-              <div class="sc-ma-grant-meta">
-                <div class="sc-ma-grant-name">{{ this.name }}</div>
-                <div class="sc-ma-grant-uuid">{{ this.uuid }}</div>
-              </div>
-            </div>
+    <ul class="sc-ma-grant-list unlist">
+      {{#each grants}}
+      <li class="sc-ma-grant-row {{#if this.missing}}is-missing{{/if}}" data-index="{{ this.index }}">
+        <input type="hidden" name="grants.{{ this.index }}.type" value="{{ this.type }}">
+        <input type="hidden" name="grants.{{ this.index }}.uuid" value="{{ this.uuid }}">
 
-            <div class="sc-ma-grant-controls">
-              <input type="hidden" name="grants.{{ this.index }}.uuid" value="{{ this.uuid }}">
-              <label>
-                {{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Quantity.Label" }}
-                <input
-                  type="number"
-                  name="grants.{{ this.index }}.quantity"
-                  min="1"
-                  step="1"
-                  value="{{ this.quantity }}"
-                  data-grant-quantity
-                  data-index="{{ this.index }}"
-                >
-              </label>
-              <button type="button" class="button icon" data-action="remove-grant" data-index="{{ this.index }}">
-                <i class="fas fa-trash"></i>
-              </button>
-            </div>
+        <input type="text" class="sc-ma-grant-qty" name="grants.{{ this.index }}.quantity" value="{{ this.quantity }}"
+               placeholder="1" aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Quantity.Label" }}">
+
+        <span class="sc-ma-grant-sep">&times;</span>
+
+        {{#if this.uuid}}
+        <div class="sc-ma-grant-source" data-tooltip="{{ this.uuid }}">
+          <img src="{{ this.img }}" alt="{{ this.name }}">
+          <div class="sc-ma-grant-meta">
+            <span class="sc-ma-grant-name">{{ this.name }}</span>
+            <span class="sc-ma-grant-type">
+              {{ this.typeLabel }}{{#if this.missing}} &mdash; {{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Source.Missing" }}{{/if}}
+            </span>
           </div>
-        {{/each}}
-      </div>
-    {{else}}
-      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Items.Empty" }}</p>
-    {{/if}}
+        </div>
+        {{else}}
+        <input type="text" class="sc-ma-grant-drop" data-grant-drop data-index="{{ this.index }}"
+               placeholder="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Source.DropHint" }}">
+        {{/if}}
+
+        <button type="button" class="unbutton control-button" data-action="remove-grant" data-index="{{ this.index }}"
+                data-tooltip aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Source.Remove" }}">
+          <i class="fas fa-minus" inert></i>
+        </button>
+      </li>
+      {{else}}
+      <li class="sc-ma-grant-empty">{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Items.Empty" }}</li>
+      {{/each}}
+    </ul>
+
+    <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Source.Hint" }}</p>
   </fieldset>
+
+  <div class="sc-ma-collapsible {{#unless checkTrayExpanded}}collapsed{{/unless}}" data-grant-check-tray>
+    <button type="button" class="sc-ma-collapsible-header" data-action="toggle-check-tray">
+      <i class="fa-solid fa-gears" inert></i>
+      <span>{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Sections.Check" }}</span>
+      <i class="fa-solid fa-caret-down" inert></i>
+    </button>
+    <div class="sc-ma-collapsible-content">
+      <fieldset>
+        <div class="form-group">
+          <label>{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Check.Kind.Label" }}</label>
+          <div class="form-fields">
+            <select name="checkSelection">
+              {{ selectOptions checkKindOptions selected=checkSelection valueAttr="value" labelAttr="label" }}
+            </select>
+          </div>
+          <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Check.Kind.Hint" }}</p>
+        </div>
+
+        <div class="form-group">
+          <label>{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Check.DC.Label" }}</label>
+          <div class="form-fields">
+            <select name="check.dc.calculation">
+              {{ selectOptions checkCalculationOptions selected=check.dc.calculation valueAttr="value" labelAttr="label" }}
+            </select>
+            {{#if showDcFormula}}
+            <input type="text" name="check.dc.formula" value="{{ check.dc.formula }}"
+                   placeholder="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Check.DC.FormulaPlaceholder" }}">
+            {{else}}
+            <input type="text" value="{{ dcPreview }}" disabled>
+            <input type="hidden" name="check.dc.formula" value="{{ check.dc.formula }}">
+            {{/if}}
+          </div>
+          <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Check.DC.Hint" }}</p>
+        </div>
+      </fieldset>
+    </div>
+  </div>
 </section>
