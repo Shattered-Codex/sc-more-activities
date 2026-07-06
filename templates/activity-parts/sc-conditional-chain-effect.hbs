@@ -1,0 +1,249 @@
+<section class="tab activity-{{ tab.id }} {{ tab.cssClass }}" data-tab="{{ tab.id }}" data-group="{{ tab.group }}">
+  {{#if appliedEffects}}{{> "systems/dnd5e/templates/activity/parts/activity-effects.hbs" }}{{/if}}
+
+  {{#if issues.length}}
+    <div class="sc-ma-flow-issues">
+      <p><i class="fa-solid fa-triangle-exclamation" inert></i> {{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Issues.Label" }}</p>
+      <ul>
+        {{#each issues}}<li>{{ this }}</li>{{/each}}
+      </ul>
+    </div>
+  {{/if}}
+
+  <fieldset>
+    <legend>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Sections.Flow" }}</legend>
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.StartNode.Label" }}</label>
+      <div class="form-fields">
+        <select name="flow.startNode" {{#unless startNodeOptions.length}}disabled{{/unless}}>
+          <option value=""></option>
+          {{ selectOptions startNodeOptions selected=flow.startNode valueAttr="value" labelAttr="label" }}
+        </select>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.StartNode.Hint" }}</p>
+    </div>
+  </fieldset>
+
+  <fieldset data-flow-nodes>
+    <legend>
+      <span>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Sections.Nodes" }}</span>
+      <button type="button" class="unbutton control-button" data-action="sc-add-node"
+              data-tooltip aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Add" }}">
+        <i class="fas fa-plus" inert></i>
+      </button>
+    </legend>
+
+    <ol class="sc-ma-flow-node-list unlist">
+      {{#each nodes as |node|}}
+      <li class="sc-ma-flow-node {{#if node.isStart}}is-start{{/if}}" data-index="{{ node.index }}">
+        <input type="hidden" name="flow.nodes.{{ node.index }}.nodeId" value="{{ node.nodeId }}">
+
+        <div class="sc-ma-flow-node-header">
+          <span class="sc-ma-flow-node-number" data-tooltip="{{ node.nodeId }}">
+            {{#if node.isStart}}<i class="fa-solid fa-play" inert></i>{{/if}}
+            {{ node.number }}
+          </span>
+          <input type="text" name="flow.nodes.{{ node.index }}.label" value="{{ node.label }}"
+                 placeholder="{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Untitled" }}">
+          <button type="button" class="unbutton control-button" data-action="sc-remove-node" data-index="{{ node.index }}"
+                  data-tooltip aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Remove" }}">
+            <i class="fas fa-minus" inert></i>
+          </button>
+        </div>
+
+        <div class="form-group">
+          <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Activity.Label" }}</label>
+          <div class="form-fields">
+            <select name="flow.nodes.{{ node.index }}.activityId">
+              {{ selectOptions ../activityOptions selected=node.activityId valueAttr="value" labelAttr="label" }}
+            </select>
+          </div>
+          {{#if node.activityMissing}}
+            <p class="hint sc-ma-flow-warning">
+              {{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Activity.Missing" }} ({{ node.activityId }})
+            </p>
+          {{/if}}
+        </div>
+
+        <div class="form-group">
+          <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.ConditionType.Label" }}</label>
+          <div class="form-fields">
+            <select name="flow.nodes.{{ node.index }}.conditionType">
+              {{ selectOptions ../conditionTypeOptions selected=node.conditionType valueAttr="value" labelAttr="label" }}
+            </select>
+          </div>
+        </div>
+
+        {{#if node.isAlways}}
+          <div class="form-group">
+            <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Routes.Next" }}</label>
+            <div class="form-fields">
+              <select name="flow.nodes.{{ node.index }}.routes.next">
+                {{ selectOptions node.routeOptions selected=node.routes.next valueAttr="value" labelAttr="label" }}
+              </select>
+            </div>
+          </div>
+        {{/if}}
+
+        {{#if node.isActorProperty}}
+          <div class="form-group sc-ma-flow-condition-row">
+            <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Path.Label" }}</label>
+            <div class="form-fields">
+              <input type="text" name="flow.nodes.{{ node.index }}.condition.path" value="{{ node.condition.path }}"
+                     placeholder="system.attributes.hp.value" spellcheck="false">
+              <select name="flow.nodes.{{ node.index }}.condition.operator" class="sc-ma-flow-operator">
+                {{ selectOptions ../operatorOptions selected=node.condition.operator valueAttr="value" labelAttr="label" }}
+              </select>
+              <input type="text" name="flow.nodes.{{ node.index }}.condition.value" value="{{ node.condition.value }}"
+                     placeholder="{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Value.Placeholder" }}" spellcheck="false">
+            </div>
+            <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Path.Hint" }}</p>
+          </div>
+        {{/if}}
+
+        {{#if node.isRollCheck}}
+          <div class="form-group">
+            <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.RollType.Label" }}</label>
+            <div class="form-fields">
+              <select name="flow.nodes.{{ node.index }}.condition.rollType">
+                {{ selectOptions ../rollTypeOptions selected=node.condition.rollType valueAttr="value" labelAttr="label" }}
+              </select>
+              {{#if node.needsAbility}}
+                <select name="flow.nodes.{{ node.index }}.condition.ability">
+                  {{ selectOptions ../abilityOptions selected=node.condition.ability valueAttr="value" labelAttr="label" }}
+                </select>
+              {{/if}}
+              {{#if node.needsSkill}}
+                <select name="flow.nodes.{{ node.index }}.condition.skill">
+                  {{ selectOptions ../skillOptions selected=node.condition.skill valueAttr="value" labelAttr="label" }}
+                </select>
+              {{/if}}
+            </div>
+          </div>
+          {{#if node.needsFormula}}
+            <div class="form-group">
+              <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Formula.Label" }}</label>
+              <div class="form-fields">
+                <input type="text" name="flow.nodes.{{ node.index }}.condition.formula" value="{{ node.condition.formula }}"
+                       placeholder="1d20 + @abilities.str.mod" spellcheck="false">
+              </div>
+            </div>
+          {{/if}}
+          <div class="form-group">
+            <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Dc.Label" }}</label>
+            <div class="form-fields">
+              <input type="text" name="flow.nodes.{{ node.index }}.condition.dcFormula" value="{{ node.condition.dcFormula }}"
+                     placeholder="15" spellcheck="false">
+            </div>
+            <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Dc.Hint" }}</p>
+          </div>
+        {{/if}}
+
+        {{#if node.isActorProperty}}
+          <div class="form-group sc-ma-flow-routes">
+            <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Routes.OnTrue" }}</label>
+            <div class="form-fields">
+              <select name="flow.nodes.{{ node.index }}.routes.onTrue">
+                {{ selectOptions node.routeOptions selected=node.routes.onTrue valueAttr="value" labelAttr="label" }}
+              </select>
+            </div>
+          </div>
+          <div class="form-group sc-ma-flow-routes">
+            <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Routes.OnFalse" }}</label>
+            <div class="form-fields">
+              <select name="flow.nodes.{{ node.index }}.routes.onFalse">
+                {{ selectOptions node.routeOptions selected=node.routes.onFalse valueAttr="value" labelAttr="label" }}
+              </select>
+            </div>
+          </div>
+        {{/if}}
+
+        {{#if node.isRollCheck}}
+          <div class="form-group sc-ma-flow-routes">
+            <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Routes.OnSuccess" }}</label>
+            <div class="form-fields">
+              <select name="flow.nodes.{{ node.index }}.routes.onTrue">
+                {{ selectOptions node.routeOptions selected=node.routes.onTrue valueAttr="value" labelAttr="label" }}
+              </select>
+            </div>
+          </div>
+          <div class="form-group sc-ma-flow-routes">
+            <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Routes.OnFailure" }}</label>
+            <div class="form-fields">
+              <select name="flow.nodes.{{ node.index }}.routes.onFalse">
+                {{ selectOptions node.routeOptions selected=node.routes.onFalse valueAttr="value" labelAttr="label" }}
+              </select>
+            </div>
+          </div>
+        {{/if}}
+
+        {{#if node.isChoice}}
+          <div class="sc-ma-flow-choices">
+            <div class="sc-ma-flow-choices-header">
+              <span>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Choices.Label" }}</span>
+              <button type="button" class="unbutton control-button" data-action="sc-add-choice" data-index="{{ node.index }}"
+                      data-tooltip aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Choices.Add" }}">
+                <i class="fas fa-plus" inert></i>
+              </button>
+            </div>
+            <ul class="unlist">
+              {{#each node.choices as |choice|}}
+              <li class="sc-ma-flow-choice-row">
+                <input type="hidden" name="flow.nodes.{{ node.index }}.choices.{{ choice.choiceIndex }}.key" value="{{ choice.key }}">
+                <input type="text" name="flow.nodes.{{ node.index }}.choices.{{ choice.choiceIndex }}.label" value="{{ choice.label }}"
+                       placeholder="{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Choices.LabelPlaceholder" }}">
+                <select name="flow.nodes.{{ node.index }}.choices.{{ choice.choiceIndex }}.next">
+                  {{ selectOptions node.routeOptions selected=choice.next valueAttr="value" labelAttr="label" }}
+                </select>
+                <button type="button" class="unbutton control-button" data-action="sc-remove-choice"
+                        data-index="{{ node.index }}" data-choice-index="{{ choice.choiceIndex }}"
+                        data-tooltip aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Choices.Remove" }}">
+                  <i class="fas fa-minus" inert></i>
+                </button>
+              </li>
+              {{else}}
+              <li class="sc-ma-flow-choice-empty">{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Choices.Empty" }}</li>
+              {{/each}}
+            </ul>
+          </div>
+        {{/if}}
+      </li>
+      {{else}}
+      <li class="sc-ma-flow-empty">{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Empty" }}</li>
+      {{/each}}
+    </ol>
+  </fieldset>
+
+  <div class="sc-ma-collapsible {{#unless policiesExpanded}}collapsed{{/unless}}" data-flow-policies>
+    <button type="button" class="sc-ma-collapsible-header" data-action="sc-toggle-policies">
+      <i class="fa-solid fa-gears" inert></i>
+      <span>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Sections.Policies" }}</span>
+      <i class="fa-solid fa-caret-down" inert></i>
+    </button>
+    <div class="sc-ma-collapsible-content">
+      <fieldset>
+        <div class="form-group">
+          <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.MaxDepth.Label" }}</label>
+          <div class="form-fields">
+            <input type="number" name="flow.maxDepth" value="{{ flow.maxDepth }}" min="1" max="20" step="1">
+          </div>
+          <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.MaxDepth.Hint" }}</p>
+        </div>
+        <div class="form-group">
+          <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.StopOnCancel.Label" }}</label>
+          <div class="form-fields">
+            <input type="checkbox" name="flow.stopOnCancel" {{#if flow.stopOnCancel}}checked{{/if}}>
+          </div>
+          <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.StopOnCancel.Hint" }}</p>
+        </div>
+        <div class="form-group">
+          <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.ContinueOnChildError.Label" }}</label>
+          <div class="form-fields">
+            <input type="checkbox" name="flow.continueOnChildError" {{#if flow.continueOnChildError}}checked{{/if}}>
+          </div>
+          <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.ContinueOnChildError.Hint" }}</p>
+        </div>
+      </fieldset>
+    </div>
+  </div>
+</section>

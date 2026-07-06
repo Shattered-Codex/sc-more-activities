@@ -1,0 +1,86 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import {
+  FLOW_PROPERTY_OPERATORS,
+  ScConditionalChainConditions
+} from "../../scripts/activities/conditional-chain/ScConditionalChainConditions.js";
+
+const actor = {
+  system: {
+    attributes: { hp: { value: 12, max: 20 } },
+    traits: { languages: { value: ["common", "elvish"] } },
+    details: { alignment: "Neutral Good" }
+  }
+};
+
+test("reads nested properties through dotted paths", () => {
+  assert.equal(ScConditionalChainConditions.getPropertyValue(actor, "system.attributes.hp.value"), 12);
+  assert.equal(ScConditionalChainConditions.getPropertyValue(actor, "system.missing.path"), undefined);
+  assert.equal(ScConditionalChainConditions.getPropertyValue(actor, ""), undefined);
+});
+
+test("compares numbers with ordering operators", () => {
+  assert.deepEqual(ScConditionalChainConditions.compare("gt", 12, 10), { valid: true, result: true });
+  assert.deepEqual(ScConditionalChainConditions.compare("gte", 12, "12"), { valid: true, result: true });
+  assert.deepEqual(ScConditionalChainConditions.compare("lt", 12, 10), { valid: true, result: false });
+  assert.deepEqual(ScConditionalChainConditions.compare("lte", "9", 10), { valid: true, result: true });
+});
+
+test("rejects ordering comparisons on non-numeric values", () => {
+  const result = ScConditionalChainConditions.compare("gt", "abc", 10);
+  assert.equal(result.valid, false);
+  assert.equal(result.reason, "not-numeric");
+});
+
+test("compares equality loosely between numbers and strings", () => {
+  assert.equal(ScConditionalChainConditions.compare("eq", 12, "12").result, true);
+  assert.equal(ScConditionalChainConditions.compare("eq", "Neutral Good", "Neutral Good").result, true);
+  assert.equal(ScConditionalChainConditions.compare("ne", true, "1").result, false);
+  assert.equal(ScConditionalChainConditions.compare("eq", "abc", "abd").result, false);
+});
+
+test("supports includes for arrays, sets and strings", () => {
+  assert.equal(ScConditionalChainConditions.compare("includes", ["common", "elvish"], "elvish").result, true);
+  assert.equal(ScConditionalChainConditions.compare("includes", new Set(["a"]), "a").result, true);
+  assert.equal(ScConditionalChainConditions.compare("includes", "Neutral Good", "Good").result, true);
+  assert.equal(ScConditionalChainConditions.compare("includes", 42, "4").valid, false);
+});
+
+test("rejects unknown operators", () => {
+  assert.equal(ScConditionalChainConditions.compare("~=", 1, 1).valid, false);
+  assert.equal(ScConditionalChainConditions.isOperator("eq"), true);
+  assert.equal(ScConditionalChainConditions.isOperator("weird"), false);
+  assert.deepEqual(Object.values(FLOW_PROPERTY_OPERATORS).sort(), ["eq", "gt", "gte", "includes", "lt", "lte", "ne"]);
+});
+
+test("evaluates actor properties end to end", () => {
+  const evaluation = ScConditionalChainConditions.evaluateActorProperty(
+    { path: "system.attributes.hp.value", operator: "gt", value: "10" },
+    actor
+  );
+  assert.deepEqual(evaluation, { valid: true, result: true, actual: 12, expected: "10" });
+});
+
+test("resolves expected values through the injected resolver", () => {
+  const evaluation = ScConditionalChainConditions.evaluateActorProperty(
+    { path: "system.attributes.hp.value", operator: "lt", value: "@attributes.hp.max" },
+    actor,
+    { resolveExpected: () => 20 }
+  );
+  assert.deepEqual(evaluation, { valid: true, result: true, actual: 12, expected: 20 });
+});
+
+test("fails safely on missing paths and invalid operators", () => {
+  const missing = ScConditionalChainConditions.evaluateActorProperty(
+    { path: "system.missing.path", operator: "eq", value: "1" },
+    actor
+  );
+  assert.deepEqual(missing, { valid: false, reason: "missing-property" });
+
+  const invalid = ScConditionalChainConditions.evaluateActorProperty(
+    { path: "system.attributes.hp.value", operator: "weird", value: "1" },
+    actor
+  );
+  assert.deepEqual(invalid, { valid: false, reason: "invalid-operator" });
+});

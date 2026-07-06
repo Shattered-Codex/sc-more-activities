@@ -51,6 +51,7 @@ The goal is to preserve the value of richer activity workflows while shaping the
 - `sc-macro`: run a world macro or GM-controlled inline code
 - `sc-hook`: fire a hook or module callback for developer workflows
 - `sc-chain`: trigger other activities from the same item in sequence
+- `sc-conditional-chain`: route between activities from the same item with conditions, rolls, and manual choices
 - `sc-contest`: resolve a contested roll workflow between participants
 - `sc-grant`: grant item-related rewards or support item flows
 - `sc-advancement`: drive item-linked advancement or progression flows
@@ -60,10 +61,11 @@ The goal is to preserve the value of richer activity workflows while shaping the
 
 ## Asset Credits
 
-Some bundled activity icons are sourced from [game-icons.net](https://game-icons.net/).
+Some bundled activity icons are sourced from [game-icons.net](https://game-icons.net/),
+currently using artwork by Delapouite and Lorc.
 Game-icons.net states that its icons are provided under the
 [Creative Commons Attribution 3.0 license](https://creativecommons.org/licenses/by/3.0/),
-which requires attribution to the original author(s). See the
+which requires attribution to the original authors. See the
 [Game-icons.net About page](https://game-icons.net/about.html) for license and author details.
 
 ## Main Features

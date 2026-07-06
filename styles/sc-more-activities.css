@@ -2144,3 +2144,135 @@
 .sc-more-activities .sc-ma-movement-preview .sc-ma-placement-row.is-out-of-range {
   border-color: color-mix(in srgb, #d32f2f 55%, var(--sc-ma-border-soft, #323749) 45%);
 }
+
+/* SC Conditional Chain flow editor */
+.sc-ma-flow-issues {
+  background: color-mix(in srgb, var(--sc-ma-danger, #d32f2f) 12%, var(--sc-ma-bg-card-soft, #1f2230) 88%);
+  border: 1px solid color-mix(in srgb, var(--sc-ma-danger, #d32f2f) 55%, var(--sc-ma-border-soft, #323749) 45%);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  margin-block-end: 0.5rem;
+  padding: 0.45rem 0.7rem;
+}
+
+.sc-ma-flow-issues p {
+  color: var(--sc-ma-text-strong);
+  font-weight: 600;
+  margin: 0 0 0.25rem;
+}
+
+.sc-ma-flow-issues ul {
+  margin: 0;
+  padding-inline-start: 1.1rem;
+}
+
+.sc-ma-flow-node-list {
+  display: grid;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sc-ma-flow-node {
+  background: color-mix(in srgb, var(--sc-ma-bg-card-soft, #1f2230) 88%, black 12%);
+  border: 1px solid var(--sc-ma-border-soft, #323749);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.5rem 0.7rem;
+}
+
+.sc-ma-flow-node.is-start {
+  border-color: color-mix(in srgb, var(--sc-ma-accent, #39f08c) 45%, var(--sc-ma-border-soft, #323749) 55%);
+}
+
+.sc-ma-flow-node-header {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.sc-ma-flow-node-header input[type="text"] {
+  flex: 1 1 auto;
+  font-weight: 600;
+  min-width: 0;
+}
+
+.sc-ma-flow-node-number {
+  align-items: center;
+  border: 1px solid var(--sc-ma-border-soft, #323749);
+  border-radius: 6px;
+  color: var(--sc-ma-text-dim);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.76rem;
+  font-weight: 700;
+  gap: 0.3rem;
+  justify-content: center;
+  min-width: 2rem;
+  padding: 0.2rem 0.4rem;
+}
+
+.sc-ma-flow-node.is-start .sc-ma-flow-node-number {
+  color: var(--sc-ma-accent, #39f08c);
+}
+
+.sc-ma-flow-warning {
+  color: color-mix(in srgb, var(--sc-ma-danger, #d32f2f) 80%, white 20%);
+}
+
+.sc-ma-flow-condition-row .form-fields input[type="text"] {
+  min-width: 0;
+}
+
+.sc-ma-flow-operator {
+  flex: 0 0 6.5rem;
+}
+
+.sc-ma-flow-choices {
+  border-top: 1px dashed var(--sc-ma-border-soft, #323749);
+  display: grid;
+  gap: 0.35rem;
+  padding-top: 0.4rem;
+}
+
+.sc-ma-flow-choices-header {
+  align-items: center;
+  color: var(--sc-ma-text-strong);
+  display: flex;
+  font-size: 0.8rem;
+  font-weight: 600;
+  gap: 0.4rem;
+}
+
+.sc-ma-flow-choices ul {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+}
+
+.sc-ma-flow-choice-row {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.sc-ma-flow-choice-row input[type="text"] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sc-ma-flow-choice-row select {
+  flex: 0 0 45%;
+  min-width: 0;
+}
+
+.sc-ma-flow-choice-empty,
+.sc-ma-flow-empty {
+  color: var(--sc-ma-text-dim);
+  font-style: italic;
+  padding: 0.4rem 0;
+  text-align: center;
+}
