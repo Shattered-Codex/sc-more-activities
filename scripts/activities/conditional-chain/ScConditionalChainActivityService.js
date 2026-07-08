@@ -1,5 +1,6 @@
 import { Constants } from "../../constants/Constants.js";
 import { Logger } from "../../support/Logger.js";
+import { ScActivityResultTracker } from "../ScActivityResultTracker.js";
 import { ScChainExecutionContext } from "../chain/ScChainExecutionContext.js";
 import { ScConditionalChainConditions } from "./ScConditionalChainConditions.js";
 import {
@@ -44,6 +45,7 @@ export class ScConditionalChainActivityService {
     const nodeMap = ScConditionalChainFlow.buildNodeMap(flow.nodes);
     const visited = new Set();
     let currentId = flow.startNode;
+    let lastResult = ScActivityResultTracker.getLastResult(usageContext.usage);
 
     while (currentId && currentId !== FLOW_END) {
       const node = nodeMap.get(currentId);
@@ -59,15 +61,18 @@ export class ScConditionalChainActivityService {
       visited.add(currentId);
 
       if (node.activityId) {
-        const proceed = await ScConditionalChainActivityService.#runChildActivity(
-          activity, node, flow, chainContext, usageContext
+        const childExecution = await ScConditionalChainActivityService.#runChildActivity(
+          activity, node, flow, chainContext, usageContext, lastResult
         );
-        if (!proceed) {
+        if (!childExecution.proceed) {
           return;
+        }
+        if (childExecution.lastResult !== undefined) {
+          lastResult = childExecution.lastResult;
         }
       }
 
-      const outcome = await ScConditionalChainActivityService.#resolveOutcome(activity, node);
+      const outcome = await ScConditionalChainActivityService.#resolveOutcome(activity, node, lastResult);
       if (outcome.canceled || !outcome.valid) {
         return;
       }
@@ -120,53 +125,86 @@ export class ScConditionalChainActivityService {
       .join("");
   }
 
-  /** Returns true when the flow may continue routing after the child step. */
-  static async #runChildActivity(activity, node, flow, chainContext, usageContext) {
+  /** Returns the child execution outcome and the latest result context when available. */
+  static async #runChildActivity(activity, node, flow, chainContext, usageContext, lastResult) {
     const target = activity?.item?.system?.activities?.get?.(node.activityId) ?? null;
     if (!target) {
       ScConditionalChainActivityService.#warnFormat("Warning.MissingChild", { activity: node.activityId },
         `Conditional chain activity not found: ${node.activityId}`);
-      return flow.continueOnChildError;
+      return {
+        proceed: flow.continueOnChildError,
+        lastResult: undefined
+      };
     }
 
     const targetKey = ScChainExecutionContext.activityKey(target);
     if (ScChainExecutionContext.hasVisited(chainContext, targetKey)) {
       ScConditionalChainActivityService.#warn("Warning.LoopDetected", "Conditional chain loop detected.");
-      return false;
+      return {
+        proceed: false,
+        lastResult: undefined
+      };
     }
 
     let childResults;
+    const childUsage = ScActivityResultTracker.withTrackedUsage(
+      ScChainExecutionContext.childUsage(usageContext.usage, chainContext, targetKey),
+      target,
+      lastResult
+    );
     try {
       childResults = await target.use(
-        ScChainExecutionContext.childUsage(usageContext.usage, chainContext, targetKey),
+        childUsage,
         usageContext.dialog ?? {},
         usageContext.message ?? {}
       );
     } catch (error) {
+      ScActivityResultTracker.cancelUsage(childUsage, "child-error");
       Logger.error("Could not execute conditional chain child activity.", error);
       ui.notifications?.error?.(Constants.format(
         `${LANG}.Error.ChildFailed`,
         { activity: target.name ?? target.id, error: error?.message ?? String(error) },
         `Could not execute ${target.name ?? target.id}: ${error?.message ?? String(error)}`
       ));
-      return flow.continueOnChildError;
+      return {
+        proceed: flow.continueOnChildError,
+        lastResult: undefined
+      };
     }
 
     if (childResults === undefined && flow.stopOnCancel) {
+      ScActivityResultTracker.cancelUsage(childUsage, "child-canceled");
       ScConditionalChainActivityService.#warn("Warning.ChildCanceled", "A conditional chain activity was canceled.");
-      return false;
+      return {
+        proceed: false,
+        lastResult: undefined
+      };
     }
-    return true;
+
+    if (childResults === undefined) {
+      ScActivityResultTracker.cancelUsage(childUsage, "child-canceled");
+      return {
+        proceed: true,
+        lastResult: undefined
+      };
+    }
+
+    return {
+      proceed: true,
+      lastResult: await ScActivityResultTracker.resolveUsageResult(target, childUsage, childResults)
+    };
   }
 
-  static async #resolveOutcome(activity, node) {
+  static async #resolveOutcome(activity, node, lastResult) {
     switch (node.conditionType) {
       case FLOW_CONDITION_TYPES.ALWAYS:
         return { valid: true, kind: "always" };
       case FLOW_CONDITION_TYPES.ACTOR_PROPERTY:
-        return ScConditionalChainActivityService.#resolveActorProperty(activity, node);
+        return ScConditionalChainActivityService.#resolveActorProperty(activity, node, lastResult);
+      case FLOW_CONDITION_TYPES.LAST_ACTIVITY_RESULT:
+        return ScConditionalChainActivityService.#resolveLastActivityResult(activity, node, lastResult);
       case FLOW_CONDITION_TYPES.ROLL_CHECK:
-        return ScConditionalChainActivityService.#resolveRollCheck(activity, node);
+        return ScConditionalChainActivityService.#resolveRollCheck(activity, node, lastResult);
       case FLOW_CONDITION_TYPES.CHOICE:
         return ScConditionalChainActivityService.#resolveChoice(node);
       default:
@@ -176,7 +214,32 @@ export class ScConditionalChainActivityService {
     }
   }
 
-  static #resolveActorProperty(activity, node) {
+  static #resolveLastActivityResult(activity, node, lastResult) {
+    if (!lastResult || typeof lastResult !== "object") {
+      ScConditionalChainActivityService.#warnFormat(
+        "Warning.MissingLastResult",
+        { node: node.label || node.nodeId },
+        `No previous activity result is available for step "${node.label || node.nodeId}".`
+      );
+      return { valid: false };
+    }
+
+    const actor = ScConditionalChainActivityService.#resolveActor(activity);
+    const evaluation = ScConditionalChainConditions.evaluateProperty(node.condition, lastResult, {
+      resolveExpected: (raw) => ScConditionalChainActivityService.#resolveExpectedValue(activity, actor, raw, lastResult)
+    });
+    if (!evaluation.valid) {
+      ScConditionalChainActivityService.#warnFormat(
+        "Warning.InvalidLastActivityResult",
+        { node: node.label || node.nodeId, path: node.condition.path, reason: evaluation.reason ?? "" },
+        `Could not evaluate last activity result "${node.condition.path}" (${evaluation.reason ?? "invalid"}).`
+      );
+      return { valid: false };
+    }
+    return { valid: true, kind: "boolean", value: evaluation.result };
+  }
+
+  static #resolveActorProperty(activity, node, lastResult) {
     const actor = ScConditionalChainActivityService.#resolveActor(activity);
     if (!actor) {
       ScConditionalChainActivityService.#warn("Warning.MissingActor", "This conditional chain needs an actor.");
@@ -184,7 +247,7 @@ export class ScConditionalChainActivityService {
     }
 
     const evaluation = ScConditionalChainConditions.evaluateActorProperty(node.condition, actor, {
-      resolveExpected: (raw) => ScConditionalChainActivityService.#resolveExpectedValue(activity, actor, raw)
+      resolveExpected: (raw) => ScConditionalChainActivityService.#resolveExpectedValue(activity, actor, raw, lastResult)
     });
     if (!evaluation.valid) {
       ScConditionalChainActivityService.#warnFormat(
@@ -197,18 +260,24 @@ export class ScConditionalChainActivityService {
     return { valid: true, kind: "boolean", value: evaluation.result };
   }
 
-  static #resolveExpectedValue(activity, actor, raw) {
+  static #resolveExpectedValue(activity, actor, raw, lastResult) {
     if (!raw) {
       return raw;
+    }
+    if (/^(true|false)$/i.test(raw)) {
+      return String(raw).trim().toLowerCase() === "true";
     }
     if (/^-?\d+(\.\d+)?$/.test(raw)) {
       return Number(raw);
     }
     const simplify = globalThis.dnd5e?.utils?.simplifyBonus;
     if (typeof simplify === "function") {
-      const rollData = activity?.getRollData?.({ deterministic: true })
-        ?? actor?.getRollData?.({ deterministic: true })
-        ?? {};
+      const rollData = ScConditionalChainActivityService.#withLastResultRollData(
+        activity?.getRollData?.({ deterministic: true })
+          ?? actor?.getRollData?.({ deterministic: true })
+          ?? {},
+        lastResult
+      );
       try {
         const value = simplify(raw, rollData);
         if (Number.isFinite(value)) {
@@ -221,14 +290,22 @@ export class ScConditionalChainActivityService {
     return raw;
   }
 
-  static async #resolveRollCheck(activity, node) {
+  /** Merges the previous chain result into roll data as `@scLast` for formula fields. */
+  static #withLastResultRollData(rollData, lastResult) {
+    if (!lastResult || typeof lastResult !== "object") {
+      return rollData;
+    }
+    return { ...rollData, scLast: ScActivityResultTracker.lastResultFormulaData(lastResult) };
+  }
+
+  static async #resolveRollCheck(activity, node, lastResult) {
     const actor = ScConditionalChainActivityService.#resolveActor(activity);
     if (!actor) {
       ScConditionalChainActivityService.#warn("Warning.MissingActor", "This conditional chain needs an actor.");
       return { valid: false };
     }
 
-    const dc = ScConditionalChainActivityService.#resolveDc(activity, actor, node.condition.dcFormula);
+    const dc = ScConditionalChainActivityService.#resolveDc(activity, actor, node.condition.dcFormula, lastResult);
     if (!Number.isFinite(dc)) {
       ScConditionalChainActivityService.#warnFormat("Warning.InvalidDc", { node: node.label || node.nodeId },
         `Conditional chain step has an invalid DC formula: ${node.label || node.nodeId}`);
@@ -237,7 +314,7 @@ export class ScConditionalChainActivityService {
 
     let rolls;
     try {
-      rolls = await ScConditionalChainActivityService.#rollForNode(actor, activity, node.condition, dc);
+      rolls = await ScConditionalChainActivityService.#rollForNode(actor, activity, node.condition, dc, lastResult);
     } catch (error) {
       Logger.error("Could not roll conditional chain check.", error);
       ScConditionalChainActivityService.#warnFormat(
@@ -265,7 +342,7 @@ export class ScConditionalChainActivityService {
     return { valid: true, kind: "boolean", value: total >= dc };
   }
 
-  static async #rollForNode(actor, activity, condition, dc) {
+  static async #rollForNode(actor, activity, condition, dc, lastResult) {
     if (condition.rollType === FLOW_ROLL_TYPES.SKILL && typeof actor?.rollSkill === "function") {
       return actor.rollSkill({ skill: condition.skill, target: dc }, {}, {});
     }
@@ -276,7 +353,10 @@ export class ScConditionalChainActivityService {
       return actor.rollAbilityCheck({ ability: condition.ability, target: dc }, {}, {});
     }
     if (condition.rollType === FLOW_ROLL_TYPES.CUSTOM) {
-      const rollData = activity?.getRollData?.() ?? actor?.getRollData?.() ?? {};
+      const rollData = ScConditionalChainActivityService.#withLastResultRollData(
+        activity?.getRollData?.() ?? actor?.getRollData?.() ?? {},
+        lastResult
+      );
       const roll = new Roll(condition.formula, rollData);
       await roll.evaluate();
       await roll.toMessage?.({
@@ -288,10 +368,13 @@ export class ScConditionalChainActivityService {
     throw new Error(Constants.localize(`${LANG}.Error.RollUnavailable`, "The configured roll is not available for this actor."));
   }
 
-  static #resolveDc(activity, actor, formula) {
-    const rollData = activity?.getRollData?.({ deterministic: true })
-      ?? actor?.getRollData?.({ deterministic: true })
-      ?? {};
+  static #resolveDc(activity, actor, formula, lastResult) {
+    const rollData = ScConditionalChainActivityService.#withLastResultRollData(
+      activity?.getRollData?.({ deterministic: true })
+        ?? actor?.getRollData?.({ deterministic: true })
+        ?? {},
+      lastResult
+    );
     const simplify = globalThis.dnd5e?.utils?.simplifyBonus;
     if (typeof simplify === "function") {
       try {

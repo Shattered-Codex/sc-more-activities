@@ -12,6 +12,7 @@ import { ScContestActivityService } from "./activities/contest/ScContestActivity
 import { ModuleSettingsRegistrar } from "./settings/ModuleSettingsRegistrar.js";
 import { MoreActivitiesMigrationService } from "./migration/MoreActivitiesMigrationService.js";
 import { Logger } from "./support/Logger.js";
+import { ScActivityResultTracker } from "./activities/ScActivityResultTracker.js";
 
 const registry = new ActivityRegistry();
 const registrationApi = new RegistrationApi({ registry });
@@ -28,6 +29,7 @@ Hooks.once("init", () => {
     return;
   }
 
+  ScActivityResultTracker.registerHooks();
   ScContestActivityService.registerQueries();
   ScCanvasActivityService.registerQueries();
   registry.beginCollection();

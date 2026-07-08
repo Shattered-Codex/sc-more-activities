@@ -155,6 +155,46 @@ test("validates actor-property configuration", () => {
   assert.deepEqual(codes(ScConditionalChainFlow.validateFlow(flow, [])), ["missing-path"]);
 });
 
+test("normalizes and validates last-activity-result conditions", () => {
+  const flow = ScConditionalChainFlow.normalizeFlow({
+    startNode: "a",
+    nodes: [{
+      nodeId: "a",
+      conditionType: FLOW_CONDITION_TYPES.LAST_ACTIVITY_RESULT,
+      condition: { path: "damage.total", operator: "gte", value: "10" },
+      routes: { next: "", onTrue: "b", onFalse: FLOW_END }
+    }, {
+      nodeId: "b",
+      routes: { next: FLOW_END }
+    }]
+  });
+
+  assert.equal(flow.nodes[0].conditionType, FLOW_CONDITION_TYPES.LAST_ACTIVITY_RESULT);
+  assert.deepEqual(ScConditionalChainFlow.validateFlow(flow, []), []);
+});
+
+test("validates last-activity-result configuration like actor-property conditions", () => {
+  const missingPath = makeFlow({
+    nodes: [{
+      nodeId: "a",
+      conditionType: FLOW_CONDITION_TYPES.LAST_ACTIVITY_RESULT,
+      condition: { path: "", operator: "eq", value: "success" },
+      routes: { onTrue: FLOW_END, onFalse: FLOW_END }
+    }]
+  });
+  assert.deepEqual(codes(ScConditionalChainFlow.validateFlow(missingPath, [])), ["missing-path"]);
+
+  const invalidOperator = makeFlow({
+    nodes: [{
+      nodeId: "a",
+      conditionType: FLOW_CONDITION_TYPES.LAST_ACTIVITY_RESULT,
+      condition: { path: "damage.type", operator: "weird", value: "fire" },
+      routes: { onTrue: FLOW_END, onFalse: FLOW_END }
+    }]
+  });
+  assert.deepEqual(codes(ScConditionalChainFlow.validateFlow(invalidOperator, [])), ["invalid-operator"]);
+});
+
 test("validates roll-check configuration", () => {
   const flow = makeFlow({
     nodes: [{

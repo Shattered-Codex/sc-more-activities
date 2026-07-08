@@ -35,7 +35,7 @@
 
     <ol class="sc-ma-flow-node-list unlist">
       {{#each nodes as |node|}}
-      <li class="sc-ma-flow-node {{#if node.isStart}}is-start{{/if}}" data-index="{{ node.index }}">
+      <li class="sc-ma-flow-node {{#if node.isStart}}is-start{{/if}}" data-index="{{ node.index }}" {{#if node.isLastActivityResult}}data-last-result-node{{/if}}>
         <input type="hidden" name="flow.nodes.{{ node.index }}.nodeId" value="{{ node.nodeId }}">
 
         <div class="sc-ma-flow-node-header">
@@ -54,7 +54,7 @@
         <div class="form-group">
           <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Activity.Label" }}</label>
           <div class="form-fields">
-            <select name="flow.nodes.{{ node.index }}.activityId">
+            <select name="flow.nodes.{{ node.index }}.activityId" data-node-activity-select>
               {{ selectOptions ../activityOptions selected=node.activityId valueAttr="value" labelAttr="label" }}
             </select>
           </div>
@@ -85,19 +85,43 @@
           </div>
         {{/if}}
 
-        {{#if node.isActorProperty}}
+        {{#if node.usesPathCondition}}
           <div class="form-group sc-ma-flow-condition-row">
-            <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Path.Label" }}</label>
+            <label>{{ node.pathFieldLabel }}</label>
             <div class="form-fields">
-              <input type="text" name="flow.nodes.{{ node.index }}.condition.path" value="{{ node.condition.path }}"
-                     placeholder="system.attributes.hp.value" spellcheck="false">
+              {{#if node.isLastActivityResult}}
+                <select data-last-result-path-select class="sc-ma-flow-path-select"
+                        aria-label="{{ node.pathFieldLabel }}"
+                        {{#if node.pathSelectedTooltip}}data-tooltip="{{ node.pathSelectedTooltip }}"{{/if}}>
+                  <option value=""{{#unless node.condition.path}} selected{{/unless}}>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.LastActivityResult.Choose" }}</option>
+                  {{#each node.pathSuggestionGroups as |group|}}
+                    <optgroup label="{{ group.label }}">
+                      {{#each group.paths as |suggestion|}}
+                        <option value="{{ suggestion.value }}"{{#if suggestion.selected}} selected{{/if}}>{{ suggestion.label }}</option>
+                      {{/each}}
+                    </optgroup>
+                  {{/each}}
+                  <option value="__custom__"{{#if node.pathIsCustom}} selected{{/if}}>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.LastActivityResult.CustomOption" }}</option>
+                </select>
+              {{else}}
+                <input type="text" name="flow.nodes.{{ node.index }}.condition.path" value="{{ node.condition.path }}"
+                       placeholder="{{ node.pathFieldPlaceholder }}" spellcheck="false">
+              {{/if}}
               <select name="flow.nodes.{{ node.index }}.condition.operator" class="sc-ma-flow-operator">
                 {{ selectOptions ../operatorOptions selected=node.condition.operator valueAttr="value" labelAttr="label" }}
               </select>
-              <input type="text" name="flow.nodes.{{ node.index }}.condition.value" value="{{ node.condition.value }}"
+              <input type="text" name="flow.nodes.{{ node.index }}.condition.value" value="{{ node.condition.value }}" class="sc-ma-flow-value"
                      placeholder="{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Value.Placeholder" }}" spellcheck="false">
             </div>
-            <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Path.Hint" }}</p>
+            {{#if node.isLastActivityResult}}
+              <div class="form-fields sc-ma-flow-custom-path" data-last-result-custom-path {{#unless node.pathIsCustom}}hidden{{/unless}}>
+                <input type="text" name="flow.nodes.{{ node.index }}.condition.path" value="{{ node.condition.path }}"
+                       placeholder="{{ node.pathFieldPlaceholder }}" spellcheck="false" data-last-result-path-input>
+              </div>
+              <p class="hint" data-last-result-path-hint>{{ node.pathSelectedHint }}</p>
+            {{else}}
+              <p class="hint">{{ node.pathFieldHint }}</p>
+            {{/if}}
           </div>
         {{/if}}
 
@@ -139,7 +163,7 @@
           </div>
         {{/if}}
 
-        {{#if node.isActorProperty}}
+        {{#if node.usesPathCondition}}
           <div class="form-group sc-ma-flow-routes">
             <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Routes.OnTrue" }}</label>
             <div class="form-fields">

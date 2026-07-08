@@ -46,12 +46,12 @@ export class ScConditionalChainConditions {
     }
   }
 
-  static evaluateActorProperty(condition = {}, actorSource, { resolveExpected } = {}) {
+  static evaluateProperty(condition = {}, source, { resolveExpected } = {}) {
     if (!ScConditionalChainConditions.isOperator(condition.operator)) {
       return { valid: false, reason: "invalid-operator" };
     }
 
-    const actual = ScConditionalChainConditions.getPropertyValue(actorSource, condition.path);
+    const actual = ScConditionalChainConditions.getPropertyValue(source, condition.path);
     if (actual === undefined) {
       return { valid: false, reason: "missing-property" };
     }
@@ -65,7 +65,17 @@ export class ScConditionalChainConditions {
     return { valid: true, result: comparison.result, actual, expected };
   }
 
+  static evaluateActorProperty(condition = {}, actorSource, { resolveExpected } = {}) {
+    return ScConditionalChainConditions.evaluateProperty(condition, actorSource, { resolveExpected });
+  }
+
   static #looseEquals(actual, expected) {
+    const actualBoolean = ScConditionalChainConditions.#asBoolean(actual);
+    const expectedBoolean = ScConditionalChainConditions.#asBoolean(expected);
+    if (actualBoolean !== null && expectedBoolean !== null) {
+      return actualBoolean === expectedBoolean;
+    }
+
     const actualNumber = ScConditionalChainConditions.#asNumber(actual);
     const expectedNumber = ScConditionalChainConditions.#asNumber(expected);
     if (actualNumber !== null && expectedNumber !== null) {
@@ -121,5 +131,22 @@ export class ScConditionalChainConditions {
     }
     const number = Number(text);
     return Number.isFinite(number) ? number : null;
+  }
+
+  static #asBoolean(value) {
+    if (typeof value === "boolean") {
+      return value;
+    }
+    if (value === null || value === undefined) {
+      return null;
+    }
+    const text = String(value).trim().toLowerCase();
+    if (text === "true") {
+      return true;
+    }
+    if (text === "false") {
+      return false;
+    }
+    return null;
   }
 }

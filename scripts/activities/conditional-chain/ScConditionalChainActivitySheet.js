@@ -1,3 +1,4 @@
+import { ScActivityResultPathCatalog } from "../ScActivityResultPathCatalog.js";
 import { ScConditionalChainActivityService } from "./ScConditionalChainActivityService.js";
 import { FLOW_PROPERTY_OPERATORS } from "./ScConditionalChainConditions.js";
 import {
@@ -8,6 +9,7 @@ import {
 } from "./ScConditionalChainFlow.js";
 
 const LANG = "SCMOREACTIVITIES.Activities.ScConditionalChain";
+const CUSTOM_PATH_OPTION = "__custom__";
 
 export class ScConditionalChainActivitySheet extends dnd5e.applications.activity.ActivitySheet {
   static DEFAULT_OPTIONS = {
@@ -31,6 +33,7 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
     context = await super._prepareEffectContext(context, options);
     const flow = ScConditionalChainFlow.normalizeFlow(this.activity?.flow);
     const availableActivities = this.#availableActivities();
+    const availableActivityIndex = new Map(availableActivities.map((entry) => [entry.id, entry]));
     const issues = ScConditionalChainFlow.validateFlow(flow, availableActivities.map((entry) => entry.id));
 
     context.flow = {
@@ -56,6 +59,7 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
     context.conditionTypeOptions = this.#localizedOptions("ConditionTypes", {
       [FLOW_CONDITION_TYPES.ALWAYS]: "Always",
       [FLOW_CONDITION_TYPES.ACTOR_PROPERTY]: "ActorProperty",
+      [FLOW_CONDITION_TYPES.LAST_ACTIVITY_RESULT]: "LastActivityResult",
       [FLOW_CONDITION_TYPES.ROLL_CHECK]: "RollCheck",
       [FLOW_CONDITION_TYPES.CHOICE]: "Choice"
     });
@@ -86,6 +90,19 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
     const knownActivityIds = new Set(availableActivities.map((entry) => entry.id));
     const endOption = { value: FLOW_END, label: game.i18n.localize(`${LANG}.Fields.Node.Routes.End`) };
     context.nodes = flow.nodes.map((node, index) => {
+      const usesPathCondition = [
+        FLOW_CONDITION_TYPES.ACTOR_PROPERTY,
+        FLOW_CONDITION_TYPES.LAST_ACTIVITY_RESULT
+      ].includes(node.conditionType);
+      const isLastActivityResult = node.conditionType === FLOW_CONDITION_TYPES.LAST_ACTIVITY_RESULT;
+      const suggestionActivity = availableActivityIndex.get(node.activityId) ?? null;
+      const conditionPath = String(node.condition.path ?? "").trim();
+      const pathSuggestionGroups = isLastActivityResult
+        ? this.#lastResultPathGroups(suggestionActivity, conditionPath)
+        : [];
+      const pathIsCustom = isLastActivityResult
+        && Boolean(conditionPath)
+        && !pathSuggestionGroups.some((group) => group.paths.some((entry) => entry.selected));
       const routeOptions = [
         endOption,
         ...flow.nodes
@@ -99,12 +116,25 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
         isStart: node.nodeId === flow.startNode,
         isAlways: node.conditionType === FLOW_CONDITION_TYPES.ALWAYS,
         isActorProperty: node.conditionType === FLOW_CONDITION_TYPES.ACTOR_PROPERTY,
+        isLastActivityResult,
         isRollCheck: node.conditionType === FLOW_CONDITION_TYPES.ROLL_CHECK,
         isChoice: node.conditionType === FLOW_CONDITION_TYPES.CHOICE,
+        usesPathCondition,
         needsAbility: [FLOW_ROLL_TYPES.ABILITY_CHECK, FLOW_ROLL_TYPES.SAVING_THROW].includes(node.condition.rollType),
         needsSkill: node.condition.rollType === FLOW_ROLL_TYPES.SKILL,
         needsFormula: node.condition.rollType === FLOW_ROLL_TYPES.CUSTOM,
         activityMissing: Boolean(node.activityId) && !knownActivityIds.has(node.activityId),
+        pathFieldLabel: game.i18n.localize(`${LANG}.Fields.Node.${isLastActivityResult ? "LastActivityResult" : "Path"}.Label`),
+        pathFieldHint: game.i18n.localize(`${LANG}.Fields.Node.${isLastActivityResult ? "LastActivityResult" : "Path"}.Hint`),
+        pathFieldPlaceholder: isLastActivityResult ? "roll.total" : "system.attributes.hp.value",
+        pathSuggestionGroups,
+        pathIsCustom,
+        pathSelectedHint: isLastActivityResult
+          ? this.#lastResultSelectedHint(suggestionActivity, conditionPath)
+          : "",
+        pathSelectedTooltip: isLastActivityResult && !pathIsCustom
+          ? this.#resultPathDescription(conditionPath)
+          : "",
         routeOptions,
         choices: node.choices.map((choice, choiceIndex) => ({ ...choice, choiceIndex }))
       };
@@ -178,6 +208,31 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
       });
     });
 
+    const activityIndex = new Map(this.#availableActivities().map((entry) => [entry.id, entry]));
+    this.element.querySelectorAll("[data-last-result-node]").forEach((element) => {
+      this.#refreshLastResultSuggestionUi(element, activityIndex);
+    });
+
+    this.element.querySelectorAll("[data-node-activity-select]").forEach((select) => {
+      select.addEventListener("change", (event) => {
+        const nodeElement = event.currentTarget.closest("[data-last-result-node]");
+        if (!nodeElement) {
+          return;
+        }
+        this.#refreshLastResultSuggestionUi(nodeElement, activityIndex);
+      });
+    });
+
+    this.element.querySelectorAll("[data-last-result-path-select]").forEach((select) => {
+      select.addEventListener("change", (event) => {
+        const nodeElement = event.currentTarget.closest("[data-last-result-node]");
+        if (!nodeElement) {
+          return;
+        }
+        this.#onLastResultPathSelected(nodeElement, event, activityIndex);
+      });
+    });
+
     this.element.querySelector("[data-action='sc-toggle-policies']")?.addEventListener("click", (event) => {
       event.preventDefault();
       const tray = this.element.querySelector("[data-flow-policies]");
@@ -211,6 +266,155 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
       value,
       label: game.i18n.localize(`${LANG}.${section}.${key}`)
     }));
+  }
+
+  #lastResultPathGroups(activity = null, selectedPath = "") {
+    return ScActivityResultPathCatalog.groupsForActivity(activity).map((group) => ({
+      id: group.id,
+      label: this.#localizeOr(`${LANG}.ResultPathGroups.${group.id}`, group.id),
+      paths: group.paths.map((path) => ({
+        value: path,
+        label: this.#resultPathLabel(path),
+        selected: path === selectedPath
+      }))
+    }));
+  }
+
+  #resultPathLabel(path) {
+    return this.#localizeOr(`${LANG}.ResultPaths.${path}.Label`, path);
+  }
+
+  #resultPathDescription(path) {
+    if (!path) {
+      return "";
+    }
+    return this.#localizeOr(`${LANG}.ResultPaths.${path}.Description`, "");
+  }
+
+  #localizeOr(key, fallback) {
+    const localized = game.i18n.localize(key);
+    return localized === key ? fallback : localized;
+  }
+
+  #lastResultPathSuggestionHint(activity = null) {
+    if (!activity) {
+      return game.i18n.localize(`${LANG}.Fields.Node.LastActivityResult.Suggestions.HintNoActivity`);
+    }
+    return game.i18n.format(`${LANG}.Fields.Node.LastActivityResult.Suggestions.HintActivity`, {
+      activity: activity.name || activity.id,
+      type: activity.type || ""
+    });
+  }
+
+  #lastResultSelectedHint(activity, path) {
+    const trimmed = String(path ?? "").trim();
+    if (!trimmed) {
+      return this.#lastResultPathSuggestionHint(activity);
+    }
+    if (!this.#knownResultPaths(activity).has(trimmed)) {
+      return game.i18n.localize(`${LANG}.Fields.Node.LastActivityResult.CustomHint`);
+    }
+    const description = this.#resultPathDescription(trimmed);
+    return description ? `${trimmed} — ${description}` : trimmed;
+  }
+
+  #knownResultPaths(activity = null) {
+    return new Set(ScActivityResultPathCatalog.suggestionsForActivity(activity).map((entry) => entry.path));
+  }
+
+  #onLastResultPathSelected(nodeElement, event, activityIndex) {
+    const select = event.currentTarget;
+    const pathInput = nodeElement.querySelector("[data-last-result-path-input]");
+    const customRow = nodeElement.querySelector("[data-last-result-custom-path]");
+    if (!pathInput) {
+      return;
+    }
+
+    const value = String(select.value ?? "");
+    if (value === CUSTOM_PATH_OPTION) {
+      // Keep the sheet from submitting while the user is still typing the path.
+      event.stopPropagation();
+      customRow?.removeAttribute("hidden");
+      pathInput.focus();
+      this.#refreshLastResultDescription(nodeElement, activityIndex);
+      return;
+    }
+
+    customRow?.setAttribute("hidden", "");
+    pathInput.value = value;
+    pathInput.dispatchEvent(new Event("input", { bubbles: true }));
+    this.#refreshLastResultDescription(nodeElement, activityIndex);
+  }
+
+  #refreshLastResultSuggestionUi(nodeElement, activityIndex) {
+    const activitySelect = nodeElement?.querySelector("[data-node-activity-select]");
+    const suggestionSelect = nodeElement?.querySelector("[data-last-result-path-select]");
+    const pathInput = nodeElement?.querySelector("[data-last-result-path-input]");
+    const customRow = nodeElement?.querySelector("[data-last-result-custom-path]");
+    if (!activitySelect || !suggestionSelect || !pathInput) {
+      return;
+    }
+
+    const activity = activityIndex.get(String(activitySelect.value ?? "").trim()) ?? null;
+    const currentPath = String(pathInput.value ?? "").trim();
+    const groups = this.#lastResultPathGroups(activity, currentPath);
+    const isKnown = groups.some((group) => group.paths.some((entry) => entry.selected));
+    const isCustom = Boolean(currentPath) && !isKnown;
+    this.#replaceLastResultSelectOptions(suggestionSelect, groups, isCustom ? CUSTOM_PATH_OPTION : currentPath);
+    customRow?.toggleAttribute("hidden", !isCustom);
+    this.#refreshLastResultDescription(nodeElement, activityIndex);
+  }
+
+  #refreshLastResultDescription(nodeElement, activityIndex) {
+    const activitySelect = nodeElement?.querySelector("[data-node-activity-select]");
+    const suggestionSelect = nodeElement?.querySelector("[data-last-result-path-select]");
+    const pathInput = nodeElement?.querySelector("[data-last-result-path-input]");
+    const hint = nodeElement?.querySelector("[data-last-result-path-hint]");
+    if (!suggestionSelect || !pathInput) {
+      return;
+    }
+
+    const activity = activityIndex.get(String(activitySelect?.value ?? "").trim()) ?? null;
+    const path = String(pathInput.value ?? "").trim();
+    if (hint) {
+      hint.textContent = this.#lastResultSelectedHint(activity, path);
+    }
+    const description = this.#knownResultPaths(activity).has(path)
+      ? this.#resultPathDescription(path)
+      : "";
+    if (description) {
+      suggestionSelect.dataset.tooltip = description;
+    } else {
+      delete suggestionSelect.dataset.tooltip;
+    }
+  }
+
+  #replaceLastResultSelectOptions(select, groups, selectedValue) {
+    select.replaceChildren();
+
+    const blank = document.createElement("option");
+    blank.value = "";
+    blank.textContent = game.i18n.localize(`${LANG}.Fields.Node.LastActivityResult.Choose`);
+    select.append(blank);
+
+    for (const group of groups) {
+      const optgroup = document.createElement("optgroup");
+      optgroup.label = group.label;
+      for (const suggestion of group.paths) {
+        const option = document.createElement("option");
+        option.value = suggestion.value;
+        option.textContent = suggestion.label;
+        optgroup.append(option);
+      }
+      select.append(optgroup);
+    }
+
+    const custom = document.createElement("option");
+    custom.value = CUSTOM_PATH_OPTION;
+    custom.textContent = game.i18n.localize(`${LANG}.Fields.Node.LastActivityResult.CustomOption`);
+    select.append(custom);
+
+    select.value = selectedValue;
   }
 
   #cloneNodes() {

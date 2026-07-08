@@ -1,4 +1,5 @@
 import { ActivityAvailability } from "../../availability/ActivityAvailability.js";
+import { ScActivityResultTracker } from "../ScActivityResultTracker.js";
 import { ACTIVITY_TYPES } from "../ActivityTypes.js";
 import { ScGrantActivityData } from "./ScGrantActivityData.js";
 import { ScGrantActivityService } from "./ScGrantActivityService.js";
@@ -31,6 +32,32 @@ export class ScGrantActivity extends dnd5e.documents.activity.ActivityMixin(ScGr
 
   async _finalizeUsage(config, results) {
     await super._finalizeUsage(config, results);
-    await ScGrantActivityService.execute(this);
+    const grantResult = await ScGrantActivityService.execute(this);
+    ScActivityResultTracker.recordActivityResult(config, {
+      kind: "grant",
+      success: grantResult?.checkPassed === true ? true : (grantResult?.canceled ? false : null),
+      failure: grantResult?.checkPassed === false ? true : (grantResult?.canceled ? false : null),
+      total: grantResult?.check ? Number(grantResult.check.total) || 0 : null,
+      target: grantResult?.check ? Number(grantResult.check.dc) || 0 : null,
+      roll: grantResult?.check ? {
+        kind: "grant-check",
+        total: Number(grantResult.check.total) || 0,
+        target: Number(grantResult.check.dc) || 0,
+        success: grantResult?.checkPassed === true,
+        failure: grantResult?.checkPassed === false
+      } : undefined,
+      activity: {
+        canceled: grantResult?.canceled === true,
+        reason: String(grantResult?.reason ?? "").trim(),
+        checkPassed: grantResult?.checkPassed === true,
+        check: grantResult?.check ? {
+          dc: Number(grantResult.check.dc) || 0,
+          total: Number(grantResult.check.total) || 0
+        } : null,
+        createdCount: Array.isArray(grantResult?.created) ? grantResult.created.length : 0,
+        updatedCount: Array.isArray(grantResult?.updated) ? grantResult.updated.length : 0,
+        actorUuid: String(grantResult?.actor?.uuid ?? "").trim()
+      }
+    });
   }
 }

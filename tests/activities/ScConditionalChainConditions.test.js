@@ -14,10 +14,27 @@ const actor = {
   }
 };
 
+const lastResult = {
+  damage: {
+    total: 14,
+    types: ["fire", "radiant"]
+  },
+  rolls: [{ total: 17 }],
+  metadata: {
+    outcome: "success"
+  }
+};
+
 test("reads nested properties through dotted paths", () => {
   assert.equal(ScConditionalChainConditions.getPropertyValue(actor, "system.attributes.hp.value"), 12);
   assert.equal(ScConditionalChainConditions.getPropertyValue(actor, "system.missing.path"), undefined);
   assert.equal(ScConditionalChainConditions.getPropertyValue(actor, ""), undefined);
+});
+
+test("reads nested properties from last activity results", () => {
+  assert.equal(ScConditionalChainConditions.getPropertyValue(lastResult, "damage.total"), 14);
+  assert.equal(ScConditionalChainConditions.getPropertyValue(lastResult, "rolls.0.total"), 17);
+  assert.equal(ScConditionalChainConditions.getPropertyValue(lastResult, "metadata.outcome"), "success");
 });
 
 test("compares numbers with ordering operators", () => {
@@ -69,6 +86,25 @@ test("resolves expected values through the injected resolver", () => {
     { resolveExpected: () => 20 }
   );
   assert.deepEqual(evaluation, { valid: true, result: true, actual: 12, expected: 20 });
+});
+
+test("evaluates last activity result sources end to end", () => {
+  const numeric = ScConditionalChainConditions.evaluateActorProperty(
+    { path: "damage.total", operator: "gte", value: "12" },
+    lastResult
+  );
+  assert.deepEqual(numeric, { valid: true, result: true, actual: 14, expected: "12" });
+
+  const includes = ScConditionalChainConditions.evaluateActorProperty(
+    { path: "damage.types", operator: "includes", value: "radiant" },
+    lastResult
+  );
+  assert.deepEqual(includes, {
+    valid: true,
+    result: true,
+    actual: ["fire", "radiant"],
+    expected: "radiant"
+  });
 });
 
 test("fails safely on missing paths and invalid operators", () => {

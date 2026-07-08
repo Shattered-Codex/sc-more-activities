@@ -1,5 +1,6 @@
 import { Constants } from "../../constants/Constants.js";
 import { Logger } from "../../support/Logger.js";
+import { ScActivityResultTracker } from "../ScActivityResultTracker.js";
 import { ScChainExecutionContext } from "./ScChainExecutionContext.js";
 
 export class ScChainActivityService {
@@ -19,6 +20,8 @@ export class ScChainActivityService {
       return;
     }
 
+    let lastResult = ScActivityResultTracker.getLastResult(usageContext.usage);
+
     for (const targetId of targetIds) {
       const target = activity?.item?.system?.activities?.get?.(targetId) ?? null;
       if (!target) {
@@ -36,13 +39,19 @@ export class ScChainActivityService {
       }
 
       let childResults;
+      const childUsage = ScActivityResultTracker.withTrackedUsage(
+        ScChainExecutionContext.childUsage(usageContext.usage, chainContext, targetUuid),
+        target,
+        lastResult
+      );
       try {
         childResults = await target.use(
-          ScChainExecutionContext.childUsage(usageContext.usage, chainContext, targetUuid),
+          childUsage,
           usageContext.dialog ?? {},
           usageContext.message ?? {}
         );
       } catch (error) {
+        ScActivityResultTracker.cancelUsage(childUsage, "child-error");
         Logger.error("Could not execute chained activity.", error);
         ui.notifications?.error?.(Constants.format(
           "SCMOREACTIVITIES.Activities.ScChain.Error.ChildFailed",
@@ -56,11 +65,16 @@ export class ScChainActivityService {
       }
 
       if (childResults === undefined && activity?.chain?.stopOnCancel !== false) {
+        ScActivityResultTracker.cancelUsage(childUsage, "child-canceled");
         ui.notifications?.warn?.(Constants.localize(
           "SCMOREACTIVITIES.Activities.ScChain.Warning.ChildCanceled",
           "A chained activity was canceled."
         ));
         return;
+      }
+
+      if (childResults !== undefined) {
+        lastResult = await ScActivityResultTracker.resolveUsageResult(target, childUsage, childResults);
       }
     }
   }

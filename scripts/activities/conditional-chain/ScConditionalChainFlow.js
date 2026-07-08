@@ -6,6 +6,7 @@ export const FLOW_END = "#end";
 export const FLOW_CONDITION_TYPES = Object.freeze({
   ALWAYS: "always",
   ACTOR_PROPERTY: "actor-property",
+  LAST_ACTIVITY_RESULT: "last-activity-result",
   ROLL_CHECK: "roll-check",
   CHOICE: "choice"
 });
@@ -180,7 +181,10 @@ export class ScConditionalChainFlow {
     const issues = [];
     const condition = node.condition;
 
-    if (node.conditionType === FLOW_CONDITION_TYPES.ACTOR_PROPERTY) {
+    if ([
+      FLOW_CONDITION_TYPES.ACTOR_PROPERTY,
+      FLOW_CONDITION_TYPES.LAST_ACTIVITY_RESULT
+    ].includes(node.conditionType)) {
       if (!condition.path) {
         issues.push({ code: "missing-path", nodeId: nodeName });
       }

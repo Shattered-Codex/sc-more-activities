@@ -2226,8 +2226,27 @@
   min-width: 0;
 }
 
+.sc-ma-flow-condition-row .form-fields .sc-ma-flow-path-select,
+.sc-ma-flow-condition-row .form-fields input[name$=".condition.path"] {
+  flex: 3 1 0;
+  min-width: 0;
+}
+
+.sc-ma-flow-condition-row .form-fields .sc-ma-flow-value {
+  flex: 2 1 0;
+}
+
 .sc-ma-flow-operator {
-  flex: 0 0 6.5rem;
+  flex: 0 1 4.5rem;
+  min-width: 0;
+}
+
+.sc-ma-flow-custom-path {
+  margin-block-start: 0.25rem;
+}
+
+.sc-ma-flow-custom-path[hidden] {
+  display: none;
 }
 
 .sc-ma-flow-choices {
