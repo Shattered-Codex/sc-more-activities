@@ -1,4 +1,5 @@
 import { ActivityAvailability } from "../../availability/ActivityAvailability.js";
+import { ScActivityResultTracker } from "../ScActivityResultTracker.js";
 import { ACTIVITY_TYPES } from "../ActivityTypes.js";
 import { ScContestActivityData } from "./ScContestActivityData.js";
 import { ScContestActivityService } from "./ScContestActivityService.js";
@@ -32,6 +33,33 @@ export class ScContestActivity extends dnd5e.documents.activity.ActivityMixin(Sc
     }
 
     const contestResult = await ScContestActivityService.execute(this, { usage, dialog, message, results });
+    if (contestResult && !contestResult.canceled) {
+      ScActivityResultTracker.recordActivityResult(usage, {
+        kind: "contest",
+        success: contestResult?.outcome?.winner === "initiator",
+        failure: contestResult?.outcome?.winner === "defender",
+        activity: {
+          canceled: false,
+          winner: String(contestResult?.outcome?.winner ?? ""),
+          tied: contestResult?.outcome?.tied === true,
+          attempt: Number(contestResult?.attempt) || 0
+        },
+        contest: {
+          winner: String(contestResult?.outcome?.winner ?? ""),
+          tied: contestResult?.outcome?.tied === true,
+          initiator: {
+            total: Number(contestResult?.initiator?.roll?.total) || 0,
+            actorUuid: String(contestResult?.initiator?.actor?.uuid ?? ""),
+            tokenUuid: String(contestResult?.initiator?.token?.document?.uuid ?? contestResult?.initiator?.token?.uuid ?? "")
+          },
+          defender: {
+            total: Number(contestResult?.defender?.roll?.total) || 0,
+            actorUuid: String(contestResult?.defender?.actor?.uuid ?? ""),
+            tokenUuid: String(contestResult?.defender?.token?.document?.uuid ?? contestResult?.defender?.token?.uuid ?? "")
+          }
+        }
+      });
+    }
     return contestResult?.canceled ? undefined : results;
   }
 }

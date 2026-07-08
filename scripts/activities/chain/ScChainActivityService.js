@@ -1,7 +1,7 @@
 import { Constants } from "../../constants/Constants.js";
 import { Logger } from "../../support/Logger.js";
-
-const HARD_MAX_DEPTH = 20;
+import { ScActivityResultTracker } from "../ScActivityResultTracker.js";
+import { ScChainExecutionContext } from "./ScChainExecutionContext.js";
 
 export class ScChainActivityService {
   static async execute(activity, usageContext = {}) {
@@ -14,11 +14,13 @@ export class ScChainActivityService {
       return;
     }
 
-    const chainContext = ScChainActivityService.#buildChainContext(activity, usageContext);
-    if (chainContext.depth >= chainContext.maxDepth) {
+    const chainContext = ScChainExecutionContext.fromUsage(usageContext.usage, activity, activity?.chain?.maxDepth);
+    if (ScChainExecutionContext.isDepthExceeded(chainContext)) {
       ScChainActivityService.#notifyLoop("SCMOREACTIVITIES.Activities.ScChain.Warning.MaxDepth", "Chain depth limit reached.");
       return;
     }
+
+    let lastResult = ScActivityResultTracker.getLastResult(usageContext.usage);
 
     for (const targetId of targetIds) {
       const target = activity?.item?.system?.activities?.get?.(targetId) ?? null;
@@ -30,20 +32,26 @@ export class ScChainActivityService {
         continue;
       }
 
-      const targetUuid = ScChainActivityService.#activityKey(target);
-      if (chainContext.path.includes(targetUuid)) {
+      const targetUuid = ScChainExecutionContext.activityKey(target);
+      if (ScChainExecutionContext.hasVisited(chainContext, targetUuid)) {
         ScChainActivityService.#notifyLoop("SCMOREACTIVITIES.Activities.ScChain.Warning.LoopDetected", "Chain loop detected.");
         return;
       }
 
       let childResults;
+      const childUsage = ScActivityResultTracker.withTrackedUsage(
+        ScChainExecutionContext.childUsage(usageContext.usage, chainContext, targetUuid),
+        target,
+        lastResult
+      );
       try {
         childResults = await target.use(
-          ScChainActivityService.#buildChildUsage(usageContext.usage, chainContext, targetUuid),
+          childUsage,
           usageContext.dialog ?? {},
           usageContext.message ?? {}
         );
       } catch (error) {
+        ScActivityResultTracker.cancelUsage(childUsage, "child-error");
         Logger.error("Could not execute chained activity.", error);
         ui.notifications?.error?.(Constants.format(
           "SCMOREACTIVITIES.Activities.ScChain.Error.ChildFailed",
@@ -57,11 +65,16 @@ export class ScChainActivityService {
       }
 
       if (childResults === undefined && activity?.chain?.stopOnCancel !== false) {
+        ScActivityResultTracker.cancelUsage(childUsage, "child-canceled");
         ui.notifications?.warn?.(Constants.localize(
           "SCMOREACTIVITIES.Activities.ScChain.Warning.ChildCanceled",
           "A chained activity was canceled."
         ));
         return;
+      }
+
+      if (childResults !== undefined) {
+        lastResult = await ScActivityResultTracker.resolveUsageResult(target, childUsage, childResults);
       }
     }
   }
@@ -73,34 +86,6 @@ export class ScChainActivityService {
       .filter(Boolean);
   }
 
-  static #buildChainContext(activity, usageContext) {
-    const source = usageContext.usage?.scMoreActivitiesChain ?? {};
-    const currentKey = ScChainActivityService.#activityKey(activity);
-    const maxDepth = ScChainActivityService.#clampDepth(activity?.chain?.maxDepth ?? source.maxDepth);
-    const path = Array.isArray(source.path) ? [...source.path] : [];
-    if (!path.includes(currentKey)) {
-      path.push(currentKey);
-    }
-    return {
-      root: source.root ?? currentKey,
-      depth: Number(source.depth ?? 0),
-      maxDepth,
-      path
-    };
-  }
-
-  static #buildChildUsage(usage, chainContext, targetUuid) {
-    return {
-      ...(usage ?? {}),
-      scMoreActivitiesChain: {
-        root: chainContext.root,
-        depth: chainContext.depth + 1,
-        maxDepth: chainContext.maxDepth,
-        path: [...chainContext.path, targetUuid]
-      }
-    };
-  }
-
   static #handleMissingTarget(activity, targetId) {
     ui.notifications?.warn?.(Constants.format(
       "SCMOREACTIVITIES.Activities.ScChain.Warning.MissingTarget",
@@ -108,18 +93,6 @@ export class ScChainActivityService {
       `Chained activity not found: ${targetId}`
     ));
     return activity?.chain?.continueOnFailure === true;
-  }
-
-  static #activityKey(activity) {
-    return activity?.uuid ?? `${activity?.item?.uuid ?? "Item"}.Activity.${activity?.id ?? activity?._id ?? "unknown"}`;
-  }
-
-  static #clampDepth(value) {
-    const depth = Number(value);
-    if (!Number.isFinite(depth)) {
-      return 5;
-    }
-    return Math.min(HARD_MAX_DEPTH, Math.max(1, Math.trunc(depth)));
   }
 
   static #notifyLoop(key, fallback) {

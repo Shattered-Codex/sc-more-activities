@@ -51,6 +51,7 @@ The goal is to preserve the value of richer activity workflows while shaping the
 - `sc-macro`: run a world macro or GM-controlled inline code
 - `sc-hook`: fire a hook or module callback for developer workflows
 - `sc-chain`: trigger other activities from the same item in sequence
+- `sc-conditional-chain`: route between activities from the same item with conditions, rolls, and manual choices
 - `sc-contest`: resolve a contested roll workflow between participants
 - `sc-grant`: grant item-related rewards or support item flows
 - `sc-advancement`: drive item-linked advancement or progression flows
@@ -60,10 +61,11 @@ The goal is to preserve the value of richer activity workflows while shaping the
 
 ## Asset Credits
 
-Some bundled activity icons are sourced from [game-icons.net](https://game-icons.net/).
+Some bundled activity icons are sourced from [game-icons.net](https://game-icons.net/),
+currently using artwork by Delapouite and Lorc.
 Game-icons.net states that its icons are provided under the
 [Creative Commons Attribution 3.0 license](https://creativecommons.org/licenses/by/3.0/),
-which requires attribution to the original author(s). See the
+which requires attribution to the original authors. See the
 [Game-icons.net About page](https://game-icons.net/about.html) for license and author details.
 
 ## Main Features
@@ -121,6 +123,203 @@ It lets you:
 - filter entries by status, category, and availability
 - enable or disable registered types for the world
 - open migration tools from the same workflow
+
+## SC Conditional Chain Guide
+
+The `sc-conditional-chain` activity routes between activities of the same item using **steps**. Each step
+can optionally run one of the item's activities, then decides where the flow goes next.
+
+### Anatomy Of A Step
+
+- **Activity** — the item activity this step runs, or *Decision only (no activity)* to route without
+  running anything. Decision-only steps still evaluate conditions against the most recent result.
+- **Decide the next step by** — the condition type (see below).
+- **Routes** — where to go for each outcome (*When true / When false*, *On success / On failure*, or
+  *Next step*). Any route can point to another step or *End flow*.
+
+The **First step** field at the top selects where the flow begins.
+
+### Condition Types
+
+| Type | What it does | Routes |
+| --- | --- | --- |
+| Always continue | No condition; always follows *Next step* | Next step |
+| Actor property | Compares an actor data path (e.g. `system.attributes.hp.value`) against a value | When true / false |
+| Last activity result | Compares the most recent child activity result against a value | When true / false |
+| Roll | Rolls an ability check, saving throw, skill check, or custom formula against a DC | On success / failure |
+| Manual choice | Opens a dialog and lets the user pick the route | One per option |
+
+Canceling a roll or a manual choice always ends the flow.
+
+### Branching On The Last Activity Result
+
+When **Decide the next step by** is **Last activity result**, the condition row has three fields:
+
+1. **Result** — a dropdown of results grouped by category (General, Rolls, Individual dice, Attack, Grant,
+   Contest). Options show friendly labels; after you pick one, the hint below the row shows the underlying
+   technical path and what it means (for example, picking *Roll total (all rolls)* shows `roll.sum`).
+   Choosing an activity for the step narrows the list to results that activity can produce.
+2. **Operator** — `=`, `≠`, `>`, `≥`, `<`, `≤`, or `includes`.
+3. **Value** — a number, `true`/`false`, text, or a deterministic formula such as `@abilities.con.mod`
+   (including `@scLast.*` references, see below).
+
+Pick **Custom path…** at the bottom of the dropdown to type any path on the raw result object manually
+(for example `roll.totals.1` for the second roll, or `roll.dice.values.2` for the third die).
+
+"Last activity result" always means the result of the **most recent step that actually ran an activity**.
+Decision-only steps inherit it unchanged, so several decision steps in a row can test different parts of
+the same result.
+
+Which activities produce detailed results:
+
+- `attack` — attack outcome + attack roll details (**the attack roll only**, not the card damage)
+- `damage`, `heal`, `save` — roll totals and individual dice (the flow waits for the roll to happen)
+- `sc-grant` — gating check outcome and created/updated document counts
+- `sc-contest` — winner, tie, and per-participant totals
+- other types — general information only (source activity, chat message, effect/template counts)
+
+### Result Path Reference
+
+**General** — available for every activity:
+
+| Label | Path | Meaning |
+| --- | --- | --- |
+| Result kind | `kind` | What the last activity produced: `"attack"`, `"damage"`, `"healing"`, `"grant"`, `"contest"`… |
+| Was a success / failure | `success` / `failure` | `true` when the activity succeeded / failed (hit, check passed…) |
+| Main total | `total` | Total of the activity's main roll |
+| Was a critical / fumble | `critical` / `fumble` | `true` on a critical / fumble (natural 1) |
+| Target number (DC/AC) | `target` | The DC or armor class the main roll was compared against |
+| Was canceled | `canceled` | `true` when the activity was canceled before finishing |
+| Source activity id / type / name | `sourceActivity.id` / `.type` / `.name` | Identity of the activity that produced the result |
+| Source item id / UUID | `sourceActivity.itemId` / `.itemUuid` | The item that owns the source activity |
+| Source actor UUID | `sourceActivity.actorUuid` | The actor that used the source activity |
+| Chat message id | `use.messageId` | Chat message created by the activity (empty when none) |
+| Updates / effects / templates | `use.updateCount` / `.effectCount` / `.templateCount` | How many updates, active effects, and measured templates the use produced |
+
+**Rolls** — attack, damage, heal, and save activities:
+
+| Label | Path | Meaning |
+| --- | --- | --- |
+| Roll total (first roll) | `roll.total` | Total of the first roll, modifiers included (first damage part) |
+| Roll total (all rolls) | `roll.sum` | Sum of every roll — e.g. total damage across all damage parts |
+| Total of roll #1 | `roll.totals.0` | Individual roll totals (`roll.totals.1`, `.2`… via custom path) |
+| Number of rolls | `roll.count` | How many separate rolls were made |
+| Roll succeeded / failed | `roll.success` / `roll.failure` | `true` when the roll met / missed its target number |
+| Roll was a critical / fumble | `roll.critical` / `roll.fumble` | `true` on a critical / fumble |
+| Roll target number | `roll.target` | The DC or AC the roll was compared against |
+| Roll formula | `roll.formula` | The formula rolled (e.g. `1d20 + 5`) — compare with `=` or `includes` |
+| Ability / skill / tool used | `roll.ability` / `roll.skill` / `roll.tool` | Keys such as `str`, `ath`… |
+
+**Individual dice** — attack, damage, heal, and save activities. Discarded dice (advantage, rerolls) are
+ignored:
+
+| Label | Path | Meaning |
+| --- | --- | --- |
+| Dice total (no modifiers) | `roll.dice.total` | Sum of the dice only — the `2d6` part of `2d6 + 4` |
+| Number of dice | `roll.dice.count` | How many dice were kept across all rolls |
+| First die value | `roll.dice.values.0` | Face rolled on the first kept die (`values.1`, `.2`… via custom path) |
+| Highest / lowest die | `roll.dice.max` / `roll.dice.min` | Highest / lowest face among the kept dice |
+
+**Attack** — attack activities:
+
+| Label | Path | Meaning |
+| --- | --- | --- |
+| Attack hit / missed | `attack.hit` / `attack.miss` | `true` when the attack hit / missed (single target or critical) |
+| Attack roll total | `attack.total` | Total of the attack roll, modifiers included |
+| Critical hit / attack fumble | `attack.critical` / `attack.fumble` | `true` on a natural critical / fumble |
+| Target armor class | `attack.target` | AC the attack was compared against (single target only) |
+
+**Grant** — `sc-grant` activities:
+
+| Label | Path | Meaning |
+| --- | --- | --- |
+| Grant check passed | `activity.checkPassed` | `true` when the grant's gating check succeeded |
+| Grant check DC / total | `activity.check.dc` / `activity.check.total` | DC and total of the gating check |
+| Documents created / updated | `activity.createdCount` / `activity.updatedCount` | How many documents the grant created / updated |
+| Target actor UUID | `activity.actorUuid` | The actor that received the grant |
+| Activity canceled / cancel reason | `activity.canceled` / `activity.reason` | Whether and why the activity was canceled |
+
+**Contest** — `sc-contest` activities:
+
+| Label | Path | Meaning |
+| --- | --- | --- |
+| Contest winner | `activity.winner` / `contest.winner` | `"initiator"`, `"defender"`, or empty on a tie |
+| Contest tied | `activity.tied` / `contest.tied` | `true` when the contest ended in a tie |
+| Contest attempt number | `activity.attempt` | How many attempts were made (rerolls on ties) |
+| Initiator / defender roll total | `contest.initiator.total` / `contest.defender.total` | Total rolled by each side |
+| Initiator / defender actor UUID | `contest.initiator.actorUuid` / `contest.defender.actorUuid` | The actor on each side |
+| Initiator / defender token UUID | `contest.initiator.tokenUuid` / `contest.defender.tokenUuid` | The token on each side |
+
+### Example: Branch On Whether An Attack Hits, Then On Damage Dealt
+
+Item setup: an `attack` activity, a `damage` activity, and an `sc-conditional-chain` activity.
+
+1. **Step 1** — Activity: the attack. Decide by **Last activity result**, condition `Attack hit` `=` `true`.
+   *When true* → Step 2. *When false* → End flow.
+2. **Step 2** — Activity: the damage. Decide by **Last activity result**, condition
+   `Roll total (all rolls)` `≥` `10`. Route each outcome to further steps (extra effects, sounds, macros…).
+
+Each step evaluates the result of **its own** child activity, so the damage comparison in Step 2 reads the
+damage activity's rolls, not the attack roll.
+
+### Reusing The Previous Result In Formulas (`@scLast`)
+
+Activities started by a chain step can reference the **previous step's result** inside their own roll
+formulas through the `@scLast` prefix. Every path from the result dropdown is available — for example
+`@scLast.roll.sum`, `@scLast.total`, `@scLast.attack.total`, `@scLast.roll.dice.max`.
+
+Example — *heal yourself for the damage you just dealt* (vampiric strike):
+
+1. **Step 1** — Activity: the attack. Condition `Attack hit` `=` `true`. *When true* → Step 2.
+2. **Step 2** — Activity: the damage. Condition: Always continue → Step 3.
+3. **Step 3** — Activity: a `heal` activity whose healing formula is `@scLast.roll.sum`.
+   It heals exactly the total rolled by the damage activity in Step 2.
+
+`@scLast` also works in the chain's own formula fields: the condition **value** field, the roll check
+**DC** field, and **custom roll formulas** (e.g. DC `10 + @scLast.roll.dice.count`).
+
+Notes:
+
+- `@scLast` reflects the result of the **most recent step that ran an activity** — decision-only steps do
+  not change it.
+- For formula use, booleans become `1`/`0` and missing values become `0`, so `@scLast.success` can be used
+  directly in arithmetic.
+- A bare `@scLast` (no path) resolves to the main roll value of the previous result (`roll.sum`, falling
+  back to `roll.total`, then `total`) — but prefer the explicit path for clarity.
+- The first step of a flow has no previous result, so `@scLast` is not available there.
+- It also works with plain `sc-chain` steps, and applies to attack, damage, and heal rolls of the child
+  activity.
+
+`@scLast` is a typed formula reference — it does not appear as a dropdown option. To find the right path,
+pick the result in the **Last activity result** dropdown of any step: the hint shows the technical path
+(e.g. `roll.sum`), and that is what you prefix with `@scLast.`.
+
+### Rules, Policies, And Limitations
+
+Execution rules:
+
+- Each step runs **at most once** per flow execution; a route that revisits a step stops the flow with a
+  loop warning. Pointing two *different* steps at the same activity is allowed (e.g. attacking again).
+- Steps that run rolling activities (`damage`, `heal`, `attack`…) **wait for the roll** before routing —
+  including rolls made from the chat card button. Roll the damage/healing from the flow's prompt, not a
+  second time from the card, or you will apply it twice.
+- Invalid configuration (missing routes, unknown steps…) blocks execution entirely; the sheet lists the
+  issues to fix at the top of the Effect tab.
+
+Flow policies (collapsible tray at the bottom of the sheet):
+
+- **Depth limit** — maximum nested chain depth before execution is blocked (shared with `sc-chain`).
+- **Stop when a child activity is canceled** — end the flow when a step's activity is closed without a
+  result. When off, the flow keeps routing (the last result is not updated).
+- **Continue after child errors** — keep routing when a step's activity is missing or throws.
+
+Limitations:
+
+- An `attack` activity only reports its **attack roll**. Damage rolled later from the attack's chat card
+  happens after the flow has already routed, so it is never captured — put the damage in a separate
+  `damage` activity step and read `roll.sum` there.
+- Results only flow between steps of the same execution. Once the flow ends, the result is gone — a later
+  use starts fresh.
 
 ## Migration From `more-activities`
 

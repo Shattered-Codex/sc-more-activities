@@ -49,7 +49,16 @@ export class ScGrantActivityService {
             { actor: recipientActor.name ?? "", dc: checkResult.dc },
             `${recipientActor.name ?? "The actor"} failed the check (DC ${checkResult.dc}). No items granted.`
           ));
-          return { canceled: false, checkPassed: false, updated: [], created: [] };
+          return {
+            canceled: false,
+            checkPassed: false,
+            check: {
+              dc: checkResult.dc,
+              total: Number(checkResult.roll?.total) || 0
+            },
+            updated: [],
+            created: []
+          };
         }
         checkInfo = {
           dc: checkResult.dc,
@@ -102,6 +111,7 @@ export class ScGrantActivityService {
       return {
         canceled: false,
         checkPassed: true,
+        check: checkInfo,
         actor: recipientActor,
         updated,
         created
