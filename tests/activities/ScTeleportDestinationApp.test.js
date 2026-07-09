@@ -44,8 +44,12 @@ const { ScTeleportDestinationApp } = await import("../../scripts/activities/tele
 function makeCanvas() {
   const stageHandlers = new Map();
   const viewListeners = new Map();
+  const stageChildren = [];
 
   globalThis.canvas = {
+    dimensions: {
+      distancePixels: 10
+    },
     stage: {
       on(eventName, handler) {
         stageHandlers.set(eventName, handler);
@@ -54,6 +58,18 @@ function makeCanvas() {
         if (stageHandlers.get(eventName) === handler) {
           stageHandlers.delete(eventName);
         }
+      },
+      addChild(child) {
+        stageChildren.push(child);
+        child.parent = this;
+        return child;
+      },
+      removeChild(child) {
+        const index = stageChildren.indexOf(child);
+        if (index >= 0) {
+          stageChildren.splice(index, 1);
+        }
+        child.parent = null;
       }
     },
     app: {
@@ -73,7 +89,7 @@ function makeCanvas() {
     }
   };
 
-  return { stageHandlers, viewListeners };
+  return { stageHandlers, viewListeners, stageChildren };
 }
 
 function patchCanvasService(t, calls) {
@@ -168,4 +184,68 @@ test("places teleport destination from captured canvas pointerup without waiting
   assert.equal(stageHandlers.has("mouseup"), false);
   assert.equal(viewListeners.has("pointerdown"), false);
   assert.equal(viewListeners.has("pointerup"), false);
+});
+
+test("draws a non-interactive teleport range ring and removes it on close", async(t) => {
+  class Graphics {
+    constructor() {
+      this.eventMode = null;
+      this.interactive = true;
+      this.commands = [];
+      this.destroyed = false;
+      this.parent = null;
+    }
+
+    lineStyle(width, color, alpha) {
+      this.commands.push(["lineStyle", width, color, alpha]);
+      return this;
+    }
+
+    drawCircle(x, y, radius) {
+      this.commands.push(["drawCircle", x, y, radius]);
+      return this;
+    }
+
+    endFill() {
+      this.commands.push(["endFill"]);
+      return this;
+    }
+
+    destroy() {
+      this.destroyed = true;
+    }
+  }
+
+  globalThis.PIXI = { Graphics };
+  const calls = [];
+  patchCanvasService(t, calls);
+  const { stageChildren } = makeCanvas();
+  const activity = {
+    teleport: {
+      snapToGrid: false,
+      teleportDistance: 30
+    }
+  };
+  const app = new ScTeleportDestinationApp(activity, [{ id: "target-token" }]);
+
+  t.after(() => {
+    delete globalThis.PIXI;
+  });
+
+  await app._onRender({}, {});
+
+  assert.equal(stageChildren.length, 1);
+  const [ring] = stageChildren;
+  assert.equal(ring.eventMode, "none");
+  assert.equal(ring.interactive, false);
+  assert.deepEqual(ring.commands, [
+    ["lineStyle", 3, 0x24b86a, 0.95],
+    ["drawCircle", 0, 0, 300],
+    ["endFill"]
+  ]);
+
+  await app.close();
+
+  assert.equal(stageChildren.length, 0);
+  assert.equal(ring.destroyed, true);
 });

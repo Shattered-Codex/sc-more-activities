@@ -36,6 +36,7 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     this.ignoreNextMouseUp = false;
     this.isResolvingDestination = false;
     this.previewTemplate = null;
+    this.previewGraphics = null;
   }
 
   async _prepareContext() {
@@ -57,6 +58,7 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
   async close(options = {}) {
     await super.close(options);
     this.#stopDestinationSelection();
+    this.#destroyPreviewGraphics();
     await ScCanvasActivityService.removePreviewTemplate(this.previewTemplate);
     this.previewTemplate = null;
   }
@@ -79,15 +81,7 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     const originCenter = ScCanvasActivityService.getTokenCenter(origin);
     const config = this.#config();
     if (config.teleportDistance > 0) {
-      const previewColors = ModuleSettings.getTeleportRangeColors();
-      this.previewTemplate = await ScCanvasActivityService.createPreviewTemplate({
-        type: "circle",
-        x: originCenter.x,
-        y: originCenter.y,
-        distance: config.teleportDistance,
-        fillColor: previewColors.fillColor,
-        borderColor: previewColors.borderColor
-      });
+      this.#drawRangePreview(originCenter, config.teleportDistance);
     }
 
     this.canvasClickHandler = this.#onCanvasClick.bind(this);
@@ -117,6 +111,39 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
 
     this.pendingPointerEvent = null;
     this.ignoreNextMouseUp = false;
+  }
+
+  #drawRangePreview(originCenter, distance) {
+    if (!globalThis.PIXI?.Graphics || this.previewGraphics || !originCenter) {
+      return;
+    }
+
+    const distancePixels = Number(canvas?.dimensions?.distancePixels ?? 0);
+    const radius = Number(distance) * distancePixels;
+    if (!Number.isFinite(radius) || radius <= 0) {
+      return;
+    }
+
+    const previewColors = ModuleSettings.getTeleportRangeColors();
+    const borderColor = Number.parseInt(String(previewColors.borderColor ?? "#24b86a").slice(1), 16);
+
+    this.previewGraphics = new PIXI.Graphics();
+    this.previewGraphics.eventMode = "none";
+    this.previewGraphics.interactive = false;
+    this.previewGraphics.lineStyle(3, borderColor, 0.95);
+    this.previewGraphics.drawCircle(originCenter.x, originCenter.y, radius);
+    this.previewGraphics.endFill();
+    canvas?.stage?.addChild?.(this.previewGraphics);
+  }
+
+  #destroyPreviewGraphics() {
+    if (!this.previewGraphics) {
+      return;
+    }
+
+    this.previewGraphics.parent?.removeChild?.(this.previewGraphics);
+    this.previewGraphics.destroy();
+    this.previewGraphics = null;
   }
 
   #onCanvasPointerDown(event) {
