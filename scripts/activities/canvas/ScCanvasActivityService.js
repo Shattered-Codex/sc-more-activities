@@ -46,10 +46,11 @@ export class ScCanvasActivityService {
     }
   }
 
-  static async executeMovement(activity, { tokenIds = null, originTokenId = null } = {}) {
+  static async executeMovement(activity, { tokenIds = null, originTokenId = null, selfDirectionPoint = null } = {}) {
     try {
       const request = ScCanvasActivityService.#buildMovementRequest(activity, {
         originTokenId,
+        selfDirectionPoint,
         tokenIds,
         useExplicitTokenIds: Array.isArray(tokenIds)
       });
@@ -65,9 +66,13 @@ export class ScCanvasActivityService {
     }
   }
 
-  static getMovementPreviewData(activity, { tokenIds = null, originTokenId = null, useExplicitTokenIds = false } = {}) {
+  static getMovementPreviewData(
+    activity,
+    { tokenIds = null, originTokenId = null, selfDirectionPoint = null, useExplicitTokenIds = false } = {}
+  ) {
     return ScCanvasActivityService.#movementOperationData(activity, {
       originTokenId,
+      selfDirectionPoint,
       tokenIds,
       useExplicitTokenIds,
       requireTargets: false
@@ -336,9 +341,13 @@ export class ScCanvasActivityService {
     });
   }
 
-  static #buildMovementRequest(activity, { tokenIds = null, originTokenId = null, useExplicitTokenIds = false } = {}) {
+  static #buildMovementRequest(
+    activity,
+    { tokenIds = null, originTokenId = null, selfDirectionPoint = null, useExplicitTokenIds = false } = {}
+  ) {
     const operation = ScCanvasActivityService.#movementOperationData(activity, {
       originTokenId,
+      selfDirectionPoint,
       tokenIds,
       useExplicitTokenIds,
       requireTargets: true
@@ -353,6 +362,7 @@ export class ScCanvasActivityService {
 
     return ScCanvasActivityService.#request("movement", activity, operation.scene, {
       originTokenId: operation.origin.id,
+      selfDirectionPoint: operation.selfDirectionPoint,
       skipped: operation.skipped,
       tokenIds: operation.targets.map((entry) => entry.token.id),
       updates: operation.updates
@@ -362,6 +372,7 @@ export class ScCanvasActivityService {
   static #movementOperationData(activity, {
     tokenIds = null,
     originTokenId = null,
+    selfDirectionPoint = null,
     useExplicitTokenIds = false,
     requireTargets = true
   } = {}) {
@@ -405,6 +416,11 @@ export class ScCanvasActivityService {
     }
 
     const originCenter = ScCanvasActivityService.#tokenCenter(origin, scene);
+    const selectedSelfDirectionPoint = ScCanvasActivityService.#validPoint(selfDirectionPoint);
+    const selectedSelfDirection = ScCanvasActivityService.#directionBetweenPoints(
+      originCenter,
+      selectedSelfDirectionPoint
+    );
     const movementPixels = ScCanvasActivityService.#distanceToPixels(normalizedConfig.distance, scene);
     const direction = normalizedConfig.type === MOVEMENT_TYPES.PULL ? -1 : 1;
     const previewTargets = [];
@@ -423,15 +439,29 @@ export class ScCanvasActivityService {
         let dx = currentCenter.x - originCenter.x;
         let dy = currentCenter.y - originCenter.y;
         let length = Math.hypot(dx, dy);
+        let movementDirection = direction;
         if (!length) {
-          dx = 1;
-          dy = 0;
+          if (token.id !== origin.id || !selectedSelfDirection) {
+            previewTargets.push({
+              token,
+              distance,
+              inRange,
+              currentCenter,
+              destinationCenter,
+              destinationPoint
+            });
+            continue;
+          }
+
+          dx = selectedSelfDirection.x;
+          dy = selectedSelfDirection.y;
           length = 1;
+          movementDirection = 1;
         }
 
         const projectedCenter = {
-          x: currentCenter.x + ((dx / length) * movementPixels * direction),
-          y: currentCenter.y + ((dy / length) * movementPixels * direction)
+          x: currentCenter.x + ((dx / length) * movementPixels * movementDirection),
+          y: currentCenter.y + ((dy / length) * movementPixels * movementDirection)
         };
         destinationPoint = ScCanvasActivityService.#topLeftForCenter(projectedCenter, token, normalizedConfig.snapToGrid, scene);
         destinationCenter = ScCanvasActivityService.#tokenCenter({
@@ -463,6 +493,7 @@ export class ScCanvasActivityService {
       scene,
       origin,
       config: normalizedConfig,
+      selfDirectionPoint: selectedSelfDirectionPoint,
       skipped,
       targets: previewTargets,
       updates
@@ -822,6 +853,10 @@ export class ScCanvasActivityService {
     }
 
     const originCenter = ScCanvasActivityService.#tokenCenter(origin, scene);
+    const selectedSelfDirection = ScCanvasActivityService.#directionBetweenPoints(
+      originCenter,
+      ScCanvasActivityService.#validPoint(payload.selfDirectionPoint)
+    );
     const movementPixels = ScCanvasActivityService.#distanceToPixels(config.distance ?? 5, scene);
     const movementType = config.type === MOVEMENT_TYPES.PULL ? MOVEMENT_TYPES.PULL : MOVEMENT_TYPES.PUSH;
     const maxRange = Number(config.maxRange ?? 0);
@@ -839,13 +874,18 @@ export class ScCanvasActivityService {
       let dx = center.x - originCenter.x;
       let dy = center.y - originCenter.y;
       let length = Math.hypot(dx, dy);
+      let direction = movementType === MOVEMENT_TYPES.PULL ? -1 : 1;
       if (!length) {
-        dx = 1;
-        dy = 0;
+        if (token.id !== origin.id || !selectedSelfDirection) {
+          continue;
+        }
+
+        dx = selectedSelfDirection.x;
+        dy = selectedSelfDirection.y;
         length = 1;
+        direction = 1;
       }
 
-      const direction = movementType === MOVEMENT_TYPES.PULL ? -1 : 1;
       const destination = {
         x: center.x + ((dx / length) * movementPixels * direction),
         y: center.y + ((dy / length) * movementPixels * direction)
@@ -1146,6 +1186,19 @@ export class ScCanvasActivityService {
       y: Number(point?.y)
     };
     return Number.isFinite(validPoint.x) && Number.isFinite(validPoint.y) ? validPoint : null;
+  }
+
+  static #directionBetweenPoints(origin, point) {
+    const originPoint = ScCanvasActivityService.#validPoint(origin);
+    const targetPoint = ScCanvasActivityService.#validPoint(point);
+    if (!originPoint || !targetPoint) {
+      return null;
+    }
+
+    const x = targetPoint.x - originPoint.x;
+    const y = targetPoint.y - originPoint.y;
+    const length = Math.hypot(x, y);
+    return length > 0 ? { x: x / length, y: y / length } : null;
   }
 
   static #validSegments(segments) {

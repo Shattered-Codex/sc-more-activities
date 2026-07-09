@@ -35,6 +35,10 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
     this.previewGraphics = null;
     this.isSubmitting = false;
     this.previewError = null;
+    this.selfDirectionPoint = null;
+    this.isChoosingSelfDirection = false;
+    this.canvasPointerDownHandler = null;
+    this.canvasPointerUpHandler = null;
     this.#prepopulateTargets();
   }
 
@@ -52,11 +56,16 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
         targetCount: 0,
         eligibleCount: 0,
         targets: [],
-        tokenGroups: { selfTokens: [], otherTokens: [] }
+        tokenGroups: { selfTokens: [], otherTokens: [] },
+        requiresSelfDirection: false,
+        hasSelfDirection: false,
+        isChoosingSelfDirection: false,
+        canExecute: false
       };
     }
 
     const maxRange = preview.config.maxRange;
+    const requiresSelfDirection = this.#requiresSelfDirection(preview);
     return {
       isSubmitting: this.isSubmitting,
       originName: preview.origin?.name ?? preview.origin?.document?.name ?? "",
@@ -79,7 +88,11 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
           ? Constants.localize("SCMOREACTIVITIES.Activities.ScMovement.App.InRange", "In range")
           : Constants.localize("SCMOREACTIVITIES.Activities.ScMovement.App.OutOfRange", "Out of range")
       })),
-      tokenGroups: this.#availableTokens(preview)
+      tokenGroups: this.#availableTokens(preview),
+      requiresSelfDirection,
+      hasSelfDirection: Boolean(this.selfDirectionPoint),
+      isChoosingSelfDirection: this.isChoosingSelfDirection,
+      canExecute: !this.isSubmitting && (!requiresSelfDirection || Boolean(this.selfDirectionPoint))
     };
   }
 
@@ -102,6 +115,9 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
     });
 
     this.element.querySelector(".sc-ma-movement-sync-targets")?.addEventListener("click", () => this.#useCurrentTargets());
+    this.element.querySelector(".sc-ma-movement-choose-self-direction")?.addEventListener("click", () => {
+      this.#toggleSelfDirectionSelection();
+    });
     this.element.querySelector(".sc-ma-movement-confirm")?.addEventListener("click", () => this.#confirm());
     this.element.querySelector(".sc-ma-movement-cancel")?.addEventListener("click", () => this.close());
     this.element.querySelectorAll(".sc-ma-target-delete").forEach((button) => {
@@ -109,6 +125,7 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
         const index = Number(event.currentTarget.dataset.index);
         if (Number.isInteger(index)) {
           this.selectedTargetIds.splice(index, 1);
+          this.#syncSelfDirectionState();
           this.render();
         }
       });
@@ -119,6 +136,7 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
   }
 
   async close(options = {}) {
+    this.#stopSelfDirectionSelection();
     this.#destroyPreviewGraphics();
     await super.close(options);
     await ScCanvasActivityService.removePreviewTemplate(this.previewTemplate);
@@ -143,6 +161,7 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
       this.previewError = null;
       return ScCanvasActivityService.getMovementPreviewData(this.activity, {
         originTokenId: this.originTokenId,
+        selfDirectionPoint: this.selfDirectionPoint,
         tokenIds: this.selectedTargetIds,
         useExplicitTokenIds: true
       });
@@ -230,6 +249,7 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
     }
 
     this.selectedTargetIds = selected;
+    this.#syncSelfDirectionState();
     this.render();
   }
 
@@ -336,6 +356,101 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
     return Math.max(Math.round(gridSize * 0.08), 6);
   }
 
+  #requiresSelfDirection(preview = null) {
+    const data = preview ?? this.#previewData();
+    const originId = data?.origin?.id ?? "";
+    return Boolean(originId && data?.targets?.some((entry) => entry?.token?.id === originId));
+  }
+
+  #syncSelfDirectionState() {
+    if (this.#requiresSelfDirection()) {
+      return;
+    }
+
+    this.selfDirectionPoint = null;
+    this.#stopSelfDirectionSelection();
+  }
+
+  #toggleSelfDirectionSelection() {
+    if (this.isChoosingSelfDirection) {
+      this.#stopSelfDirectionSelection();
+      this.render();
+      return;
+    }
+
+    this.#startSelfDirectionSelection();
+  }
+
+  #startSelfDirectionSelection() {
+    const preview = this.#previewData();
+    if (!this.#requiresSelfDirection(preview)) {
+      return;
+    }
+
+    if (this.canvasPointerUpHandler) {
+      return;
+    }
+
+    this.canvasPointerDownHandler = this.#onCanvasPointerDown.bind(this);
+    this.canvasPointerUpHandler = this.#onCanvasPointerUp.bind(this);
+    canvas?.app?.view?.addEventListener?.("pointerdown", this.canvasPointerDownHandler, true);
+    canvas?.app?.view?.addEventListener?.("pointerup", this.canvasPointerUpHandler, true);
+    this.isChoosingSelfDirection = true;
+    this.render();
+  }
+
+  #stopSelfDirectionSelection() {
+    if (this.canvasPointerDownHandler) {
+      canvas?.app?.view?.removeEventListener?.("pointerdown", this.canvasPointerDownHandler, true);
+      this.canvasPointerDownHandler = null;
+    }
+
+    if (this.canvasPointerUpHandler) {
+      canvas?.app?.view?.removeEventListener?.("pointerup", this.canvasPointerUpHandler, true);
+      this.canvasPointerUpHandler = null;
+    }
+
+    this.isChoosingSelfDirection = false;
+  }
+
+  #onCanvasPointerDown(event) {
+    if (Number(event?.button ?? 0) !== 0) {
+      return;
+    }
+
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+  }
+
+  #onCanvasPointerUp(event) {
+    if (Number(event?.button ?? 0) !== 0) {
+      return;
+    }
+
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+
+    const point = this.#eventCanvasPosition(event);
+    const origin = this.#originTokenObject();
+    const originCenter = origin ? ScCanvasActivityService.getTokenCenter(origin) : null;
+    if (!point || !originCenter || Math.hypot(point.x - originCenter.x, point.y - originCenter.y) <= 0) {
+      return;
+    }
+
+    this.selfDirectionPoint = point;
+    this.#stopSelfDirectionSelection();
+    this.render();
+  }
+
+  #eventCanvasPosition(event) {
+    const clientPosition = canvas?.canvasCoordinatesFromClient?.(event);
+    if (Number.isFinite(clientPosition?.x) && Number.isFinite(clientPosition?.y)) {
+      return clientPosition;
+    }
+
+    return null;
+  }
+
   async #confirm() {
     if (this.isSubmitting) {
       return;
@@ -349,11 +464,20 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
       return;
     }
 
+    if (this.#requiresSelfDirection() && !this.selfDirectionPoint) {
+      ui.notifications?.warn?.(Constants.localize(
+        "SCMOREACTIVITIES.Activities.ScMovement.Warning.MissingSelfDirection",
+        "Choose a movement direction for the self target."
+      ));
+      return;
+    }
+
     this.isSubmitting = true;
     this.render();
 
     const result = await ScCanvasActivityService.executeMovement(this.activity, {
       originTokenId: this.originTokenId,
+      selfDirectionPoint: this.selfDirectionPoint,
       tokenIds: this.selectedTargetIds
     });
     if (result?.ok) {

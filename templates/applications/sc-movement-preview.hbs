@@ -55,12 +55,27 @@
     {{/each}}
   </div>
 
+  {{#if requiresSelfDirection}}
+    <div class="sc-ma-placement-controls">
+      <button type="button" class="sc-ma-movement-choose-self-direction {{#if isChoosingSelfDirection}}placing{{/if}}" {{#if isSubmitting}}disabled{{/if}}>
+        <i class="fas fa-location-arrow"></i>
+        {{#if isChoosingSelfDirection}}
+          {{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.ChoosingSelfDirection" }}
+        {{else if hasSelfDirection}}
+          {{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.SelfDirectionReady" }}
+        {{else}}
+          {{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.ChooseSelfDirection" }}
+        {{/if}}
+      </button>
+    </div>
+  {{/if}}
+
   <div class="sc-ma-placement-controls">
     <button type="button" class="sc-ma-movement-sync-targets" {{#if isSubmitting}}disabled{{/if}}>
       <i class="fas fa-bullseye"></i>
       {{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.UseCurrentTargets" }}
     </button>
-    <button type="button" class="sc-ma-movement-confirm" {{#if isSubmitting}}disabled{{/if}}>
+    <button type="button" class="sc-ma-movement-confirm" {{#unless canExecute}}disabled{{/unless}}>
       <i class="fas fa-play"></i>
       {{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Execute" }}
     </button>
