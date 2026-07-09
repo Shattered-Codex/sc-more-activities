@@ -31,7 +31,10 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     this.selectedTargets = selectedTargets;
     this.canvasClickHandler = null;
     this.canvasPointerDownHandler = null;
+    this.canvasPointerUpHandler = null;
     this.pendingPointerEvent = null;
+    this.ignoreNextMouseUp = false;
+    this.isResolvingDestination = false;
     this.previewTemplate = null;
   }
 
@@ -89,8 +92,10 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
 
     this.canvasClickHandler = this.#onCanvasClick.bind(this);
     this.canvasPointerDownHandler = this.#onCanvasPointerDown.bind(this);
+    this.canvasPointerUpHandler = this.#onCanvasPointerUp.bind(this);
     canvas?.stage?.on?.("mouseup", this.canvasClickHandler);
     canvas?.app?.view?.addEventListener?.("pointerdown", this.canvasPointerDownHandler, true);
+    canvas?.app?.view?.addEventListener?.("pointerup", this.canvasPointerUpHandler, true);
   }
 
   #stopDestinationSelection() {
@@ -105,8 +110,13 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
       canvas?.app?.view?.removeEventListener?.("pointerdown", this.canvasPointerDownHandler, true);
       this.canvasPointerDownHandler = null;
     }
+    if (this.canvasPointerUpHandler) {
+      canvas?.app?.view?.removeEventListener?.("pointerup", this.canvasPointerUpHandler, true);
+      this.canvasPointerUpHandler = null;
+    }
 
     this.pendingPointerEvent = null;
+    this.ignoreNextMouseUp = false;
   }
 
   #onCanvasPointerDown(event) {
@@ -114,16 +124,46 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
       return;
     }
 
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+
     this.pendingPointerEvent = event;
   }
 
+  #onCanvasPointerUp(event) {
+    if (Number(event?.button ?? 0) !== 0) {
+      return;
+    }
+
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+
+    if (this.#eventCanvasPosition(event, event)) {
+      this.ignoreNextMouseUp = true;
+      void this.#resolveDestination(event, event);
+    }
+  }
+
   async #onCanvasClick(event) {
+    if (this.ignoreNextMouseUp) {
+      this.ignoreNextMouseUp = false;
+      return;
+    }
+
+    await this.#resolveDestination(event, this.pendingPointerEvent);
+  }
+
+  async #resolveDestination(event, pointerEvent = null) {
+    if (this.isResolvingDestination) {
+      return;
+    }
+
     const origin = ScCanvasActivityService.getOriginTokenObject(this.activity);
     if (!origin) {
       return;
     }
 
-    const rawPosition = this.#eventCanvasPosition(event, this.pendingPointerEvent);
+    const rawPosition = this.#eventCanvasPosition(event, pointerEvent);
     const destination = this.#config().snapToGrid
       ? ScCanvasActivityService.snapCenterPoint(rawPosition)
       : rawPosition;
@@ -142,14 +182,19 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
       return;
     }
 
+    this.isResolvingDestination = true;
     this.#stopDestinationSelection();
-    const result = await ScCanvasActivityService.executeTeleportPlacement(this.activity, {
-      tokenIds: this.selectedTargets.map((target) => target.id),
-      destination
-    });
-    if (result?.ok) {
-      await this.close();
-      return;
+    try {
+      const result = await ScCanvasActivityService.executeTeleportPlacement(this.activity, {
+        tokenIds: this.selectedTargets.map((target) => target.id),
+        destination
+      });
+      if (result?.ok) {
+        await this.close();
+        return;
+      }
+    } finally {
+      this.isResolvingDestination = false;
     }
 
     await this.#startDestinationSelection();
