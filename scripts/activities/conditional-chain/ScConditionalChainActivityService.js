@@ -153,7 +153,7 @@ export class ScConditionalChainActivityService {
       lastResult
     );
     try {
-      const childMessage = node.suppressMessage
+      const childMessage = flow.suppressChildMessages
         ? { ...(usageContext.message ?? {}), create: false }
         : (usageContext.message ?? {});
       childResults = await target.use(

@@ -66,14 +66,6 @@
         </div>
 
         <div class="form-group">
-          <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.SuppressMessage.Label" }}</label>
-          <div class="form-fields">
-            <input type="checkbox" name="flow.nodes.{{ node.index }}.suppressMessage" {{#if node.suppressMessage}}checked{{/if}}>
-          </div>
-          <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.SuppressMessage.Hint" }}</p>
-        </div>
-
-        <div class="form-group">
           <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.ConditionType.Label" }}</label>
           <div class="form-fields">
             <select name="flow.nodes.{{ node.index }}.conditionType">
@@ -319,6 +311,13 @@
             <input type="checkbox" name="flow.continueOnChildError" {{#if flow.continueOnChildError}}checked{{/if}}>
           </div>
           <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.ContinueOnChildError.Hint" }}</p>
+        </div>
+        <div class="form-group">
+          <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.SuppressChildMessages.Label" }}</label>
+          <div class="form-fields">
+            <input type="checkbox" name="flow.suppressChildMessages" {{#if flow.suppressChildMessages}}checked{{/if}}>
+          </div>
+          <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.SuppressChildMessages.Hint" }}</p>
         </div>
       </fieldset>
     </div>

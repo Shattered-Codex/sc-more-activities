@@ -357,8 +357,8 @@ Flow policies (collapsible tray at the bottom of the sheet):
 - **Stop when a child activity is canceled** — end the flow when a step's activity is closed without a
   result. When off, the flow keeps routing (the last result is not updated).
 - **Continue after child errors** — keep routing when a step's activity is missing or throws.
-- Each step can **suppress its activity card** while preserving roll messages and the conditional chain's
-  own card. The plain `sc-chain` provides one global option for all of its child activities.
+- **Suppress child activity cards** — skip usage cards for activities executed by the flow while preserving
+  roll messages and the conditional chain's own card. The same option is available on `sc-chain`.
 
 Limitations:
 

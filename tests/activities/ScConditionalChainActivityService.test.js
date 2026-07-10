@@ -331,7 +331,7 @@ test("uses the first matching value path and falls back when none match", async(
   assert.equal(ScConditionalChainFlow.resolveNextNode(node, { kind: "value-fallback" }), "fallback");
 });
 
-test("suppresses a child usage card when the step option is enabled", async() => {
+test("suppresses child usage cards when the flow policy is enabled", async() => {
   let receivedMessage;
   const child = makeChildActivity({
     id: "child",
@@ -343,10 +343,10 @@ test("suppresses a child usage card when the step option is enabled", async() =>
   const activities = new Map([["child", child]]);
   const flow = ScConditionalChainFlow.normalizeFlow({
     startNode: "child-step",
+    suppressChildMessages: true,
     nodes: [{
       nodeId: "child-step",
       activityId: "child",
-      suppressMessage: true,
       conditionType: FLOW_CONDITION_TYPES.ALWAYS,
       routes: { next: FLOW_END }
     }]

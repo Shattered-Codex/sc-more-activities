@@ -40,7 +40,8 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
       startNode: flow.startNode,
       maxDepth: flow.maxDepth,
       stopOnCancel: flow.stopOnCancel,
-      continueOnChildError: flow.continueOnChildError
+      continueOnChildError: flow.continueOnChildError,
+      suppressChildMessages: flow.suppressChildMessages
     };
     context.policiesExpanded = this.#policiesExpanded;
     context.issues = issues.map((issue) => ScConditionalChainActivityService.describeIssue(issue));

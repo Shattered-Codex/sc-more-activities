@@ -27,6 +27,7 @@ export class ScConditionalChainFlow {
       maxDepth: ScChainExecutionContext.clampDepth(raw?.maxDepth),
       stopOnCancel: raw?.stopOnCancel !== false,
       continueOnChildError: raw?.continueOnChildError === true,
+      suppressChildMessages: raw?.suppressChildMessages === true,
       nodes: nodes.map((node) => ScConditionalChainFlow.normalizeNode(node))
     };
   }
@@ -44,7 +45,6 @@ export class ScConditionalChainFlow {
       nodeId: String(raw?.nodeId ?? "").trim(),
       label: String(raw?.label ?? "").trim(),
       activityId: String(raw?.activityId ?? "").trim(),
-      suppressMessage: raw?.suppressMessage === true,
       conditionType,
       condition: {
         path: String(raw?.condition?.path ?? "").trim(),

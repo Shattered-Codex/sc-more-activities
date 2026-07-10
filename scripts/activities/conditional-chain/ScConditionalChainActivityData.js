@@ -27,6 +27,10 @@ export class ScConditionalChainActivityData extends dnd5e.dataModels.activity.Ba
           required: false,
           initial: false
         }),
+        suppressChildMessages: new fields.BooleanField({
+          required: false,
+          initial: false
+        }),
         nodes: new fields.ArrayField(new fields.SchemaField({
           nodeId: new fields.StringField({
             required: true,
@@ -42,10 +46,6 @@ export class ScConditionalChainActivityData extends dnd5e.dataModels.activity.Ba
             required: false,
             blank: true,
             initial: ""
-          }),
-          suppressMessage: new fields.BooleanField({
-            required: false,
-            initial: false
           }),
           conditionType: new fields.StringField({
             required: false,
