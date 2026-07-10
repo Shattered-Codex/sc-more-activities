@@ -216,7 +216,7 @@ export class ScActivityResultTracker {
     if (!data || typeof data !== "object" || Array.isArray(data)) {
       return data;
     }
-    const preferred = [original?.roll?.sum, original?.roll?.total, original?.total]
+    const preferred = [original?.roll?.sum, original?.roll?.total, original?.total, original?.value, original?.macro?.value]
       .map((value) => Number(value))
       .find((value) => Number.isFinite(value)) ?? 0;
     Object.defineProperty(data, "toString", {

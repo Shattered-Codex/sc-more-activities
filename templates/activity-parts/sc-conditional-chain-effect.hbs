@@ -66,6 +66,14 @@
         </div>
 
         <div class="form-group">
+          <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.SuppressMessage.Label" }}</label>
+          <div class="form-fields">
+            <input type="checkbox" name="flow.nodes.{{ node.index }}.suppressMessage" {{#if node.suppressMessage}}checked{{/if}}>
+          </div>
+          <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.SuppressMessage.Hint" }}</p>
+        </div>
+
+        <div class="form-group">
           <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.ConditionType.Label" }}</label>
           <div class="form-fields">
             <select name="flow.nodes.{{ node.index }}.conditionType">
@@ -107,11 +115,13 @@
                 <input type="text" name="flow.nodes.{{ node.index }}.condition.path" value="{{ node.condition.path }}"
                        placeholder="{{ node.pathFieldPlaceholder }}" spellcheck="false">
               {{/if}}
-              <select name="flow.nodes.{{ node.index }}.condition.operator" class="sc-ma-flow-operator">
-                {{ selectOptions ../operatorOptions selected=node.condition.operator valueAttr="value" labelAttr="label" }}
-              </select>
-              <input type="text" name="flow.nodes.{{ node.index }}.condition.value" value="{{ node.condition.value }}" class="sc-ma-flow-value"
-                     placeholder="{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Value.Placeholder" }}" spellcheck="false">
+              {{#unless node.isLastActivityValue}}
+                <select name="flow.nodes.{{ node.index }}.condition.operator" class="sc-ma-flow-operator">
+                  {{ selectOptions ../operatorOptions selected=node.condition.operator valueAttr="value" labelAttr="label" }}
+                </select>
+                <input type="text" name="flow.nodes.{{ node.index }}.condition.value" value="{{ node.condition.value }}" class="sc-ma-flow-value"
+                       placeholder="{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Value.Placeholder" }}" spellcheck="false">
+              {{/unless}}
             </div>
             {{#if node.isLastActivityResult}}
               <div class="form-fields sc-ma-flow-custom-path" data-last-result-custom-path {{#unless node.pathIsCustom}}hidden{{/unless}}>
@@ -122,6 +132,49 @@
             {{else}}
               <p class="hint">{{ node.pathFieldHint }}</p>
             {{/if}}
+          </div>
+        {{/if}}
+
+        {{#if node.isLastActivityValue}}
+          <div class="sc-ma-flow-choices">
+            <div class="sc-ma-flow-choices-header">
+              <span>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.ValueBranches.Label" }}</span>
+              <button type="button" class="unbutton control-button" data-action="sc-add-value-branch" data-index="{{ node.index }}"
+                      data-tooltip aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.ValueBranches.Add" }}">
+                <i class="fas fa-plus" inert></i>
+              </button>
+            </div>
+            <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.ValueBranches.Hint" }}</p>
+            <ul class="unlist">
+              {{#each node.valueBranches as |branch|}}
+              <li class="sc-ma-flow-choice-row sc-ma-flow-value-branch-row">
+                <input type="hidden" name="flow.nodes.{{ node.index }}.valueBranches.{{ branch.branchIndex }}.key" value="{{ branch.key }}">
+                <select name="flow.nodes.{{ node.index }}.valueBranches.{{ branch.branchIndex }}.operator" class="sc-ma-flow-operator">
+                  {{ selectOptions ../../operatorOptions selected=branch.operator valueAttr="value" labelAttr="label" }}
+                </select>
+                <input type="text" name="flow.nodes.{{ node.index }}.valueBranches.{{ branch.branchIndex }}.value" value="{{ branch.value }}"
+                       placeholder="{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Value.Placeholder" }}" spellcheck="false">
+                <select name="flow.nodes.{{ node.index }}.valueBranches.{{ branch.branchIndex }}.next">
+                  {{ selectOptions node.routeOptions selected=branch.next valueAttr="value" labelAttr="label" }}
+                </select>
+                <button type="button" class="unbutton control-button" data-action="sc-remove-value-branch"
+                        data-index="{{ node.index }}" data-branch-index="{{ branch.branchIndex }}"
+                        data-tooltip aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.ValueBranches.Remove" }}">
+                  <i class="fas fa-minus" inert></i>
+                </button>
+              </li>
+              {{else}}
+              <li class="sc-ma-flow-choice-empty">{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.ValueBranches.Empty" }}</li>
+              {{/each}}
+            </ul>
+          </div>
+          <div class="form-group sc-ma-flow-routes">
+            <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Routes.Fallback" }}</label>
+            <div class="form-fields">
+              <select name="flow.nodes.{{ node.index }}.routes.fallback">
+                {{ selectOptions node.routeOptions selected=node.routes.fallback valueAttr="value" labelAttr="label" }}
+              </select>
+            </div>
           </div>
         {{/if}}
 
@@ -163,7 +216,7 @@
           </div>
         {{/if}}
 
-        {{#if node.usesPathCondition}}
+        {{#if node.usesBinaryPathCondition}}
           <div class="form-group sc-ma-flow-routes">
             <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Routes.OnTrue" }}</label>
             <div class="form-fields">

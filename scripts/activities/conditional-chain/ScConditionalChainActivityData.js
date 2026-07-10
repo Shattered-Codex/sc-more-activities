@@ -43,6 +43,10 @@ export class ScConditionalChainActivityData extends dnd5e.dataModels.activity.Ba
             blank: true,
             initial: ""
           }),
+          suppressMessage: new fields.BooleanField({
+            required: false,
+            initial: false
+          }),
           conditionType: new fields.StringField({
             required: false,
             initial: FLOW_CONDITION_TYPES.ALWAYS,
@@ -104,8 +108,23 @@ export class ScConditionalChainActivityData extends dnd5e.dataModels.activity.Ba
               required: false,
               blank: true,
               initial: FLOW_END
+            }),
+            fallback: new fields.StringField({
+              required: false,
+              blank: true,
+              initial: FLOW_END
             })
           }),
+          valueBranches: new fields.ArrayField(new fields.SchemaField({
+            key: new fields.StringField({ required: true, blank: true, initial: "" }),
+            operator: new fields.StringField({
+              required: false,
+              initial: FLOW_PROPERTY_OPERATORS.EQ,
+              choices: Object.values(FLOW_PROPERTY_OPERATORS)
+            }),
+            value: new fields.StringField({ required: false, blank: true, initial: "" }),
+            next: new fields.StringField({ required: false, blank: true, initial: FLOW_END })
+          }), { required: false, initial: [] }),
           choices: new fields.ArrayField(new fields.SchemaField({
             key: new fields.StringField({
               required: true,

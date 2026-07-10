@@ -18,7 +18,8 @@ export class ScChainActivitySheet extends dnd5e.applications.activity.ActivitySh
       activityIds: this.activity?.chain?.activityIds ?? "",
       maxDepth: this.activity?.chain?.maxDepth ?? 5,
       continueOnFailure: this.activity?.chain?.continueOnFailure === true,
-      stopOnCancel: this.activity?.chain?.stopOnCancel !== false
+      stopOnCancel: this.activity?.chain?.stopOnCancel !== false,
+      suppressChildMessages: this.activity?.chain?.suppressChildMessages === true
     };
     context.availableActivities = this.#getAvailableActivities(configuredIds);
     return context;

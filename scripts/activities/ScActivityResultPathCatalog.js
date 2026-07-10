@@ -72,7 +72,8 @@ const GROUPS = Object.freeze({
     "contest.defender.total",
     "contest.defender.actorUuid",
     "contest.defender.tokenUuid"
-  ])
+  ]),
+  macro: Object.freeze(["value", "macro.value", "macro.returned"])
 });
 
 const ACTIVITY_GROUPS = Object.freeze({
@@ -81,7 +82,8 @@ const ACTIVITY_GROUPS = Object.freeze({
   heal: Object.freeze(["common", "roll", "dice"]),
   save: Object.freeze(["common", "roll", "dice"]),
   "sc-grant": Object.freeze(["common", "grant", "roll"]),
-  "sc-contest": Object.freeze(["common", "contest"])
+  "sc-contest": Object.freeze(["common", "contest"]),
+  "sc-macro": Object.freeze(["common", "macro"])
 });
 
 export class ScActivityResultPathCatalog {

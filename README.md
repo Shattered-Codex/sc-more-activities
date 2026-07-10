@@ -146,6 +146,7 @@ The **First step** field at the top selects where the flow begins.
 | Always continue | No condition; always follows *Next step* | Next step |
 | Actor property | Compares an actor data path (e.g. `system.attributes.hp.value`) against a value | When true / false |
 | Last activity result | Compares the most recent child activity result against a value | When true / false |
+| Last activity value (multiple paths) | Checks an ordered list of comparisons against one result path | First matching path / fallback |
 | Roll | Rolls an ability check, saving throw, skill check, or custom formula against a DC | On success / failure |
 | Manual choice | Opens a dialog and lets the user pick the route | One per option |
 
@@ -170,12 +171,18 @@ Pick **Custom path…** at the bottom of the dropdown to type any path on the ra
 Decision-only steps inherit it unchanged, so several decision steps in a row can test different parts of
 the same result.
 
+Use **Last activity value (multiple paths)** when one result should choose among three or more routes.
+Select the result path once, add non-overlapping value paths, and configure a fallback. For example:
+`< 5` → Low, `between 5..10` → Medium, `> 10` → High. The editor reports overlapping numeric paths such
+as `≤ 5` and `≥ 4` as a configuration error before execution.
+
 Which activities produce detailed results:
 
 - `attack` — attack outcome + attack roll details (**the attack roll only**, not the card damage)
 - `damage`, `heal`, `save` — roll totals and individual dice (the flow waits for the roll to happen)
 - `sc-grant` — gating check outcome and created/updated document counts
 - `sc-contest` — winner, tie, and per-participant totals
+- `sc-macro` — the explicit macro return at `value` or `macro.value`, plus `macro.returned`
 - other types — general information only (source activity, chat message, effect/template counts)
 
 ### Result Path Reference
@@ -250,6 +257,17 @@ ignored:
 | Initiator / defender actor UUID | `contest.initiator.actorUuid` / `contest.defender.actorUuid` | The actor on each side |
 | Initiator / defender token UUID | `contest.initiator.tokenUuid` / `contest.defender.tokenUuid` | The token on each side |
 
+**Macro return** — `sc-macro` activities:
+
+| Label | Path | Meaning |
+| --- | --- | --- |
+| Macro returned value | `value` / `macro.value` | The JSON-compatible value explicitly returned by the macro |
+| Macro returned a value | `macro.returned` | `true` when the macro used an explicit return value |
+
+World and inline macros may return a number, boolean, string, array, or plain object. For example,
+`return 3;` can be routed with `value = 1`, `value = 2`, and so on. Existing macros that return nothing
+continue to work as before.
+
 ### Example: Branch On Whether An Attack Hits, Then On Damage Dealt
 
 Item setup: an `attack` activity, a `damage` activity, and an `sc-conditional-chain` activity.
@@ -278,14 +296,41 @@ Example — *heal yourself for the damage you just dealt* (vampiric strike):
 `@scLast` also works in the chain's own formula fields: the condition **value** field, the roll check
 **DC** field, and **custom roll formulas** (e.g. DC `10 + @scLast.roll.dice.count`).
 
+#### Use The Previous Result As A Roll DC
+
+A step configured with **Decide the next step by → Roll** can calculate its **DC** from the most recent
+activity result. Enter the formula directly in the DC field even though the field initially displays a
+number such as `15`.
+
+Common DC formulas:
+
+| Previous activity result | DC formula |
+| --- | --- |
+| First roll total | `@scLast.roll.total` |
+| Sum of all rolls | `@scLast.roll.sum` |
+| Value returned by an SC Macro | `@scLast.macro.value` |
+| Previous result plus a fixed modifier | `@scLast.roll.sum + 5` |
+| Macro return plus a fixed base | `10 + @scLast.macro.value` |
+
+Example — *use a macro return as the next roll's DC*:
+
+1. **Step 1** runs an `sc-macro` activity whose world or inline macro explicitly returns a number, such
+   as `return 12;`. Route it to Step 2.
+2. **Step 2** uses no child activity and selects **Roll** as its condition type.
+3. Set Step 2's **DC** to `@scLast.macro.value`. The roll uses DC 12.
+4. Configure the **On success** and **On failure** routes normally.
+
+The macro must return a numeric value for a numeric DC. Use the explicit path
+`@scLast.macro.value` rather than a bare `@scLast` so the source of the DC remains clear.
+
 Notes:
 
 - `@scLast` reflects the result of the **most recent step that ran an activity** — decision-only steps do
   not change it.
 - For formula use, booleans become `1`/`0` and missing values become `0`, so `@scLast.success` can be used
   directly in arithmetic.
-- A bare `@scLast` (no path) resolves to the main roll value of the previous result (`roll.sum`, falling
-  back to `roll.total`, then `total`) — but prefer the explicit path for clarity.
+- A bare `@scLast` (no path) resolves to the main numeric value of the previous result (`roll.sum`,
+  falling back to `roll.total`, `total`, then a macro return) — but prefer the explicit path for clarity.
 - The first step of a flow has no previous result, so `@scLast` is not available there.
 - It also works with plain `sc-chain` steps, and applies to attack, damage, and heal rolls of the child
   activity.
@@ -312,6 +357,8 @@ Flow policies (collapsible tray at the bottom of the sheet):
 - **Stop when a child activity is canceled** — end the flow when a step's activity is closed without a
   result. When off, the flow keeps routing (the last result is not updated).
 - **Continue after child errors** — keep routing when a step's activity is missing or throws.
+- Each step can **suppress its activity card** while preserving roll messages and the conditional chain's
+  own card. The plain `sc-chain` provides one global option for all of its child activities.
 
 Limitations:
 

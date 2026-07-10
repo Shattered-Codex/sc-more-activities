@@ -7,6 +7,7 @@ export const FLOW_CONDITION_TYPES = Object.freeze({
   ALWAYS: "always",
   ACTOR_PROPERTY: "actor-property",
   LAST_ACTIVITY_RESULT: "last-activity-result",
+  LAST_ACTIVITY_VALUE: "last-activity-value",
   ROLL_CHECK: "roll-check",
   CHOICE: "choice"
 });
@@ -38,10 +39,12 @@ export class ScConditionalChainFlow {
       ? raw.condition.rollType
       : FLOW_ROLL_TYPES.ABILITY_CHECK;
     const choices = Array.isArray(raw?.choices) ? raw.choices : [];
+    const valueBranches = Array.isArray(raw?.valueBranches) ? raw.valueBranches : [];
     return {
       nodeId: String(raw?.nodeId ?? "").trim(),
       label: String(raw?.label ?? "").trim(),
       activityId: String(raw?.activityId ?? "").trim(),
+      suppressMessage: raw?.suppressMessage === true,
       conditionType,
       condition: {
         path: String(raw?.condition?.path ?? "").trim(),
@@ -56,8 +59,15 @@ export class ScConditionalChainFlow {
       routes: {
         next: ScConditionalChainFlow.#normalizeRoute(raw?.routes?.next),
         onTrue: ScConditionalChainFlow.#normalizeRoute(raw?.routes?.onTrue),
-        onFalse: ScConditionalChainFlow.#normalizeRoute(raw?.routes?.onFalse)
+        onFalse: ScConditionalChainFlow.#normalizeRoute(raw?.routes?.onFalse),
+        fallback: ScConditionalChainFlow.#normalizeRoute(raw?.routes?.fallback)
       },
+      valueBranches: valueBranches.map((branch) => ({
+        key: String(branch?.key ?? "").trim(),
+        operator: String(branch?.operator ?? "eq").trim() || "eq",
+        value: String(branch?.value ?? "").trim(),
+        next: ScConditionalChainFlow.#normalizeRoute(branch?.next)
+      })),
       choices: choices.map((choice) => ({
         key: String(choice?.key ?? "").trim(),
         label: String(choice?.label ?? "").trim(),
@@ -158,6 +168,13 @@ export class ScConditionalChainFlow {
       const choice = (node.choices ?? []).find((entry) => entry.key === outcome.key);
       return choice?.next || null;
     }
+    if (outcome.kind === "value-branch") {
+      const branch = (node.valueBranches ?? []).find((entry) => entry.key === outcome.key);
+      return branch?.next || null;
+    }
+    if (outcome.kind === "value-fallback") {
+      return node.routes?.fallback || null;
+    }
     return null;
   }
 
@@ -171,6 +188,15 @@ export class ScConditionalChainFlow {
         target: choice.next
       }));
     }
+    if (node.conditionType === FLOW_CONDITION_TYPES.LAST_ACTIVITY_VALUE) {
+      return [
+        ...node.valueBranches.map((branch, index) => ({
+          name: `value:${branch.key || index}`,
+          target: branch.next
+        })),
+        { name: "fallback", target: node.routes.fallback }
+      ];
+    }
     return [
       { name: "onTrue", target: node.routes.onTrue },
       { name: "onFalse", target: node.routes.onFalse }
@@ -183,13 +209,50 @@ export class ScConditionalChainFlow {
 
     if ([
       FLOW_CONDITION_TYPES.ACTOR_PROPERTY,
-      FLOW_CONDITION_TYPES.LAST_ACTIVITY_RESULT
+      FLOW_CONDITION_TYPES.LAST_ACTIVITY_RESULT,
+      FLOW_CONDITION_TYPES.LAST_ACTIVITY_VALUE
     ].includes(node.conditionType)) {
       if (!condition.path) {
         issues.push({ code: "missing-path", nodeId: nodeName });
       }
       if (!ScConditionalChainConditions.isOperator(condition.operator)) {
         issues.push({ code: "invalid-operator", nodeId: nodeName, ref: condition.operator });
+      }
+    }
+
+    if (node.conditionType === FLOW_CONDITION_TYPES.LAST_ACTIVITY_VALUE) {
+      if (!node.valueBranches.length) {
+        issues.push({ code: "missing-value-branches", nodeId: nodeName });
+      }
+      const seenKeys = new Set();
+      for (const branch of node.valueBranches) {
+        if (!branch.key) {
+          issues.push({ code: "empty-value-branch-key", nodeId: nodeName });
+        } else if (seenKeys.has(branch.key)) {
+          issues.push({ code: "duplicate-value-branch-key", nodeId: nodeName, ref: branch.key });
+        }
+        seenKeys.add(branch.key);
+        if (!ScConditionalChainConditions.isOperator(branch.operator)) {
+          issues.push({ code: "invalid-operator", nodeId: nodeName, ref: branch.operator });
+        } else if (branch.operator === "between"
+          && !ScConditionalChainConditions.numericInterval(branch.operator, branch.value)) {
+          issues.push({ code: "invalid-value-range", nodeId: nodeName, ref: branch.value });
+        }
+      }
+      for (let leftIndex = 0; leftIndex < node.valueBranches.length; leftIndex += 1) {
+        const left = node.valueBranches[leftIndex];
+        const leftInterval = ScConditionalChainConditions.numericInterval(left.operator, left.value);
+        for (let rightIndex = leftIndex + 1; rightIndex < node.valueBranches.length; rightIndex += 1) {
+          const right = node.valueBranches[rightIndex];
+          const rightInterval = ScConditionalChainConditions.numericInterval(right.operator, right.value);
+          if (ScConditionalChainConditions.intervalsOverlap(leftInterval, rightInterval)) {
+            issues.push({
+              code: "conflicting-value-branches",
+              nodeId: nodeName,
+              ref: `${ScConditionalChainFlow.#branchDescription(left, leftIndex)} / ${ScConditionalChainFlow.#branchDescription(right, rightIndex)}`
+            });
+          }
+        }
       }
     }
 
@@ -220,5 +283,9 @@ export class ScConditionalChainFlow {
     }
 
     return issues;
+  }
+
+  static #branchDescription(branch, index) {
+    return `#${index + 1} (${branch.operator} ${branch.value})`;
   }
 }

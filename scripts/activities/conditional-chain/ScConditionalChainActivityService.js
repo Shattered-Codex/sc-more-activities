@@ -153,10 +153,13 @@ export class ScConditionalChainActivityService {
       lastResult
     );
     try {
+      const childMessage = node.suppressMessage
+        ? { ...(usageContext.message ?? {}), create: false }
+        : (usageContext.message ?? {});
       childResults = await target.use(
         childUsage,
         usageContext.dialog ?? {},
-        usageContext.message ?? {}
+        childMessage
       );
     } catch (error) {
       ScActivityResultTracker.cancelUsage(childUsage, "child-error");
@@ -203,6 +206,8 @@ export class ScConditionalChainActivityService {
         return ScConditionalChainActivityService.#resolveActorProperty(activity, node, lastResult);
       case FLOW_CONDITION_TYPES.LAST_ACTIVITY_RESULT:
         return ScConditionalChainActivityService.#resolveLastActivityResult(activity, node, lastResult);
+      case FLOW_CONDITION_TYPES.LAST_ACTIVITY_VALUE:
+        return ScConditionalChainActivityService.#resolveLastActivityValue(activity, node, lastResult);
       case FLOW_CONDITION_TYPES.ROLL_CHECK:
         return ScConditionalChainActivityService.#resolveRollCheck(activity, node, lastResult);
       case FLOW_CONDITION_TYPES.CHOICE:
@@ -237,6 +242,40 @@ export class ScConditionalChainActivityService {
       return { valid: false };
     }
     return { valid: true, kind: "boolean", value: evaluation.result };
+  }
+
+  static #resolveLastActivityValue(activity, node, lastResult) {
+    if (!lastResult || typeof lastResult !== "object") {
+      ScConditionalChainActivityService.#warnFormat(
+        "Warning.MissingLastResult",
+        { node: node.label || node.nodeId },
+        `No previous activity result is available for step "${node.label || node.nodeId}".`
+      );
+      return { valid: false };
+    }
+
+    const actor = ScConditionalChainActivityService.#resolveActor(activity);
+    for (const branch of node.valueBranches) {
+      const evaluation = ScConditionalChainConditions.evaluateProperty({
+        path: node.condition.path,
+        operator: branch.operator,
+        value: branch.value
+      }, lastResult, {
+        resolveExpected: (raw) => ScConditionalChainActivityService.#resolveExpectedValue(activity, actor, raw, lastResult)
+      });
+      if (!evaluation.valid) {
+        ScConditionalChainActivityService.#warnFormat(
+          "Warning.InvalidLastActivityResult",
+          { node: node.label || node.nodeId, path: node.condition.path, reason: evaluation.reason ?? "" },
+          `Could not evaluate last activity result "${node.condition.path}" (${evaluation.reason ?? "invalid"}).`
+        );
+        return { valid: false };
+      }
+      if (evaluation.result) {
+        return { valid: true, kind: "value-branch", key: branch.key };
+      }
+    }
+    return { valid: true, kind: "value-fallback" };
   }
 
   static #resolveActorProperty(activity, node, lastResult) {

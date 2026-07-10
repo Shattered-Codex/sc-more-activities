@@ -48,5 +48,13 @@
       </div>
       <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScChain.Fields.StopOnCancel.Hint" }}</p>
     </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScChain.Fields.SuppressChildMessages.Label" }}</label>
+      <div class="form-fields">
+        <input type="checkbox" name="chain.suppressChildMessages" {{#if chain.suppressChildMessages}}checked{{/if}}>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScChain.Fields.SuppressChildMessages.Hint" }}</p>
+    </div>
   </fieldset>
 </section>

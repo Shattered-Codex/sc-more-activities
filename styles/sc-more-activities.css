@@ -2288,6 +2288,14 @@
   min-width: 0;
 }
 
+.sc-ma-flow-value-branch-row select.sc-ma-flow-operator {
+  flex: 0 0 4.5rem;
+}
+
+.sc-ma-flow-value-branch-row select:not(.sc-ma-flow-operator) {
+  flex: 0 0 38%;
+}
+
 .sc-ma-flow-choice-empty,
 .sc-ma-flow-empty {
   color: var(--sc-ma-text-dim);

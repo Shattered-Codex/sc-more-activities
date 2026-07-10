@@ -3,6 +3,7 @@ import { ACTIVITY_TYPES } from "../ActivityTypes.js";
 import { ScMacroActivityData } from "./ScMacroActivityData.js";
 import { ScMacroActivityService } from "./ScMacroActivityService.js";
 import { ScMacroActivitySheet } from "./ScMacroActivitySheet.js";
+import { ScActivityResultTracker } from "../ScActivityResultTracker.js";
 
 export class ScMacroActivity extends dnd5e.documents.activity.ActivityMixin(ScMacroActivityData) {
   static LOCALIZATION_PREFIXES = [...super.LOCALIZATION_PREFIXES, "SCMOREACTIVITIES.Activities.ScMacro"];
@@ -31,7 +32,17 @@ export class ScMacroActivity extends dnd5e.documents.activity.ActivityMixin(ScMa
       return results;
     }
 
-    await ScMacroActivityService.execute(this, { usage, dialog, message, results });
+    const execution = await ScMacroActivityService.execute(this, { usage, dialog, message, results });
+    if (execution?.executed) {
+      ScActivityResultTracker.recordActivityResult(usage, {
+        kind: "macro",
+        value: execution.value ?? null,
+        macro: {
+          returned: execution.value !== undefined,
+          value: execution.value ?? null
+        }
+      });
+    }
     return results;
   }
 }

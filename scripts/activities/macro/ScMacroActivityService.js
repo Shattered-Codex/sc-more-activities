@@ -4,11 +4,10 @@ import { Logger } from "../../support/Logger.js";
 export class ScMacroActivityService {
   static async execute(activity, usageContext = {}) {
     if (activity?.execution?.mode === "inline") {
-      await ScMacroActivityService.#executeInlineMacro(activity, usageContext);
-      return;
+      return ScMacroActivityService.#executeInlineMacro(activity, usageContext);
     }
 
-    await ScMacroActivityService.#executeWorldMacro(activity, usageContext);
+    return ScMacroActivityService.#executeWorldMacro(activity, usageContext);
   }
 
   static async #executeWorldMacro(activity, usageContext) {
@@ -19,7 +18,7 @@ export class ScMacroActivityService {
         "SCMOREACTIVITIES.Activities.ScMacro.Warning.MissingWorldMacro",
         "Choose a world macro before using this activity."
       ));
-      return;
+      return { executed: false };
     }
 
     const canExecute = macro.canExecute !== false
@@ -29,13 +28,16 @@ export class ScMacroActivityService {
         "SCMOREACTIVITIES.Activities.ScMacro.Warning.WorldMacroPermission",
         "You do not have permission to execute the selected macro."
       ));
-      return;
+      return { executed: false };
     }
 
     try {
-      await macro.execute(ScMacroActivityService.#buildExecutionContext(activity, usageContext));
+      return { executed: true, value: ScMacroActivityService.#cloneSafe(await macro.execute(
+        ScMacroActivityService.#buildExecutionContext(activity, usageContext)
+      )) };
     } catch (error) {
       ScMacroActivityService.#notifyExecutionError(error, "world");
+      return { executed: false };
     }
   }
 
@@ -45,7 +47,7 @@ export class ScMacroActivityService {
         "SCMOREACTIVITIES.Activities.ScMacro.Warning.InlineRequiresGm",
         "Only a GM can execute inline macro code."
       ));
-      return;
+      return { executed: false };
     }
 
     const macroCode = activity?.inline?.code?.trim?.() ?? "";
@@ -54,7 +56,7 @@ export class ScMacroActivityService {
         "SCMOREACTIVITIES.Activities.ScMacro.Warning.MissingInlineCode",
         "Add inline macro code before using this activity."
       ));
-      return;
+      return { executed: false };
     }
 
     try {
@@ -74,7 +76,7 @@ export class ScMacroActivityService {
         "ui",
         `"use strict"; return (async () => {\n${macroCode}\n})();`
       );
-      await execute(
+      const value = await execute(
         context.activity,
         context.item,
         context.actor,
@@ -88,8 +90,10 @@ export class ScMacroActivityService {
         globalThis.canvas,
         globalThis.ui
       );
+      return { executed: true, value: ScMacroActivityService.#cloneSafe(value) };
     } catch (error) {
       ScMacroActivityService.#notifyExecutionError(error, "inline");
+      return { executed: false };
     }
   }
 
@@ -127,5 +131,16 @@ export class ScMacroActivityService {
       { error: error?.message ?? String(error) },
       `Could not execute macro: ${error?.message ?? String(error)}`
     ));
+  }
+
+  static #cloneSafe(value) {
+    if (value === undefined) {
+      return undefined;
+    }
+    try {
+      return typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value));
+    } catch (_error) {
+      return String(value);
+    }
   }
 }

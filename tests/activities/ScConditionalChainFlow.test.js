@@ -256,6 +256,74 @@ test("resolves choice outcomes by option key", () => {
   assert.equal(ScConditionalChainFlow.resolveNextNode(node, { kind: "choice", key: "ghost" }), null);
 });
 
+test("normalizes and validates ordered last-value paths without changing binary conditions", () => {
+  const flow = ScConditionalChainFlow.normalizeFlow({
+    startNode: "decision",
+    nodes: [{
+      nodeId: "decision",
+      conditionType: FLOW_CONDITION_TYPES.LAST_ACTIVITY_VALUE,
+      condition: { path: " roll.sum " },
+      routes: { fallback: FLOW_END },
+      valueBranches: [
+        { key: " low ", operator: "lt", value: " 5 ", next: "low-step" },
+        { key: " middle ", operator: "between", value: " 5..10 ", next: "middle-step" },
+        { key: " high ", operator: "gt", value: " 10 ", next: "high-step" }
+      ]
+    },
+    { nodeId: "low-step", routes: { next: FLOW_END } },
+    { nodeId: "middle-step", routes: { next: FLOW_END } },
+    { nodeId: "high-step", routes: { next: FLOW_END } }]
+  });
+
+  assert.equal(flow.nodes[0].condition.path, "roll.sum");
+  assert.deepEqual(flow.nodes[0].valueBranches[1], {
+    key: "middle", operator: "between", value: "5..10", next: "middle-step"
+  });
+  assert.deepEqual(ScConditionalChainFlow.validateFlow(flow, []), []);
+});
+
+test("validates last-value paths and resolves branch and fallback outcomes", () => {
+  const node = makeNode({
+    conditionType: FLOW_CONDITION_TYPES.LAST_ACTIVITY_VALUE,
+    condition: { path: "value" },
+    routes: { fallback: "fallback" },
+    valueBranches: [{ key: "one", operator: "eq", value: "1", next: "first" }]
+  });
+  assert.equal(ScConditionalChainFlow.resolveNextNode(node, { kind: "value-branch", key: "one" }), "first");
+  assert.equal(ScConditionalChainFlow.resolveNextNode(node, { kind: "value-fallback" }), "fallback");
+
+  const invalid = makeFlow({
+    nodes: [{
+      nodeId: "a",
+      conditionType: FLOW_CONDITION_TYPES.LAST_ACTIVITY_VALUE,
+      condition: { path: "" },
+      routes: { fallback: FLOW_END },
+      valueBranches: []
+    }]
+  });
+  assert.deepEqual(codes(ScConditionalChainFlow.validateFlow(invalid, [])), ["missing-path", "missing-value-branches"]);
+});
+
+test("rejects conflicting numeric value paths with a user-facing issue", () => {
+  const flow = ScConditionalChainFlow.normalizeFlow({
+    startNode: "a",
+    nodes: [{
+      nodeId: "a",
+      conditionType: FLOW_CONDITION_TYPES.LAST_ACTIVITY_VALUE,
+      condition: { path: "roll.sum" },
+      routes: { fallback: FLOW_END },
+      valueBranches: [
+        { key: "low", operator: "lte", value: "5", next: FLOW_END },
+        { key: "high", operator: "gte", value: "4", next: FLOW_END }
+      ]
+    }]
+  });
+  const issues = ScConditionalChainFlow.validateFlow(flow, []);
+  const conflict = issues.find((issue) => issue.code === "conflicting-value-branches");
+  assert.ok(conflict);
+  assert.match(conflict.ref, /#1 \(lte 5\).*#2 \(gte 4\)/);
+});
+
 test("returns null for unset routes and invalid outcomes", () => {
   const node = makeNode({ routes: { next: "" } });
   assert.equal(ScConditionalChainFlow.resolveNextNode(node, { kind: "always" }), null);
