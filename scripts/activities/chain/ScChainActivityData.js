@@ -22,6 +22,10 @@ export class ScChainActivityData extends dnd5e.dataModels.activity.BaseActivityD
         stopOnCancel: new fields.BooleanField({
           required: false,
           initial: true
+        }),
+        suppressChildMessages: new fields.BooleanField({
+          required: false,
+          initial: false
         })
       })
     };

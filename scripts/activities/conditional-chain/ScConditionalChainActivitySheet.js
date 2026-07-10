@@ -40,7 +40,8 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
       startNode: flow.startNode,
       maxDepth: flow.maxDepth,
       stopOnCancel: flow.stopOnCancel,
-      continueOnChildError: flow.continueOnChildError
+      continueOnChildError: flow.continueOnChildError,
+      suppressChildMessages: flow.suppressChildMessages
     };
     context.policiesExpanded = this.#policiesExpanded;
     context.issues = issues.map((issue) => ScConditionalChainActivityService.describeIssue(issue));
@@ -60,6 +61,7 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
       [FLOW_CONDITION_TYPES.ALWAYS]: "Always",
       [FLOW_CONDITION_TYPES.ACTOR_PROPERTY]: "ActorProperty",
       [FLOW_CONDITION_TYPES.LAST_ACTIVITY_RESULT]: "LastActivityResult",
+      [FLOW_CONDITION_TYPES.LAST_ACTIVITY_VALUE]: "LastActivityValue",
       [FLOW_CONDITION_TYPES.ROLL_CHECK]: "RollCheck",
       [FLOW_CONDITION_TYPES.CHOICE]: "Choice"
     });
@@ -70,6 +72,7 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
       [FLOW_PROPERTY_OPERATORS.GTE]: "Gte",
       [FLOW_PROPERTY_OPERATORS.LT]: "Lt",
       [FLOW_PROPERTY_OPERATORS.LTE]: "Lte",
+      [FLOW_PROPERTY_OPERATORS.BETWEEN]: "Between",
       [FLOW_PROPERTY_OPERATORS.INCLUDES]: "Includes"
     });
     context.rollTypeOptions = this.#localizedOptions("RollTypes", {
@@ -92,9 +95,16 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
     context.nodes = flow.nodes.map((node, index) => {
       const usesPathCondition = [
         FLOW_CONDITION_TYPES.ACTOR_PROPERTY,
+        FLOW_CONDITION_TYPES.LAST_ACTIVITY_RESULT,
+        FLOW_CONDITION_TYPES.LAST_ACTIVITY_VALUE
+      ].includes(node.conditionType);
+      const usesBinaryPathCondition = [
+        FLOW_CONDITION_TYPES.ACTOR_PROPERTY,
         FLOW_CONDITION_TYPES.LAST_ACTIVITY_RESULT
       ].includes(node.conditionType);
-      const isLastActivityResult = node.conditionType === FLOW_CONDITION_TYPES.LAST_ACTIVITY_RESULT;
+      const isLastActivityValue = node.conditionType === FLOW_CONDITION_TYPES.LAST_ACTIVITY_VALUE;
+      const isLastActivityResult = node.conditionType === FLOW_CONDITION_TYPES.LAST_ACTIVITY_RESULT
+        || isLastActivityValue;
       const suggestionActivity = availableActivityIndex.get(node.activityId) ?? null;
       const conditionPath = String(node.condition.path ?? "").trim();
       const pathSuggestionGroups = isLastActivityResult
@@ -117,9 +127,11 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
         isAlways: node.conditionType === FLOW_CONDITION_TYPES.ALWAYS,
         isActorProperty: node.conditionType === FLOW_CONDITION_TYPES.ACTOR_PROPERTY,
         isLastActivityResult,
+        isLastActivityValue,
         isRollCheck: node.conditionType === FLOW_CONDITION_TYPES.ROLL_CHECK,
         isChoice: node.conditionType === FLOW_CONDITION_TYPES.CHOICE,
         usesPathCondition,
+        usesBinaryPathCondition,
         needsAbility: [FLOW_ROLL_TYPES.ABILITY_CHECK, FLOW_ROLL_TYPES.SAVING_THROW].includes(node.condition.rollType),
         needsSkill: node.condition.rollType === FLOW_ROLL_TYPES.SKILL,
         needsFormula: node.condition.rollType === FLOW_ROLL_TYPES.CUSTOM,
@@ -136,7 +148,8 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
           ? this.#resultPathDescription(conditionPath)
           : "",
         routeOptions,
-        choices: node.choices.map((choice, choiceIndex) => ({ ...choice, choiceIndex }))
+        choices: node.choices.map((choice, choiceIndex) => ({ ...choice, choiceIndex })),
+        valueBranches: node.valueBranches.map((branch, branchIndex) => ({ ...branch, branchIndex }))
       };
     });
 
@@ -203,6 +216,37 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
           return;
         }
         nodes[index].choices.splice(choiceIndex, 1);
+        await this.activity.update({ "flow.nodes": nodes });
+        this.render();
+      });
+    });
+
+    this.element.querySelectorAll("[data-action='sc-add-value-branch']").forEach((button) => {
+      button.addEventListener("click", async(event) => {
+        event.preventDefault();
+        const index = Number(event.currentTarget.dataset.index);
+        const nodes = this.#cloneNodes();
+        if (!nodes[index]) {
+          return;
+        }
+        nodes[index].valueBranches.push({
+          key: foundry.utils.randomID(8), operator: "eq", value: "", next: FLOW_END
+        });
+        await this.activity.update({ "flow.nodes": nodes });
+        this.render();
+      });
+    });
+
+    this.element.querySelectorAll("[data-action='sc-remove-value-branch']").forEach((button) => {
+      button.addEventListener("click", async(event) => {
+        event.preventDefault();
+        const index = Number(event.currentTarget.dataset.index);
+        const branchIndex = Number(event.currentTarget.dataset.branchIndex);
+        const nodes = this.#cloneNodes();
+        if (!nodes[index] || !Number.isInteger(branchIndex)) {
+          return;
+        }
+        nodes[index].valueBranches.splice(branchIndex, 1);
         await this.activity.update({ "flow.nodes": nodes });
         this.render();
       });
@@ -443,6 +487,9 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
       merged.choices = entry?.choices !== undefined
         ? this.#choicesFromSubmit(entry.choices)
         : (base.choices ?? []);
+      merged.valueBranches = entry?.valueBranches !== undefined
+        ? this.#indexedEntries(entry.valueBranches)
+        : (base.valueBranches ?? []);
       return ScConditionalChainFlow.normalizeNode(merged);
     });
   }
@@ -455,6 +502,18 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
       return rawChoices;
     }
     return Object.entries(rawChoices)
+      .sort(([left], [right]) => Number(left) - Number(right))
+      .map(([, value]) => value);
+  }
+
+  #indexedEntries(rawEntries) {
+    if (!rawEntries) {
+      return [];
+    }
+    if (Array.isArray(rawEntries)) {
+      return rawEntries;
+    }
+    return Object.entries(rawEntries)
       .sort(([left], [right]) => Number(left) - Number(right))
       .map(([, value]) => value);
   }

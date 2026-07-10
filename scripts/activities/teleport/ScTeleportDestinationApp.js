@@ -30,12 +30,7 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     this.activity = activity;
     this.selectedTargets = selectedTargets;
     this.canvasClickHandler = null;
-    this.canvasPointerDownHandler = null;
-    this.canvasPointerUpHandler = null;
-    this.pendingPointerEvent = null;
-    this.ignoreNextMouseUp = false;
     this.isResolvingDestination = false;
-    this.previewTemplate = null;
     this.previewGraphics = null;
   }
 
@@ -59,8 +54,6 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     await super.close(options);
     this.#stopDestinationSelection();
     this.#destroyPreviewGraphics();
-    await ScCanvasActivityService.removePreviewTemplate(this.previewTemplate);
-    this.previewTemplate = null;
   }
 
   async #startDestinationSelection() {
@@ -85,32 +78,15 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     }
 
     this.canvasClickHandler = this.#onCanvasClick.bind(this);
-    this.canvasPointerDownHandler = this.#onCanvasPointerDown.bind(this);
-    this.canvasPointerUpHandler = this.#onCanvasPointerUp.bind(this);
-    canvas?.stage?.on?.("mouseup", this.canvasClickHandler);
-    canvas?.app?.view?.addEventListener?.("pointerdown", this.canvasPointerDownHandler, true);
-    canvas?.app?.view?.addEventListener?.("pointerup", this.canvasPointerUpHandler, true);
+    canvas?.stage?.on?.("click", this.canvasClickHandler);
   }
 
   #stopDestinationSelection() {
     if (!this.canvasClickHandler) {
-      this.pendingPointerEvent = null;
-    } else {
-      canvas?.stage?.off?.("mouseup", this.canvasClickHandler);
-      this.canvasClickHandler = null;
+      return;
     }
-
-    if (this.canvasPointerDownHandler) {
-      canvas?.app?.view?.removeEventListener?.("pointerdown", this.canvasPointerDownHandler, true);
-      this.canvasPointerDownHandler = null;
-    }
-    if (this.canvasPointerUpHandler) {
-      canvas?.app?.view?.removeEventListener?.("pointerup", this.canvasPointerUpHandler, true);
-      this.canvasPointerUpHandler = null;
-    }
-
-    this.pendingPointerEvent = null;
-    this.ignoreNextMouseUp = false;
+    canvas?.stage?.off?.("click", this.canvasClickHandler);
+    this.canvasClickHandler = null;
   }
 
   #drawRangePreview(originCenter, distance) {
@@ -126,11 +102,13 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
 
     const previewColors = ModuleSettings.getTeleportRangeColors();
     const borderColor = Number.parseInt(String(previewColors.borderColor ?? "#24b86a").slice(1), 16);
+    const fillColor = Number.parseInt(String(previewColors.fillColor ?? "#39f08c").slice(1), 16);
 
     this.previewGraphics = new PIXI.Graphics();
     this.previewGraphics.eventMode = "none";
     this.previewGraphics.interactive = false;
     this.previewGraphics.lineStyle(3, borderColor, 0.95);
+    this.previewGraphics.beginFill(fillColor, 0.2);
     this.previewGraphics.drawCircle(originCenter.x, originCenter.y, radius);
     this.previewGraphics.endFill();
     canvas?.stage?.addChild?.(this.previewGraphics);
@@ -146,41 +124,11 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     this.previewGraphics = null;
   }
 
-  #onCanvasPointerDown(event) {
-    if (Number(event?.button ?? 0) !== 0) {
-      return;
-    }
-
-    event?.preventDefault?.();
-    event?.stopPropagation?.();
-
-    this.pendingPointerEvent = event;
-  }
-
-  #onCanvasPointerUp(event) {
-    if (Number(event?.button ?? 0) !== 0) {
-      return;
-    }
-
-    event?.preventDefault?.();
-    event?.stopPropagation?.();
-
-    if (this.#eventCanvasPosition(event, event)) {
-      this.ignoreNextMouseUp = true;
-      void this.#resolveDestination(event, event);
-    }
-  }
-
   async #onCanvasClick(event) {
-    if (this.ignoreNextMouseUp) {
-      this.ignoreNextMouseUp = false;
-      return;
-    }
-
-    await this.#resolveDestination(event, this.pendingPointerEvent);
+    await this.#resolveDestination(event);
   }
 
-  async #resolveDestination(event, pointerEvent = null) {
+  async #resolveDestination(event) {
     if (this.isResolvingDestination) {
       return;
     }
@@ -190,7 +138,7 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
       return;
     }
 
-    const rawPosition = this.#eventCanvasPosition(event, pointerEvent);
+    const rawPosition = this.#eventCanvasPosition(event);
     const destination = this.#config().snapToGrid
       ? ScCanvasActivityService.snapCenterPoint(rawPosition)
       : rawPosition;
@@ -235,19 +183,22 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     };
   }
 
-  #eventCanvasPosition(event, pointerEvent = null) {
-    const button = pointerEvent?.button ?? event?.button ?? event?.data?.originalEvent?.button;
+  #eventCanvasPosition(event) {
+    const button = event?.data?.originalEvent?.button ?? event?.button;
     if (button !== undefined && button !== 0) {
       return null;
     }
 
-    const localPosition = event?.data?.getLocalPosition?.(canvas?.stage);
+    const localPosition = event?.data?.getLocalPosition?.(canvas?.tokens ?? canvas?.stage);
     if (Number.isFinite(localPosition?.x) && Number.isFinite(localPosition?.y)) {
       return localPosition;
     }
 
-    const originalEvent = pointerEvent ?? event?.data?.originalEvent ?? event;
-    const clientPosition = canvas?.canvasCoordinatesFromClient?.(originalEvent);
+    const originalEvent = event?.data?.originalEvent ?? event;
+    const clientPosition = canvas?.canvasCoordinatesFromClient?.({
+      x: originalEvent?.x ?? originalEvent?.clientX,
+      y: originalEvent?.y ?? originalEvent?.clientY
+    });
     if (Number.isFinite(clientPosition?.x) && Number.isFinite(clientPosition?.y)) {
       return clientPosition;
     }

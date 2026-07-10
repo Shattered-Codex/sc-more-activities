@@ -281,3 +281,83 @@ test("can evaluate an inherited last result before the first node executes a chi
 
   assert.deepEqual(calls, ["grant-hit"]);
 });
+
+for (const [total, expected] of [[4, "low"], [5, "middle"], [10, "middle"], [11, "high"]]) {
+  test(`routes roll total ${total} through the matching ordered value path`, async() => {
+    const calls = [];
+    const activities = new Map(["low", "middle", "high"].map((id) => [id, makeChildActivity({
+      id,
+      onUse() {
+        calls.push(id);
+        return makeUseResults(id);
+      }
+    })]));
+    const flow = ScConditionalChainFlow.normalizeFlow({
+      startNode: "decision",
+      nodes: [{
+        nodeId: "decision",
+        conditionType: FLOW_CONDITION_TYPES.LAST_ACTIVITY_VALUE,
+        condition: { path: "roll.sum" },
+        routes: { fallback: FLOW_END },
+        valueBranches: [
+          { key: "low", operator: "lt", value: "5", next: "low-step" },
+          { key: "middle", operator: "between", value: "5..10", next: "middle-step" },
+          { key: "high", operator: "gt", value: "10", next: "high-step" }
+        ]
+      }, ...["low", "middle", "high"].map((id) => ({
+        nodeId: `${id}-step`, activityId: id, routes: { next: FLOW_END }
+      }))]
+    });
+
+    await ScConditionalChainActivityService.execute(makeRootActivity(flow, activities), {
+      usage: ScActivityResultTracker.withLastResult({}, { kind: "damage", roll: { sum: total } })
+    });
+    assert.deepEqual(calls, [expected]);
+  });
+}
+
+test("uses the first matching value path and falls back when none match", async() => {
+  const node = ScConditionalChainFlow.normalizeNode({
+    nodeId: "decision",
+    conditionType: FLOW_CONDITION_TYPES.LAST_ACTIVITY_VALUE,
+    condition: { path: "value" },
+    routes: { fallback: "fallback" },
+    valueBranches: [
+      { key: "first", operator: "lte", value: "10", next: "a" },
+      { key: "second", operator: "gte", value: "5", next: "b" }
+    ]
+  });
+  assert.equal(ScConditionalChainFlow.resolveNextNode(node, { kind: "value-branch", key: "first" }), "a");
+  assert.equal(ScConditionalChainFlow.resolveNextNode(node, { kind: "value-fallback" }), "fallback");
+});
+
+test("suppresses child usage cards when the flow policy is enabled", async() => {
+  let receivedMessage;
+  const child = makeChildActivity({
+    id: "child",
+    onUse(_usage, _dialog, message) {
+      receivedMessage = message;
+      return makeUseResults("child");
+    }
+  });
+  const activities = new Map([["child", child]]);
+  const flow = ScConditionalChainFlow.normalizeFlow({
+    startNode: "child-step",
+    suppressChildMessages: true,
+    nodes: [{
+      nodeId: "child-step",
+      activityId: "child",
+      conditionType: FLOW_CONDITION_TYPES.ALWAYS,
+      routes: { next: FLOW_END }
+    }]
+  });
+
+  await ScConditionalChainActivityService.execute(makeRootActivity(flow, activities), {
+    usage: {},
+    dialog: {},
+    message: { data: { flavor: "parent" } }
+  });
+
+  assert.equal(receivedMessage.create, false);
+  assert.deepEqual(receivedMessage.data, { flavor: "parent" });
+});

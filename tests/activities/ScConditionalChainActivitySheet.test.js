@@ -92,7 +92,8 @@ function makeSheet(flow) {
     ["conditional-chain", makeActivity({ id: "conditional-chain", name: "Conditional Chain", type: "sc-conditional-chain" })],
     ["attack", makeActivity({ id: "attack", name: "Attack", type: "attack" })],
     ["contest", makeActivity({ id: "contest", name: "Contest", type: "sc-contest" })],
-    ["grant", makeActivity({ id: "grant", name: "Grant", type: "sc-grant" })]
+    ["grant", makeActivity({ id: "grant", name: "Grant", type: "sc-grant" })],
+    ["macro", makeActivity({ id: "macro", name: "Macro", type: "sc-macro" })]
   ]);
   const activity = {
     id: "conditional-chain",
@@ -180,4 +181,24 @@ test("preserves a manual last-result path while still exposing suggestions", asy
   assert.ok(Array.isArray(node.pathSuggestionGroups));
   assert.ok(suggestionValues(node.pathSuggestionGroups).includes("attack.hit"));
   assert.equal(node.pathIsCustom, true);
+});
+
+test("offers macro return paths for multi-value routing", async() => {
+  const node = await prepareNode(ScConditionalChainFlow.normalizeFlow({
+    startNode: "decision",
+    nodes: [{
+      nodeId: "decision",
+      activityId: "macro",
+      conditionType: FLOW_CONDITION_TYPES.LAST_ACTIVITY_VALUE,
+      condition: { path: "macro.value" },
+      routes: { fallback: FLOW_END },
+      valueBranches: [{ key: "one", operator: "eq", value: "1", next: FLOW_END }]
+    }]
+  }));
+
+  assert.equal(node.isLastActivityValue, true);
+  assert.equal(node.usesPathCondition, true);
+  assert.equal(node.usesBinaryPathCondition, false);
+  assert.ok(suggestionValues(node.pathSuggestionGroups).includes("value"));
+  assert.ok(suggestionValues(node.pathSuggestionGroups).includes("macro.value"));
 });

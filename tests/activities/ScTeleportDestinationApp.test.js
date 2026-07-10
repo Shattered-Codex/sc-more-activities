@@ -43,7 +43,6 @@ const { ScTeleportDestinationApp } = await import("../../scripts/activities/tele
 
 function makeCanvas() {
   const stageHandlers = new Map();
-  const viewListeners = new Map();
   const stageChildren = [];
 
   globalThis.canvas = {
@@ -72,24 +71,12 @@ function makeCanvas() {
         child.parent = null;
       }
     },
-    app: {
-      view: {
-        addEventListener(eventName, handler, options) {
-          viewListeners.set(eventName, { handler, options });
-        },
-        removeEventListener(eventName, handler) {
-          if (viewListeners.get(eventName)?.handler === handler) {
-            viewListeners.delete(eventName);
-          }
-        }
-      }
-    },
     canvasCoordinatesFromClient(event) {
-      return { x: event.clientX + 10, y: event.clientY + 20 };
+      return { x: event.x + 10, y: event.y + 20 };
     }
   };
 
-  return { stageHandlers, viewListeners, stageChildren };
+  return { stageHandlers, stageChildren };
 }
 
 function patchCanvasService(t, calls) {
@@ -120,10 +107,10 @@ function patchCanvasService(t, calls) {
   });
 }
 
-test("places teleport destination from captured canvas pointerup without waiting for stage mouseup", async(t) => {
+test("places teleport destination from the PIXI canvas click event", async(t) => {
   const calls = [];
   patchCanvasService(t, calls);
-  const { stageHandlers, viewListeners } = makeCanvas();
+  const { stageHandlers } = makeCanvas();
   const activity = {
     teleport: {
       snapToGrid: false,
@@ -134,38 +121,17 @@ test("places teleport destination from captured canvas pointerup without waiting
 
   await app._onRender({}, {});
 
-  assert.equal(viewListeners.get("pointerdown")?.options, true);
-  assert.equal(viewListeners.get("pointerup")?.options, true);
-  assert.equal(typeof stageHandlers.get("mouseup"), "function");
+  assert.equal(typeof stageHandlers.get("click"), "function");
 
-  const pointerDownEvent = {
-    button: 0,
-    clientX: 123,
-    clientY: 456,
-    preventDefaultCalled: false,
-    stopPropagationCalled: false,
-    preventDefault() {
-      this.preventDefaultCalled = true;
-    },
-    stopPropagation() {
-      this.stopPropagationCalled = true;
+  const clickEvent = {
+    data: {
+      originalEvent: { button: 0 },
+      getLocalPosition() {
+        return { x: 123, y: 456 };
+      }
     }
   };
-  const pointerUpEvent = {
-    button: 0,
-    clientX: 123,
-    clientY: 456,
-    preventDefaultCalled: false,
-    stopPropagationCalled: false,
-    preventDefault() {
-      this.preventDefaultCalled = true;
-    },
-    stopPropagation() {
-      this.stopPropagationCalled = true;
-    }
-  };
-  viewListeners.get("pointerdown").handler(pointerDownEvent);
-  viewListeners.get("pointerup").handler(pointerUpEvent);
+  stageHandlers.get("click")(clickEvent);
   await Promise.resolve();
   await Promise.resolve();
 
@@ -173,17 +139,35 @@ test("places teleport destination from captured canvas pointerup without waiting
     activity,
     placement: {
       tokenIds: ["target-token"],
-      destination: { x: 133, y: 476 }
+      destination: { x: 123, y: 456 }
     }
   }]);
-  assert.equal(pointerDownEvent.preventDefaultCalled, true);
-  assert.equal(pointerDownEvent.stopPropagationCalled, true);
-  assert.equal(pointerUpEvent.preventDefaultCalled, true);
-  assert.equal(pointerUpEvent.stopPropagationCalled, true);
   assert.equal(app.closed, true);
-  assert.equal(stageHandlers.has("mouseup"), false);
-  assert.equal(viewListeners.has("pointerdown"), false);
-  assert.equal(viewListeners.has("pointerup"), false);
+  assert.equal(stageHandlers.has("click"), false);
+});
+
+test("converts PointerEvent client coordinates for the Foundry canvas fallback", async(t) => {
+  const calls = [];
+  patchCanvasService(t, calls);
+  const { stageHandlers } = makeCanvas();
+  const activity = {
+    teleport: {
+      snapToGrid: false,
+      teleportDistance: 0
+    }
+  };
+  const app = new ScTeleportDestinationApp(activity, [{ id: "target-token" }]);
+
+  await app._onRender({}, {});
+  stageHandlers.get("click")({
+    data: {
+      originalEvent: { button: 0, clientX: 123, clientY: 456 }
+    }
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.deepEqual(calls[0]?.placement.destination, { x: 133, y: 476 });
 });
 
 test("draws a non-interactive teleport range ring and removes it on close", async(t) => {
@@ -198,6 +182,11 @@ test("draws a non-interactive teleport range ring and removes it on close", asyn
 
     lineStyle(width, color, alpha) {
       this.commands.push(["lineStyle", width, color, alpha]);
+      return this;
+    }
+
+    beginFill(color, alpha) {
+      this.commands.push(["beginFill", color, alpha]);
       return this;
     }
 
@@ -240,6 +229,7 @@ test("draws a non-interactive teleport range ring and removes it on close", asyn
   assert.equal(ring.interactive, false);
   assert.deepEqual(ring.commands, [
     ["lineStyle", 3, 0x24b86a, 0.95],
+    ["beginFill", 0x39f08c, 0.2],
     ["drawCircle", 0, 0, 300],
     ["endFill"]
   ]);

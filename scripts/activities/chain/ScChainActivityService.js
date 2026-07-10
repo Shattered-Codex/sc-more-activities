@@ -45,10 +45,13 @@ export class ScChainActivityService {
         lastResult
       );
       try {
+        const childMessage = activity?.chain?.suppressChildMessages === true
+          ? { ...(usageContext.message ?? {}), create: false }
+          : (usageContext.message ?? {});
         childResults = await target.use(
           childUsage,
           usageContext.dialog ?? {},
-          usageContext.message ?? {}
+          childMessage
         );
       } catch (error) {
         ScActivityResultTracker.cancelUsage(childUsage, "child-error");

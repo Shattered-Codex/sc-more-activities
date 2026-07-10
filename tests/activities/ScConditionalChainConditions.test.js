@@ -50,6 +50,19 @@ test("rejects ordering comparisons on non-numeric values", () => {
   assert.equal(result.reason, "not-numeric");
 });
 
+test("compares inclusive numeric ranges and detects interval overlap", () => {
+  assert.deepEqual(ScConditionalChainConditions.compare("between", 5, "5..10"), { valid: true, result: true });
+  assert.deepEqual(ScConditionalChainConditions.compare("between", 10, "5,10"), { valid: true, result: true });
+  assert.equal(ScConditionalChainConditions.compare("between", 11, "5..10").result, false);
+  assert.equal(ScConditionalChainConditions.compare("between", 7, "10..5").valid, false);
+
+  const belowFive = ScConditionalChainConditions.numericInterval("lt", "5");
+  const fiveToTen = ScConditionalChainConditions.numericInterval("between", "5..10");
+  const fourOrMore = ScConditionalChainConditions.numericInterval("gte", "4");
+  assert.equal(ScConditionalChainConditions.intervalsOverlap(belowFive, fiveToTen), false);
+  assert.equal(ScConditionalChainConditions.intervalsOverlap(belowFive, fourOrMore), true);
+});
+
 test("compares equality loosely between numbers and strings", () => {
   assert.equal(ScConditionalChainConditions.compare("eq", 12, "12").result, true);
   assert.equal(ScConditionalChainConditions.compare("eq", "Neutral Good", "Neutral Good").result, true);
@@ -68,7 +81,7 @@ test("rejects unknown operators", () => {
   assert.equal(ScConditionalChainConditions.compare("~=", 1, 1).valid, false);
   assert.equal(ScConditionalChainConditions.isOperator("eq"), true);
   assert.equal(ScConditionalChainConditions.isOperator("weird"), false);
-  assert.deepEqual(Object.values(FLOW_PROPERTY_OPERATORS).sort(), ["eq", "gt", "gte", "includes", "lt", "lte", "ne"]);
+  assert.deepEqual(Object.values(FLOW_PROPERTY_OPERATORS).sort(), ["between", "eq", "gt", "gte", "includes", "lt", "lte", "ne"]);
 });
 
 test("evaluates actor properties end to end", () => {
