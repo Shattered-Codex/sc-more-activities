@@ -1803,36 +1803,89 @@
   width: 100%;
 }
 
+.sc-more-activities .sc-ma-chain-picker .form-fields {
+  align-items: center;
+  display: flex;
+  gap: var(--sc-ma-space-2);
+}
+
+.sc-more-activities .sc-ma-chain-picker select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .sc-more-activities .sc-ma-chain-activity-list {
-  border: 1px solid var(--sc-ma-border-soft);
-  border-radius: 6px;
+  counter-reset: sc-ma-chain-step;
+  display: grid;
+  gap: 0.4rem;
   list-style: none;
   margin: 0;
-  max-height: 8rem;
+  max-height: 12rem;
   overflow: auto;
   padding: 0;
 }
 
-.sc-more-activities .sc-ma-chain-activity-list li {
+.sc-more-activities .sc-ma-chain-activity-row {
   align-items: center;
-  border-bottom: 1px solid var(--sc-ma-border-soft);
+  background: color-mix(in srgb, var(--sc-ma-bg-card-soft) 88%, black 12%);
+  border: 1px solid var(--sc-ma-border-soft);
+  border-radius: 8px;
+  counter-increment: sc-ma-chain-step;
   display: grid;
   gap: var(--sc-ma-space-2);
-  grid-template-columns: minmax(5rem, max-content) 1fr max-content;
-  min-height: 1.75rem;
-  padding: 0.25rem var(--sc-ma-space-2);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 2.25rem;
+  padding: 0.4rem 0.55rem;
 }
 
-.sc-more-activities .sc-ma-chain-activity-list li:last-child {
-  border-bottom: 0;
-}
-
-.sc-more-activities .sc-ma-chain-activity-list code {
-  color: var(--sc-ma-text-strong);
-}
-
-.sc-more-activities .sc-ma-chain-activity-list small {
+.sc-more-activities .sc-ma-chain-activity-row::before {
+  align-items: center;
+  border: 1px solid var(--sc-ma-border-soft);
+  border-radius: 6px;
   color: var(--sc-ma-text-dim);
+  content: counter(sc-ma-chain-step);
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 700;
+  height: 1.45rem;
+  justify-content: center;
+  width: 1.45rem;
+}
+
+.sc-more-activities .sc-ma-chain-activity-row.is-missing {
+  border-color: color-mix(in srgb, var(--sc-ma-danger) 55%, var(--sc-ma-border-soft) 45%);
+}
+
+.sc-more-activities .sc-ma-chain-activity-summary {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem var(--sc-ma-space-2);
+  min-width: 0;
+}
+
+.sc-more-activities .sc-ma-chain-activity-summary strong {
+  color: var(--sc-ma-text-strong);
+  flex: 1 1 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-more-activities .sc-ma-chain-activity-summary :is(code, small) {
+  color: var(--sc-ma-text-dim);
+  font-size: 0.74rem;
+}
+
+.sc-more-activities .sc-ma-chain-activity-missing {
+  color: color-mix(in srgb, var(--sc-ma-danger) 80%, white 20%);
+}
+
+.sc-more-activities .sc-ma-chain-activity-empty {
+  color: var(--sc-ma-text-dim);
+  font-style: italic;
+  padding: 0.6rem;
+  text-align: center;
 }
 
 .sc-more-activities.sc-ma-contest-card {

@@ -4,26 +4,48 @@
   <fieldset>
     <legend>{{ localize "SCMOREACTIVITIES.Activities.ScChain.Sections.Configuration" }}</legend>
 
-    <div class="form-group stacked">
-      <label>{{ localize "SCMOREACTIVITIES.Activities.ScChain.Fields.ActivityIds.Label" }}</label>
-      <textarea name="chain.activityIds" rows="5" spellcheck="false">{{ chain.activityIds }}</textarea>
-      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScChain.Fields.ActivityIds.Hint" }}</p>
+    <div class="form-group stacked sc-ma-chain-picker">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScChain.Fields.ActivityPicker.Label" }}</label>
+      <div class="form-fields">
+        <select data-chain-activity-select>
+          <option value="">{{ localize "SCMOREACTIVITIES.Activities.ScChain.Fields.ActivityPicker.Placeholder" }}</option>
+          {{ selectOptions activityOptions valueAttr="value" labelAttr="label" }}
+        </select>
+        <button type="button" class="unbutton control-button" data-action="sc-add-chain-activity" disabled
+                data-tooltip aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScChain.Fields.ActivityPicker.Add" }}">
+          <i class="fas fa-plus" inert></i>
+        </button>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScChain.Fields.ActivityPicker.Hint" }}</p>
     </div>
 
-    {{#if availableActivities.length}}
-      <div class="form-group stacked">
-        <label>{{ localize "SCMOREACTIVITIES.Activities.ScChain.Fields.AvailableActivities.Label" }}</label>
-        <ol class="sc-ma-chain-activity-list">
-          {{#each availableActivities as |activity|}}
-            <li>
-              <code>{{ activity.id }}</code>
-              <span>{{ activity.name }}</span>
-              <small>{{ activity.type }}</small>
-            </li>
-          {{/each}}
-        </ol>
-      </div>
-    {{/if}}
+    <div class="form-group stacked">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScChain.Fields.ActivityList.Label" }}</label>
+      <textarea name="chain.activityIds" data-chain-activity-ids hidden>{{ chain.activityIds }}</textarea>
+      <ol class="sc-ma-chain-activity-list" data-chain-activity-list>
+        {{#each configuredActivities as |activity|}}
+          <li class="sc-ma-chain-activity-row {{#if activity.missing}}is-missing{{/if}}">
+            <span class="sc-ma-chain-activity-summary">
+              <strong>{{ activity.name }}</strong>
+              {{#if activity.type}}<small>{{ activity.type }}</small>{{/if}}
+              {{#if activity.missing}}
+                <small class="sc-ma-chain-activity-missing">{{ localize "SCMOREACTIVITIES.Activities.ScChain.Fields.ActivityList.Missing" activity=activity.id }}</small>
+              {{else}}
+                <code>{{ activity.id }}</code>
+              {{/if}}
+            </span>
+            <button type="button" class="unbutton control-button" data-action="sc-remove-chain-activity"
+                    data-index="{{ activity.index }}" data-tooltip
+                    aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScChain.Fields.ActivityList.Remove" }}">
+              <i class="fas fa-minus" inert></i>
+            </button>
+          </li>
+        {{else}}
+          <li class="sc-ma-chain-activity-empty">{{ localize "SCMOREACTIVITIES.Activities.ScChain.Fields.ActivityList.Empty" }}</li>
+        {{/each}}
+      </ol>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScChain.Fields.ActivityList.Hint" }}</p>
+    </div>
 
     <div class="form-group">
       <label>{{ localize "SCMOREACTIVITIES.Activities.ScChain.Fields.MaxDepth.Label" }}</label>
