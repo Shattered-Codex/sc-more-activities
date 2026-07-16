@@ -49,6 +49,13 @@ const GROUPS = Object.freeze({
     "attack.fumble",
     "attack.target"
   ]),
+  save: Object.freeze([
+    "save.success",
+    "save.failure",
+    "save.total",
+    "save.dc",
+    "save.ability"
+  ]),
   grant: Object.freeze([
     "activity.checkPassed",
     "activity.createdCount",
@@ -80,7 +87,7 @@ const ACTIVITY_GROUPS = Object.freeze({
   attack: Object.freeze(["common", "attack", "roll", "dice"]),
   damage: Object.freeze(["common", "roll", "dice"]),
   heal: Object.freeze(["common", "roll", "dice"]),
-  save: Object.freeze(["common", "roll", "dice"]),
+  save: Object.freeze(["common", "save", "roll", "dice"]),
   "sc-grant": Object.freeze(["common", "grant", "roll"]),
   "sc-contest": Object.freeze(["common", "contest"]),
   "sc-macro": Object.freeze(["common", "macro"])

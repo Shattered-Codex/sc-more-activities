@@ -133,3 +133,21 @@ test("fails safely on missing paths and invalid operators", () => {
   );
   assert.deepEqual(invalid, { valid: false, reason: "invalid-operator" });
 });
+
+test("rejects null values only when the caller opts into treatNullAsMissing", () => {
+  const source = { success: null };
+
+  const rejected = ScConditionalChainConditions.evaluateProperty(
+    { path: "success", operator: "eq", value: "true" },
+    source,
+    { treatNullAsMissing: true }
+  );
+  assert.deepEqual(rejected, { valid: false, reason: "null-property" });
+
+  const compared = ScConditionalChainConditions.evaluateProperty(
+    { path: "success", operator: "eq", value: "true" },
+    source
+  );
+  assert.equal(compared.valid, true);
+  assert.equal(compared.result, false);
+});

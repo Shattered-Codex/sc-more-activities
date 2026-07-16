@@ -31,6 +31,10 @@ export class ScConditionalChainActivityData extends dnd5e.dataModels.activity.Ba
           required: false,
           initial: false
         }),
+        compactChildCards: new fields.BooleanField({
+          required: false,
+          initial: false
+        }),
         nodes: new fields.ArrayField(new fields.SchemaField({
           nodeId: new fields.StringField({
             required: true,

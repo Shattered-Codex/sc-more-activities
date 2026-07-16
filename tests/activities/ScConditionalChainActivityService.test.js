@@ -9,6 +9,8 @@ globalThis.ui = {
   }
 };
 
+globalThis.game = {};
+
 globalThis.dnd5e = {
   utils: {
     simplifyBonus(formula, data) {
@@ -149,6 +151,196 @@ test("routes to the true branch from a child activity last result", async() => {
   });
 
   assert.deepEqual(calls, ["attack", "grant-hit"]);
+});
+
+test("stops with a warning instead of routing onFalse when the result value is null", async() => {
+  const calls = [];
+  const attack = makeChildActivity({
+    id: "attack",
+    type: "attack",
+    onUse(usage) {
+      ScActivityResultTracker.recordActivityResult(usage, {
+        kind: "attack",
+        success: null,
+        failure: null
+      });
+      calls.push("attack");
+      return makeUseResults("attack");
+    }
+  });
+  const onHit = makeChildActivity({
+    id: "grant-hit",
+    type: "sc-grant",
+    onUse() {
+      calls.push("grant-hit");
+      return makeUseResults("grant-hit");
+    }
+  });
+  const onMiss = makeChildActivity({
+    id: "grant-miss",
+    type: "sc-grant",
+    onUse() {
+      calls.push("grant-miss");
+      return makeUseResults("grant-miss");
+    }
+  });
+
+  const activities = new Map([
+    ["attack", attack],
+    ["grant-hit", onHit],
+    ["grant-miss", onMiss]
+  ]);
+  const flow = ScConditionalChainFlow.normalizeFlow({
+    startNode: "attack-step",
+    nodes: [
+      {
+        nodeId: "attack-step",
+        activityId: "attack",
+        conditionType: FLOW_CONDITION_TYPES.LAST_ACTIVITY_RESULT,
+        condition: { path: "success", operator: "eq", value: "true" },
+        routes: { onTrue: "on-hit", onFalse: "on-miss" }
+      },
+      {
+        nodeId: "on-hit",
+        activityId: "grant-hit",
+        conditionType: FLOW_CONDITION_TYPES.ALWAYS,
+        routes: { next: FLOW_END }
+      },
+      {
+        nodeId: "on-miss",
+        activityId: "grant-miss",
+        conditionType: FLOW_CONDITION_TYPES.ALWAYS,
+        routes: { next: FLOW_END }
+      }
+    ]
+  });
+
+  const warnings = [];
+  const originalWarn = globalThis.ui.notifications.warn;
+  globalThis.ui.notifications.warn = (message) => warnings.push(String(message));
+  try {
+    await ScConditionalChainActivityService.execute(makeRootActivity(flow, activities), {
+      usage: {},
+      dialog: {},
+      message: {}
+    });
+  } finally {
+    globalThis.ui.notifications.warn = originalWarn;
+  }
+
+  assert.deepEqual(calls, ["attack"]);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /null-property/);
+});
+
+test("routes on the cancellation snapshot when a canceled child continues the flow", async() => {
+  const calls = [];
+  const canceled = makeChildActivity({
+    id: "canceled",
+    type: "utility",
+    onUse() {
+      calls.push("canceled");
+      return undefined;
+    }
+  });
+  const onCanceled = makeChildActivity({
+    id: "grant-canceled",
+    type: "sc-grant",
+    onUse() {
+      calls.push("grant-canceled");
+      return makeUseResults("grant-canceled");
+    }
+  });
+  const onFinished = makeChildActivity({
+    id: "grant-finished",
+    type: "sc-grant",
+    onUse() {
+      calls.push("grant-finished");
+      return makeUseResults("grant-finished");
+    }
+  });
+
+  const activities = new Map([
+    ["canceled", canceled],
+    ["grant-canceled", onCanceled],
+    ["grant-finished", onFinished]
+  ]);
+  const flow = ScConditionalChainFlow.normalizeFlow({
+    startNode: "canceled-step",
+    stopOnCancel: false,
+    nodes: [
+      {
+        nodeId: "canceled-step",
+        activityId: "canceled",
+        conditionType: FLOW_CONDITION_TYPES.LAST_ACTIVITY_RESULT,
+        condition: { path: "canceled", operator: "eq", value: "true" },
+        routes: { onTrue: "on-canceled", onFalse: "on-finished" }
+      },
+      {
+        nodeId: "on-canceled",
+        activityId: "grant-canceled",
+        conditionType: FLOW_CONDITION_TYPES.ALWAYS,
+        routes: { next: FLOW_END }
+      },
+      {
+        nodeId: "on-finished",
+        activityId: "grant-finished",
+        conditionType: FLOW_CONDITION_TYPES.ALWAYS,
+        routes: { next: FLOW_END }
+      }
+    ]
+  });
+
+  await ScConditionalChainActivityService.execute(makeRootActivity(flow, activities), {
+    usage: {},
+    dialog: {},
+    message: {}
+  });
+
+  assert.deepEqual(calls, ["canceled", "grant-canceled"]);
+});
+
+test("blocks execution when a save step runs with suppressed child messages", async() => {
+  const calls = [];
+  const save = makeChildActivity({
+    id: "disarm",
+    type: "save",
+    onUse() {
+      calls.push("disarm");
+      return makeUseResults("disarm");
+    }
+  });
+
+  const activities = new Map([["disarm", save]]);
+  const flow = ScConditionalChainFlow.normalizeFlow({
+    startNode: "save-step",
+    suppressChildMessages: true,
+    nodes: [
+      {
+        nodeId: "save-step",
+        activityId: "disarm",
+        conditionType: FLOW_CONDITION_TYPES.ALWAYS,
+        routes: { next: FLOW_END }
+      }
+    ]
+  });
+
+  const warnings = [];
+  const originalWarn = globalThis.ui.notifications.warn;
+  globalThis.ui.notifications.warn = (message) => warnings.push(String(message));
+  try {
+    await ScConditionalChainActivityService.execute(makeRootActivity(flow, activities), {
+      usage: {},
+      dialog: {},
+      message: {}
+    });
+  } finally {
+    globalThis.ui.notifications.warn = originalWarn;
+  }
+
+  assert.deepEqual(calls, []);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /save-suppressed/);
 });
 
 test("resolves @scLast references in the expected value field", async() => {

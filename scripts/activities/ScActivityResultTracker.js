@@ -25,6 +25,18 @@ export class ScActivityResultTracker {
     Hooks.on("dnd5e.preRollDamageV2", (rollConfig) => {
       ScActivityResultTracker.#injectLastResultRollData(rollConfig);
     });
+    Hooks.on("dnd5e.rollDamageV2", (rolls, data) => {
+      ScActivityResultTracker.#recordDamageRoll(data?.subject, rolls);
+    });
+    Hooks.on("dnd5e.rollAttackV2", (rolls, data) => {
+      ScActivityResultTracker.#recordAttackRoll(data?.subject, rolls);
+    });
+    Hooks.on("dnd5e.rollSavingThrow", (rolls, data) => {
+      ScActivityResultTracker.#recordSaveRoll(rolls, data);
+    });
+    Hooks.on("createChatMessage", (message) => {
+      ScActivityResultTracker.#recordSaveMessage(message);
+    });
   }
 
   static withTrackedUsage(usage = {}, activity, lastResult = undefined) {
@@ -197,6 +209,16 @@ export class ScActivityResultTracker {
       };
     }
 
+    if (kind === "save") {
+      snapshot.save = {
+        success,
+        failure,
+        total,
+        dc: hasTarget ? target : null,
+        ability: String(extra?.ability ?? "").trim()
+      };
+    }
+
     return snapshot;
   }
 
@@ -252,7 +274,7 @@ export class ScActivityResultTracker {
     if (!rolls.length) {
       return;
     }
-    const record = ScActivityResultTracker.#pendingRecordFor(rollConfig?.subject);
+    const record = ScActivityResultTracker.#pendingRecordFor(rollConfig?.subject, { requireLastResult: true });
     if (!record || record.lastResult === undefined || record.lastResult === null) {
       return;
     }
@@ -267,16 +289,120 @@ export class ScActivityResultTracker {
     }
   }
 
-  static #pendingRecordFor(activity) {
+  /**
+   * Captures a damage roll initiated from a dnd5e usage card.
+   *
+   * dnd5e configures an activity use on a temporary item clone, but chat-card
+   * buttons resolve the original activity again. Tracking through the official
+   * roll hook keeps conditional chains waiting for — and then receiving — the
+   * result regardless of which instance performs the roll.
+   */
+  static #recordDamageRoll(activity, rolls) {
+    const record = ScActivityResultTracker.#pendingRecordFor(activity);
+    if (!record) {
+      return;
+    }
+
+    record.awaitsAsyncResult = false;
+    ScActivityResultTracker.#finalize(
+      record,
+      ScActivityResultTracker.buildRollSnapshot("damage", rolls)
+    );
+  }
+
+  /**
+   * Mirrors #recordDamageRoll for attack rolls: chat-card attack buttons run
+   * on a freshly resolved activity instance, so the wrapped `rollAttack` on
+   * the used instance may never execute. The official hook covers both paths;
+   * #finalize ignores whichever fires second.
+   */
+  static #recordAttackRoll(activity, rolls) {
+    const record = ScActivityResultTracker.#pendingRecordFor(activity);
+    if (!record || record.activityType !== "attack") {
+      return;
+    }
+
+    record.awaitsAsyncResult = false;
+    ScActivityResultTracker.#finalize(
+      record,
+      ScActivityResultTracker.buildRollSnapshot("attack", rolls)
+    );
+  }
+
+  /**
+   * Captures the saving throw made against a tracked save activity.
+   *
+   * The save is rolled by the *target* actor from the chat card, so it cannot
+   * be matched by activity instance. Pending save records are matched by the
+   * save ability and DC configured on the activity; when either side lacks a
+   * value that criterion is skipped.
+   */
+  static #recordSaveRoll(rolls, data = {}) {
+    const list = Array.isArray(rolls) ? rolls.filter(Boolean) : (rolls ? [rolls] : []);
+    if (!list.length) {
+      return;
+    }
+    const ability = String(data?.ability ?? "").trim();
+    const record = ScActivityResultTracker.#pendingSaveRecord(ability, list);
+    if (!record) {
+      return;
+    }
+
+    record.awaitsAsyncResult = false;
+    ScActivityResultTracker.#finalize(
+      record,
+      ScActivityResultTracker.buildRollSnapshot("save", list, { ability })
+    );
+  }
+
+  /**
+   * Fallback for saving throws rolled on another client: dnd5e roll hooks
+   * only fire locally, but the resulting chat message reaches every client.
+   * The same-client hook path finalizes first when both apply.
+   */
+  static #recordSaveMessage(message) {
+    const flag = message?.flags?.dnd5e?.roll ?? message?.getFlag?.("dnd5e", "roll");
+    if (String(flag?.type ?? "") !== "save") {
+      return;
+    }
+    ScActivityResultTracker.#recordSaveRoll(message?.rolls, { ability: flag?.ability });
+  }
+
+  static #pendingSaveRecord(ability, rolls) {
+    const dc = rolls
+      .map((roll) => Number(roll?.options?.target))
+      .find((value) => Number.isFinite(value)) ?? null;
+    let match = null;
+    for (const record of ScActivityResultTracker.#records.values()) {
+      if (record.finalized || record.activityType !== "save" || !record.awaitsAsyncResult) {
+        continue;
+      }
+      const expectation = record.saveExpectation ?? {};
+      if (expectation.abilities?.length && ability && !expectation.abilities.includes(ability)) {
+        continue;
+      }
+      if (Number.isFinite(expectation.dc) && Number.isFinite(dc) && expectation.dc !== dc) {
+        continue;
+      }
+      match = record;
+    }
+    return match;
+  }
+
+  static #pendingRecordFor(activity, { requireLastResult = false } = {}) {
     if (!activity) {
       return null;
     }
     const trackerKey = ScActivityResultTracker.#trackerKey(activity);
     let match = null;
     for (const record of ScActivityResultTracker.#records.values()) {
-      if (!record.finalized && record.trackerKey === trackerKey && record.lastResult !== undefined) {
-        match = record;
+      if (record.finalized || record.trackerKey !== trackerKey) {
+        continue;
       }
+      if (requireLastResult && record.lastResult === undefined) {
+        continue;
+      }
+      match = record;
     }
     return match;
   }
@@ -316,7 +442,26 @@ export class ScActivityResultTracker {
     if (lastResult !== undefined) {
       record.lastResult = lastResult;
     }
-    ScActivityResultTracker.#wrapAutoResultMethod(activity, record);
+    if (String(activity?.type ?? "").trim() === "save") {
+      ScActivityResultTracker.#prepareSaveTracking(activity, record);
+    } else {
+      ScActivityResultTracker.#wrapAutoResultMethod(activity, record);
+    }
+  }
+
+  /**
+   * Save activities resolve through the target's saving throw, rolled from
+   * the chat card — usually by a different actor and activity instance.
+   * Waiting on `rollDamage` would stall forever for saves without damage,
+   * so the record waits on the saving-throw hook instead. A damage roll from
+   * the card can still finalize the record first (dnd5e.rollDamageV2).
+   */
+  static #prepareSaveTracking(activity, record) {
+    record.awaitsAsyncResult = true;
+    record.saveExpectation = {
+      abilities: Array.from(activity?.save?.ability ?? []).map((entry) => String(entry).trim()).filter(Boolean),
+      dc: Number(activity?.save?.dc?.value)
+    };
   }
 
   static #onPostUseActivity(activity, usageConfig, results) {
@@ -381,7 +526,6 @@ export class ScActivityResultTracker {
         return "rollAttack";
       case "damage":
       case "heal":
-      case "save":
         return "rollDamage";
       default:
         return "";
@@ -448,6 +592,7 @@ export class ScActivityResultTracker {
       instrumented: false,
       useComplete: false,
       lastResult: undefined,
+      saveExpectation: null,
       resolve,
       promise,
       snapshot: ScActivityResultTracker.#baseSnapshot(activity)

@@ -34,14 +34,15 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
     const flow = ScConditionalChainFlow.normalizeFlow(this.activity?.flow);
     const availableActivities = this.#availableActivities();
     const availableActivityIndex = new Map(availableActivities.map((entry) => [entry.id, entry]));
-    const issues = ScConditionalChainFlow.validateFlow(flow, availableActivities.map((entry) => entry.id));
+    const issues = ScConditionalChainFlow.validateFlow(flow, availableActivities);
 
     context.flow = {
       startNode: flow.startNode,
       maxDepth: flow.maxDepth,
       stopOnCancel: flow.stopOnCancel,
       continueOnChildError: flow.continueOnChildError,
-      suppressChildMessages: flow.suppressChildMessages
+      suppressChildMessages: flow.suppressChildMessages,
+      compactChildCards: flow.compactChildCards
     };
     context.policiesExpanded = this.#policiesExpanded;
     context.issues = issues.map((issue) => ScConditionalChainActivityService.describeIssue(issue));

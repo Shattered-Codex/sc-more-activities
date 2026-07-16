@@ -242,6 +242,143 @@ test("leaves untracked rolls and usages without a previous result untouched", as
   await ScActivityResultTracker.resolveUsageResult(activity, usage, makeUseResults());
 });
 
+test("captures the target's saving throw for save activities", async() => {
+  const activity = {
+    ...makeActivity("save"),
+    save: { ability: new Set(["int"]), dc: { value: 22 } }
+  };
+  const usage = ScActivityResultTracker.withTrackedUsage({}, activity);
+
+  Hooks.callAll("dnd5e.preUseActivity", activity, usage);
+  Hooks.callAll("dnd5e.postUseActivity", activity, usage, makeUseResults());
+
+  Hooks.callAll(
+    "dnd5e.rollSavingThrow",
+    [makeRoll({ total: 16, target: 22, targets: [] })],
+    { ability: "int", subject: { uuid: "Actor.target-1" } }
+  );
+
+  const result = await ScActivityResultTracker.resolveUsageResult(activity, usage, makeUseResults());
+  assert.equal(result.kind, "save");
+  assert.equal(result.success, false);
+  assert.equal(result.failure, true);
+  assert.deepEqual(result.save, {
+    success: false,
+    failure: true,
+    total: 16,
+    dc: 22,
+    ability: "int"
+  });
+});
+
+test("ignores saving throws that do not match the pending save activity", async() => {
+  const activity = {
+    ...makeActivity("save"),
+    save: { ability: new Set(["int"]), dc: { value: 22 } }
+  };
+  const usage = ScActivityResultTracker.withTrackedUsage({}, activity);
+
+  Hooks.callAll("dnd5e.preUseActivity", activity, usage);
+  Hooks.callAll("dnd5e.postUseActivity", activity, usage, makeUseResults());
+
+  // Wrong ability and wrong DC: neither may finalize the pending record.
+  Hooks.callAll(
+    "dnd5e.rollSavingThrow",
+    [makeRoll({ total: 25, target: 15, targets: [] })],
+    { ability: "dex", subject: { uuid: "Actor.other" } }
+  );
+  Hooks.callAll(
+    "dnd5e.rollSavingThrow",
+    [makeRoll({ total: 25, target: 15, targets: [] })],
+    { ability: "int", subject: { uuid: "Actor.other" } }
+  );
+
+  Hooks.callAll(
+    "dnd5e.rollSavingThrow",
+    [makeRoll({ total: 25, target: 22, targets: [] })],
+    { ability: "int", subject: { uuid: "Actor.target-1" } }
+  );
+
+  const result = await ScActivityResultTracker.resolveUsageResult(activity, usage, makeUseResults());
+  assert.equal(result.kind, "save");
+  assert.equal(result.success, true);
+  assert.equal(result.save.total, 25);
+});
+
+test("captures saving throws rolled on another client through the chat message fallback", async() => {
+  const activity = {
+    ...makeActivity("save"),
+    save: { ability: new Set(["dex"]), dc: { value: 14 } }
+  };
+  const usage = ScActivityResultTracker.withTrackedUsage({}, activity);
+
+  Hooks.callAll("dnd5e.preUseActivity", activity, usage);
+  Hooks.callAll("dnd5e.postUseActivity", activity, usage, makeUseResults());
+
+  Hooks.callAll("createChatMessage", {
+    flags: { dnd5e: { roll: { type: "save", ability: "dex" } } },
+    rolls: [makeRoll({ total: 17, target: 14, targets: [] })]
+  });
+
+  const result = await ScActivityResultTracker.resolveUsageResult(activity, usage, makeUseResults());
+  assert.equal(result.kind, "save");
+  assert.equal(result.save.success, true);
+  assert.equal(result.save.dc, 14);
+  assert.equal(result.save.ability, "dex");
+});
+
+test("finalizes chat-card damage rolls even when the usage has no previous result", async() => {
+  const activity = makeActivity("damage");
+  const usage = ScActivityResultTracker.withTrackedUsage({}, activity);
+  const runtimeActivity = {
+    ...activity,
+    async rollDamage() {
+      throw new Error("should not be called");
+    }
+  };
+
+  Hooks.callAll("dnd5e.preUseActivity", runtimeActivity, usage);
+  Hooks.callAll("dnd5e.postUseActivity", runtimeActivity, usage, makeUseResults());
+
+  // Chat-card buttons resolve a fresh activity instance with the same ids.
+  const cardActivity = makeActivity("damage");
+  Hooks.callAll(
+    "dnd5e.rollDamageV2",
+    [{ total: 9, formula: "2d6 + 2", dice: [] }],
+    { subject: cardActivity }
+  );
+
+  const result = await ScActivityResultTracker.resolveUsageResult(runtimeActivity, usage, makeUseResults());
+  assert.equal(result.kind, "damage");
+  assert.equal(result.roll.total, 9);
+});
+
+test("finalizes chat-card attack rolls through the official attack hook", async() => {
+  const activity = makeActivity("attack");
+  const usage = ScActivityResultTracker.withTrackedUsage({}, activity);
+  const runtimeActivity = {
+    ...activity,
+    async rollAttack() {
+      throw new Error("should not be called");
+    }
+  };
+
+  Hooks.callAll("dnd5e.preUseActivity", runtimeActivity, usage);
+  Hooks.callAll("dnd5e.postUseActivity", runtimeActivity, usage, makeUseResults());
+
+  const cardActivity = makeActivity("attack");
+  Hooks.callAll(
+    "dnd5e.rollAttackV2",
+    [makeRoll({ total: 18, target: 15, targets: [] })],
+    { subject: cardActivity, ammoUpdate: null }
+  );
+
+  const result = await ScActivityResultTracker.resolveUsageResult(runtimeActivity, usage, makeUseResults());
+  assert.equal(result.kind, "attack");
+  assert.equal(result.attack.hit, true);
+  assert.equal(result.attack.target, 15);
+});
+
 test("returns the latest in-memory activity payload even when it is recorded after postUse finalizes", async() => {
   const activity = makeActivity("sc-contest");
   const usage = ScActivityResultTracker.withTrackedUsage({}, activity);

@@ -49,7 +49,7 @@ export class ScConditionalChainConditions {
     }
   }
 
-  static evaluateProperty(condition = {}, source, { resolveExpected } = {}) {
+  static evaluateProperty(condition = {}, source, { resolveExpected, treatNullAsMissing = false } = {}) {
     if (!ScConditionalChainConditions.isOperator(condition.operator)) {
       return { valid: false, reason: "invalid-operator" };
     }
@@ -57,6 +57,9 @@ export class ScConditionalChainConditions {
     const actual = ScConditionalChainConditions.getPropertyValue(source, condition.path);
     if (actual === undefined) {
       return { valid: false, reason: "missing-property" };
+    }
+    if (treatNullAsMissing && actual === null) {
+      return { valid: false, reason: "null-property" };
     }
 
     const rawExpected = String(condition.value ?? "").trim();

@@ -28,6 +28,7 @@ export class ScConditionalChainFlow {
       stopOnCancel: raw?.stopOnCancel !== false,
       continueOnChildError: raw?.continueOnChildError === true,
       suppressChildMessages: raw?.suppressChildMessages === true,
+      compactChildCards: raw?.compactChildCards === true,
       nodes: nodes.map((node) => ScConditionalChainFlow.normalizeNode(node))
     };
   }
@@ -94,8 +95,11 @@ export class ScConditionalChainFlow {
    * Static validation of a normalized flow. Returns a list of issues; an empty
    * list means the flow is safe to execute. Each issue carries a stable `code`
    * plus enough data to build a localized message.
+   *
+   * `availableActivities` accepts plain id strings or `{ id, type }` entries;
+   * type-aware checks are skipped for entries without a type.
    */
-  static validateFlow(flow, availableActivityIds = []) {
+  static validateFlow(flow, availableActivities = []) {
     const issues = [];
     const nodes = flow?.nodes ?? [];
     if (!nodes.length) {
@@ -121,7 +125,13 @@ export class ScConditionalChainFlow {
       issues.push({ code: "unknown-start", ref: flow.startNode });
     }
 
-    const activityIds = new Set(availableActivityIds ?? []);
+    const activityEntries = (availableActivities ?? []).map((entry) => (
+      typeof entry === "string"
+        ? { id: entry, type: "" }
+        : { id: String(entry?.id ?? "").trim(), type: String(entry?.type ?? "").trim() }
+    ));
+    const activityIds = new Set(activityEntries.map((entry) => entry.id));
+    const activityTypes = new Map(activityEntries.map((entry) => [entry.id, entry.type]));
     for (const node of nodes) {
       if (!node.nodeId) {
         continue;
@@ -130,6 +140,12 @@ export class ScConditionalChainFlow {
 
       if (node.activityId && !activityIds.has(node.activityId)) {
         issues.push({ code: "unknown-activity", nodeId: nodeName, ref: node.activityId });
+      }
+
+      // A save activity resolves through its chat-card button; with child
+      // messages suppressed the saving throw could never be rolled.
+      if (flow.suppressChildMessages && activityTypes.get(node.activityId) === "save") {
+        issues.push({ code: "save-suppressed", nodeId: nodeName });
       }
 
       for (const route of ScConditionalChainFlow.#relevantRoutes(node)) {

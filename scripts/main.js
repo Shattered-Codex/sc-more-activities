@@ -13,6 +13,7 @@ import { ModuleSettingsRegistrar } from "./settings/ModuleSettingsRegistrar.js";
 import { MoreActivitiesMigrationService } from "./migration/MoreActivitiesMigrationService.js";
 import { Logger } from "./support/Logger.js";
 import { ScActivityResultTracker } from "./activities/ScActivityResultTracker.js";
+import { ScConditionalChainCardCustomizer } from "./activities/conditional-chain/ScConditionalChainCardCustomizer.js";
 
 const registry = new ActivityRegistry();
 const registrationApi = new RegistrationApi({ registry });
@@ -30,6 +31,7 @@ Hooks.once("init", () => {
   }
 
   ScActivityResultTracker.registerHooks();
+  ScConditionalChainCardCustomizer.registerHook();
   ScContestActivityService.registerQueries();
   ScCanvasActivityService.registerQueries();
   registry.beginCollection();
