@@ -29,7 +29,7 @@ export class ScConditionalChainActivityService {
     const flow = ScConditionalChainFlow.normalizeFlow(activity?.flow);
     const issues = ScConditionalChainFlow.validateFlow(
       flow,
-      ScConditionalChainActivityService.#availableActivityIds(activity)
+      ScConditionalChainActivityService.#availableActivities(activity)
     );
     if (issues.length) {
       ScConditionalChainActivityService.#reportIssues(issues);
@@ -87,12 +87,12 @@ export class ScConditionalChainActivityService {
     }
   }
 
-  static #availableActivityIds(activity) {
+  static #availableActivities(activity) {
     const activities = activity?.item?.system?.activities;
     const values = typeof activities?.values === "function" ? activities.values() : activities;
     return Array.from(values ?? [])
       .filter((entry) => entry?.id && entry.id !== activity?.id)
-      .map((entry) => entry.id);
+      .map((entry) => ({ id: entry.id, type: entry.type }));
   }
 
   static describeIssue(issue) {
@@ -155,7 +155,14 @@ export class ScConditionalChainActivityService {
     try {
       const childMessage = flow.suppressChildMessages
         ? { ...(usageContext.message ?? {}), create: false }
-        : (usageContext.message ?? {});
+        : {
+          ...(usageContext.message ?? {}),
+          data: {
+            ...(usageContext.message?.data ?? {}),
+            flags: { ...(usageContext.message?.data?.flags ?? {}) }
+          }
+        };
+      ScConditionalChainActivityService.#configureChildMessage(childMessage, flow, target);
       childResults = await target.use(
         childUsage,
         usageContext.dialog ?? {},
@@ -185,16 +192,34 @@ export class ScConditionalChainActivityService {
     }
 
     if (childResults === undefined) {
+      // Replace the previous step's result with the cancellation snapshot so
+      // later "last activity result" nodes never evaluate stale data.
       ScActivityResultTracker.cancelUsage(childUsage, "child-canceled");
       return {
         proceed: true,
-        lastResult: undefined
+        lastResult: await ScActivityResultTracker.resolveUsageResult(target, childUsage, undefined)
       };
     }
 
     return {
       proceed: true,
       lastResult: await ScActivityResultTracker.resolveUsageResult(target, childUsage, childResults)
+    };
+  }
+
+  static #configureChildMessage(message, flow, target) {
+    if (!flow.compactChildCards || message.create === false) {
+      return;
+    }
+
+    message.data ??= {};
+    message.data.flags = { ...(message.data.flags ?? {}) };
+    message.data.flags[Constants.MODULE_ID] = {
+      ...(message.data.flags[Constants.MODULE_ID] ?? {}),
+      conditionalChainCard: {
+        compact: true,
+        activityName: String(target?.name ?? target?.id ?? "").trim()
+      }
     };
   }
 
@@ -230,8 +255,11 @@ export class ScConditionalChainActivityService {
     }
 
     const actor = ScConditionalChainActivityService.#resolveActor(activity);
+    // Result snapshots use null for "unknown" (e.g. a save or attack whose
+    // outcome was never resolved); fail loudly instead of routing onFalse.
     const evaluation = ScConditionalChainConditions.evaluateProperty(node.condition, lastResult, {
-      resolveExpected: (raw) => ScConditionalChainActivityService.#resolveExpectedValue(activity, actor, raw, lastResult)
+      resolveExpected: (raw) => ScConditionalChainActivityService.#resolveExpectedValue(activity, actor, raw, lastResult),
+      treatNullAsMissing: true
     });
     if (!evaluation.valid) {
       ScConditionalChainActivityService.#warnFormat(
@@ -261,7 +289,8 @@ export class ScConditionalChainActivityService {
         operator: branch.operator,
         value: branch.value
       }, lastResult, {
-        resolveExpected: (raw) => ScConditionalChainActivityService.#resolveExpectedValue(activity, actor, raw, lastResult)
+        resolveExpected: (raw) => ScConditionalChainActivityService.#resolveExpectedValue(activity, actor, raw, lastResult),
+        treatNullAsMissing: true
       });
       if (!evaluation.valid) {
         ScConditionalChainActivityService.#warnFormat(

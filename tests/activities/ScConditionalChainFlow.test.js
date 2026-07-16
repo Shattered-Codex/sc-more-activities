@@ -115,6 +115,24 @@ test("detects references to missing activities", () => {
   assert.equal(issues[0].ref, "deleted");
 });
 
+test("rejects save steps when child chat cards are suppressed", () => {
+  const flow = makeFlow({
+    suppressChildMessages: true,
+    nodes: [{ nodeId: "a", activityId: "disarm", routes: { next: FLOW_END } }]
+  });
+
+  const issues = ScConditionalChainFlow.validateFlow(flow, [{ id: "disarm", type: "save" }]);
+  assert.deepEqual(codes(issues), ["save-suppressed"]);
+
+  const withCards = makeFlow({
+    nodes: [{ nodeId: "a", activityId: "disarm", routes: { next: FLOW_END } }]
+  });
+  assert.deepEqual(ScConditionalChainFlow.validateFlow(withCards, [{ id: "disarm", type: "save" }]), []);
+
+  // Plain id strings carry no type information, so the check is skipped.
+  assert.deepEqual(ScConditionalChainFlow.validateFlow(flow, ["disarm"]), []);
+});
+
 test("detects unset, unknown and self routes", () => {
   const flow = ScConditionalChainFlow.normalizeFlow({
     startNode: "a",

@@ -76,9 +76,12 @@ export class ScChainActivityService {
         return;
       }
 
-      if (childResults !== undefined) {
-        lastResult = await ScActivityResultTracker.resolveUsageResult(target, childUsage, childResults);
+      // A canceled child (stopOnCancel off) resolves to its cancellation
+      // snapshot so `@scLast` never carries a stale result forward.
+      if (childResults === undefined) {
+        ScActivityResultTracker.cancelUsage(childUsage, "child-canceled");
       }
+      lastResult = await ScActivityResultTracker.resolveUsageResult(target, childUsage, childResults);
     }
   }
 
