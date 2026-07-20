@@ -1,64 +1,96 @@
 <div class="sc-ma-placement sc-ma-movement-preview">
-  <div class="sc-ma-placement-summary">
-    <span>{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Origin" }}: {{ originName }}</span>
-    <span>{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Type" }}: {{ movementTypeLabel }}</span>
-    <span>{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Distance" }}: {{ movementDistance }}</span>
-    <span>
-      {{#if hasRangeLimit}}
-        {{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Range" }}: {{ maxRange }}
-      {{else}}
-        {{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.RangeUnlimited" }}
-      {{/if}}
-    </span>
-  </div>
+  <header class="sc-ma-mv-origin">
+    <i class="fas fa-crosshairs" aria-hidden="true"></i>
+    <div class="sc-ma-mv-origin-text">
+      <span class="sc-ma-mv-label">{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Origin" }}</span>
+      <strong class="sc-ma-mv-origin-name">{{ originName }}</strong>
+    </div>
+    <span class="sc-ma-mv-badge {{#if isPush}}is-push{{/if}}{{#if isPull}}is-pull{{/if}}">{{ movementTypeLabel }}</span>
+  </header>
 
-  <div class="sc-ma-placement-summary">
-    <span>{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Targets" }}: {{ targetCount }}</span>
-    <span>{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Eligible" }}: {{ eligibleCount }}</span>
-    <span>{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.MaxTargets" }}: {{ maxTargets }}</span>
-  </div>
-
-  <div class="form-group">
-    <label>{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.AddTarget" }}</label>
-    <div class="form-fields">
-      <select name="targetId" {{#if isSubmitting}}disabled{{/if}}>
-        <option value="">{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.SelectTarget" }}</option>
-        {{#if tokenGroups.selfTokens.length}}
-          <optgroup label="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Self" }}">
-            {{#each tokenGroups.selfTokens as |token|}}
-              <option value="{{ token.id }}">{{ token.name }} ({{ token.distance }})</option>
-            {{/each}}
-          </optgroup>
-        {{/if}}
-        {{#if tokenGroups.otherTokens.length}}
-          <optgroup label="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.OtherTokens" }}">
-            {{#each tokenGroups.otherTokens as |token|}}
-              <option value="{{ token.id }}">{{ token.name }} ({{ token.distance }})</option>
-            {{/each}}
-          </optgroup>
-        {{/if}}
-      </select>
+  <div class="sc-ma-mv-stats">
+    <div class="sc-ma-mv-stat">
+      <span class="sc-ma-mv-label">{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Distance" }}</span>
+      <span class="sc-ma-mv-value">{{ movementDistance }}</span>
+    </div>
+    <div class="sc-ma-mv-stat">
+      <span class="sc-ma-mv-label">{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Range" }}</span>
+      <span class="sc-ma-mv-value">{{ rangeLabel }}</span>
+    </div>
+    <div class="sc-ma-mv-stat">
+      <span class="sc-ma-mv-label">{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Targets" }}</span>
+      <span class="sc-ma-mv-value">{{ targetCount }}<small>/{{ maxTargets }}</small></span>
+    </div>
+    <div class="sc-ma-mv-stat">
+      <span class="sc-ma-mv-label">{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Eligible" }}</span>
+      <span class="sc-ma-mv-value {{#unless eligibleCount}}is-empty{{/unless}}">{{ eligibleCount }}</span>
     </div>
   </div>
 
-  <div class="sc-ma-placement-list">
-    {{#each targets as |target|}}
-      <div class="sc-ma-placement-row {{#unless target.inRange}}is-out-of-range{{/unless}}">
-        <span>{{ target.name }}</span>
-        <span>{{ target.distance }} · {{ target.statusLabel }}</span>
-        <button type="button" class="sc-ma-target-delete" data-index="{{ target.index }}" title="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.RemoveTarget" }}" {{#if ../isSubmitting}}disabled{{/if}}>
-          <i class="fas fa-trash"></i>
+  {{#if requiresMovementChoice}}
+    <section class="sc-ma-mv-section">
+      <h4 class="sc-ma-mv-section-title">{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Type" }}</h4>
+      <div class="sc-ma-mv-segmented" role="group">
+        <button type="button" data-movement-type="push" class="{{#if isPush}}placing{{/if}}" aria-pressed="{{isPush}}" {{#if isSubmitting}}disabled{{/if}}>
+          <i class="fas fa-arrow-right" aria-hidden="true"></i>
+          {{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.ChoosePush" }}
+        </button>
+        <button type="button" data-movement-type="pull" class="{{#if isPull}}placing{{/if}}" aria-pressed="{{isPull}}" {{#if isSubmitting}}disabled{{/if}}>
+          <i class="fas fa-arrow-left" aria-hidden="true"></i>
+          {{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.ChoosePull" }}
         </button>
       </div>
-    {{else}}
-      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.Canvas.Warning.MissingTargets" }}</p>
-    {{/each}}
-  </div>
+    </section>
+  {{/if}}
+
+  <section class="sc-ma-mv-section">
+    <h4 class="sc-ma-mv-section-title">
+      {{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Targets" }}
+      <button type="button" class="sc-ma-movement-sync-targets sc-ma-mv-ghost" {{#if isSubmitting}}disabled{{/if}}>
+        <i class="fas fa-bullseye" aria-hidden="true"></i>
+        {{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.UseCurrentTargets" }}
+      </button>
+    </h4>
+
+    <select name="targetId" class="sc-ma-mv-picker" aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.AddTarget" }}" {{#if isSubmitting}}disabled{{/if}}>
+      <option value="">{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.SelectTarget" }}</option>
+      {{#if tokenGroups.selfTokens.length}}
+        <optgroup label="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Self" }}">
+          {{#each tokenGroups.selfTokens as |token|}}
+            <option value="{{ token.id }}">{{ token.name }} ({{ token.distance }})</option>
+          {{/each}}
+        </optgroup>
+      {{/if}}
+      {{#if tokenGroups.otherTokens.length}}
+        <optgroup label="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.OtherTokens" }}">
+          {{#each tokenGroups.otherTokens as |token|}}
+            <option value="{{ token.id }}">{{ token.name }} ({{ token.distance }})</option>
+          {{/each}}
+        </optgroup>
+      {{/if}}
+    </select>
+
+    <div class="sc-ma-placement-list">
+      {{#each targets as |target|}}
+        <div class="sc-ma-placement-row {{#unless target.inRange}}is-out-of-range{{/unless}}">
+          <span class="sc-ma-mv-target-name">{{ target.name }}</span>
+          <span class="sc-ma-mv-target-distance">{{ target.distance }}</span>
+          <span class="sc-ma-mv-status {{#if target.inRange}}is-ok{{else}}is-bad{{/if}}">{{ target.statusLabel }}</span>
+          <button type="button" class="sc-ma-target-delete" data-index="{{ target.index }}" aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.RemoveTarget" }}" data-tooltip="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.RemoveTarget" }}" {{#if ../isSubmitting}}disabled{{/if}}>
+            <i class="fas fa-trash" aria-hidden="true"></i>
+          </button>
+        </div>
+      {{else}}
+        <p class="sc-ma-mv-empty">{{ localize "SCMOREACTIVITIES.Activities.Canvas.Warning.MissingTargets" }}</p>
+      {{/each}}
+    </div>
+  </section>
 
   {{#if requiresSelfDirection}}
-    <div class="sc-ma-placement-controls">
-      <button type="button" class="sc-ma-movement-choose-self-direction {{#if isChoosingSelfDirection}}placing{{/if}}" {{#if isSubmitting}}disabled{{/if}}>
-        <i class="fas fa-location-arrow"></i>
+    <section class="sc-ma-mv-section">
+      <h4 class="sc-ma-mv-section-title">{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.SelfDirection" }}</h4>
+      <button type="button" class="sc-ma-movement-choose-self-direction sc-ma-mv-wide {{#if isChoosingSelfDirection}}placing{{/if}} {{#if hasSelfDirection}}is-ready{{/if}}" {{#if isSubmitting}}disabled{{/if}}>
+        <i class="fas {{#if hasSelfDirection}}fa-check{{else}}fa-location-arrow{{/if}}" aria-hidden="true"></i>
         {{#if isChoosingSelfDirection}}
           {{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.ChoosingSelfDirection" }}
         {{else if hasSelfDirection}}
@@ -67,21 +99,22 @@
           {{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.ChooseSelfDirection" }}
         {{/if}}
       </button>
-    </div>
+    </section>
   {{/if}}
 
-  <div class="sc-ma-placement-controls">
-    <button type="button" class="sc-ma-movement-sync-targets" {{#if isSubmitting}}disabled{{/if}}>
-      <i class="fas fa-bullseye"></i>
-      {{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.UseCurrentTargets" }}
-    </button>
-    <button type="button" class="sc-ma-movement-confirm" {{#unless canExecute}}disabled{{/unless}}>
-      <i class="fas fa-play"></i>
-      {{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Execute" }}
-    </button>
-    <button type="button" class="sc-ma-movement-cancel" {{#if isSubmitting}}disabled{{/if}}>
-      <i class="fas fa-times"></i>
-      {{ localize "SCMOREACTIVITIES.Actions.Cancel" }}
-    </button>
-  </div>
+  <footer class="sc-ma-mv-footer">
+    {{#if blockReason}}
+      <p class="sc-ma-mv-block-reason"><i class="fas fa-circle-exclamation" aria-hidden="true"></i> {{ blockReason }}</p>
+    {{/if}}
+    <div class="sc-ma-mv-actions">
+      <button type="button" class="sc-ma-movement-cancel" {{#if isSubmitting}}disabled{{/if}}>
+        <i class="fas fa-times" aria-hidden="true"></i>
+        {{ localize "SCMOREACTIVITIES.Actions.Cancel" }}
+      </button>
+      <button type="button" class="sc-ma-movement-confirm sc-ma-mv-primary" {{#unless canExecute}}disabled{{/unless}}>
+        <i class="fas fa-play" aria-hidden="true"></i>
+        {{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Execute" }}
+      </button>
+    </div>
+  </footer>
 </div>

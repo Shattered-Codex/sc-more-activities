@@ -267,7 +267,7 @@ export class MoreActivitiesMigrationConverter {
   static #convertMovement(activitySource, context, includeSource) {
     const targetType = LEGACY_MORE_ACTIVITIES_TARGET_TYPES.movement;
     const movementType = String(activitySource?.movementType ?? "push").trim().toLowerCase();
-    if (!["push", "pull"].includes(movementType)) {
+    if (!["push", "pull", "either"].includes(movementType)) {
       return MoreActivitiesMigrationConverter.#blocked(
         "movement",
         targetType,
@@ -646,4 +646,3 @@ export class MoreActivitiesMigrationConverter {
     return JSON.parse(JSON.stringify(value));
   }
 }
-

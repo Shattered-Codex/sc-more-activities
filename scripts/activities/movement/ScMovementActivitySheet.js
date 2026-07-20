@@ -57,6 +57,10 @@ export class ScMovementActivitySheet extends dnd5e.applications.activity.Activit
       {
         value: MOVEMENT_TYPES.PULL,
         label: game.i18n.localize("SCMOREACTIVITIES.Activities.ScMovement.Fields.Type.Choices.Pull")
+      },
+      {
+        value: MOVEMENT_TYPES.EITHER,
+        label: game.i18n.localize("SCMOREACTIVITIES.Activities.ScMovement.Fields.Type.Choices.Either")
       }
     ];
   }

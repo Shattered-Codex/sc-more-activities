@@ -49,6 +49,29 @@ test("blocks complex legacy grant activities", () => {
   assert.equal(result.reason, "unsupported-complex-grant");
 });
 
+test("preserves the runtime direction choice when migrating legacy movement", () => {
+  const result = MoreActivitiesMigrationConverter.convert({
+    _id: "movement1",
+    type: "movement",
+    name: "Legacy Movement",
+    movementType: "either",
+    movementDistance: 10,
+    targetRange: 30,
+    maxTargets: 1
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.targetType, "sc-movement");
+  assert.deepEqual(result.convertedSource.movement, {
+    targetSource: "targets",
+    type: "either",
+    distance: 10,
+    maxRange: 30,
+    maxTargets: 1,
+    snapToGrid: true
+  });
+});
+
 test("maps legacy advancement ids into sc-advancement selections", () => {
   const result = MoreActivitiesMigrationConverter.convert({
     _id: "adv1",

@@ -56,7 +56,7 @@ The goal is to preserve the value of richer activity workflows while shaping the
 - `sc-grant`: grant item-related rewards or support item flows
 - `sc-advancement`: drive item-linked advancement or progression flows
 - `sc-teleport`: move tokens through a guided teleport workflow
-- `sc-movement`: push, pull, or reposition tokens with preview support
+- `sc-movement`: push or pull tokens, with an optional direction choice at use time and preview support
 - `sc-wall`: create wall previews and GM-mediated wall placement
 
 ## Asset Credits

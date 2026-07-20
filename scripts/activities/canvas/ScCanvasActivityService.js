@@ -46,11 +46,15 @@ export class ScCanvasActivityService {
     }
   }
 
-  static async executeMovement(activity, { tokenIds = null, originTokenId = null, selfDirectionPoint = null } = {}) {
+  static async executeMovement(
+    activity,
+    { tokenIds = null, originTokenId = null, selfDirectionPoint = null, movementType = null } = {}
+  ) {
     try {
       const request = ScCanvasActivityService.#buildMovementRequest(activity, {
         originTokenId,
         selfDirectionPoint,
+        movementType,
         tokenIds,
         useExplicitTokenIds: Array.isArray(tokenIds)
       });
@@ -68,11 +72,18 @@ export class ScCanvasActivityService {
 
   static getMovementPreviewData(
     activity,
-    { tokenIds = null, originTokenId = null, selfDirectionPoint = null, useExplicitTokenIds = false } = {}
+    {
+      tokenIds = null,
+      originTokenId = null,
+      selfDirectionPoint = null,
+      movementType = null,
+      useExplicitTokenIds = false
+    } = {}
   ) {
     return ScCanvasActivityService.#movementOperationData(activity, {
       originTokenId,
       selfDirectionPoint,
+      movementType,
       tokenIds,
       useExplicitTokenIds,
       requireTargets: false
@@ -343,11 +354,26 @@ export class ScCanvasActivityService {
 
   static #buildMovementRequest(
     activity,
-    { tokenIds = null, originTokenId = null, selfDirectionPoint = null, useExplicitTokenIds = false } = {}
+    {
+      tokenIds = null,
+      originTokenId = null,
+      selfDirectionPoint = null,
+      movementType = null,
+      useExplicitTokenIds = false
+    } = {}
   ) {
+    if (activity?.movement?.type === MOVEMENT_TYPES.EITHER
+      && ![MOVEMENT_TYPES.PUSH, MOVEMENT_TYPES.PULL].includes(movementType)) {
+      throw new Error(Constants.localize(
+        "SCMOREACTIVITIES.Activities.ScMovement.Warning.MissingMovementType",
+        "Choose whether to push or pull the targets."
+      ));
+    }
+
     const operation = ScCanvasActivityService.#movementOperationData(activity, {
       originTokenId,
       selfDirectionPoint,
+      movementType,
       tokenIds,
       useExplicitTokenIds,
       requireTargets: true
@@ -362,6 +388,7 @@ export class ScCanvasActivityService {
 
     return ScCanvasActivityService.#request("movement", activity, operation.scene, {
       originTokenId: operation.origin.id,
+      movementType: operation.config.type,
       selfDirectionPoint: operation.selfDirectionPoint,
       skipped: operation.skipped,
       tokenIds: operation.targets.map((entry) => entry.token.id),
@@ -373,6 +400,7 @@ export class ScCanvasActivityService {
     tokenIds = null,
     originTokenId = null,
     selfDirectionPoint = null,
+    movementType = null,
     useExplicitTokenIds = false,
     requireTargets = true
   } = {}) {
@@ -392,7 +420,7 @@ export class ScCanvasActivityService {
       maxTargets: Math.max(1, Number(config.maxTargets ?? 1) || 1),
       snapToGrid: config.snapToGrid !== false,
       targetSource: config.targetSource ?? CANVAS_TARGET_SOURCES.TARGETS,
-      type: config.type === MOVEMENT_TYPES.PULL ? MOVEMENT_TYPES.PULL : MOVEMENT_TYPES.PUSH
+      type: ScCanvasActivityService.#movementType(config.type, movementType)
     };
 
     const targets = useExplicitTokenIds
@@ -691,7 +719,9 @@ export class ScCanvasActivityService {
       );
     }
 
-    await scene.updateEmbeddedDocuments("Token", updates, { animate: false });
+    await scene.updateEmbeddedDocuments("Token", updates, {
+      animate: payload.operation === "movement"
+    });
     return {
       ok: true,
       count: updates.length,
@@ -840,6 +870,13 @@ export class ScCanvasActivityService {
 
   static #serverMovementUpdates(scene, activity, payload) {
     const config = activity?.movement ?? {};
+    if (config.type === MOVEMENT_TYPES.EITHER
+      && ![MOVEMENT_TYPES.PUSH, MOVEMENT_TYPES.PULL].includes(payload.movementType)) {
+      return ScCanvasActivityService.#failure(
+        "SCMOREACTIVITIES.Activities.Canvas.Warning.InvalidRequest",
+        "The canvas operation request is no longer valid."
+      );
+    }
     const origin = scene.tokens?.get(payload.originTokenId);
     const targets = ScCanvasActivityService.#limitedTargets(
       ScCanvasActivityService.#tokenDocumentsFromIds(scene, payload.tokenIds),
@@ -858,7 +895,7 @@ export class ScCanvasActivityService {
       ScCanvasActivityService.#validPoint(payload.selfDirectionPoint)
     );
     const movementPixels = ScCanvasActivityService.#distanceToPixels(config.distance ?? 5, scene);
-    const movementType = config.type === MOVEMENT_TYPES.PULL ? MOVEMENT_TYPES.PULL : MOVEMENT_TYPES.PUSH;
+    const movementType = ScCanvasActivityService.#movementType(config.type, payload.movementType);
     const maxRange = Number(config.maxRange ?? 0);
     const updates = [];
     const skipped = [];
@@ -1199,6 +1236,16 @@ export class ScCanvasActivityService {
     const y = targetPoint.y - originPoint.y;
     const length = Math.hypot(x, y);
     return length > 0 ? { x: x / length, y: y / length } : null;
+  }
+
+  static #movementType(configuredType, requestedType) {
+    if (configuredType === MOVEMENT_TYPES.PULL) {
+      return MOVEMENT_TYPES.PULL;
+    }
+    if (configuredType === MOVEMENT_TYPES.EITHER && requestedType === MOVEMENT_TYPES.PULL) {
+      return MOVEMENT_TYPES.PULL;
+    }
+    return MOVEMENT_TYPES.PUSH;
   }
 
   static #validSegments(segments) {
