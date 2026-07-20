@@ -159,6 +159,46 @@ test("movement preview projects an explicitly selected origin target using an ex
   assert.deepEqual(preview.updates, [{ id: origin.id, x: 0, y: 300 }]);
 });
 
+test("movement preview applies either choice as push away from the origin", (t) => {
+  const origin = makeToken({ id: "origin-token", x: 100, y: 100 });
+  const target = makeToken({ id: "target-token", x: 300, y: 100 });
+  const scene = makeScene([origin, target]);
+  installCanvasGlobals(t, scene);
+
+  const preview = ScCanvasActivityService.getMovementPreviewData(
+    makeActivity({ type: MOVEMENT_TYPES.EITHER }),
+    {
+      movementType: MOVEMENT_TYPES.PUSH,
+      originTokenId: origin.id,
+      tokenIds: [target.id],
+      useExplicitTokenIds: true
+    }
+  );
+
+  assert.equal(preview.config.type, MOVEMENT_TYPES.PUSH);
+  assert.deepEqual(preview.updates, [{ id: target.id, x: 500, y: 100 }]);
+});
+
+test("movement preview applies either choice as pull toward the origin", (t) => {
+  const origin = makeToken({ id: "origin-token", x: 100, y: 100 });
+  const target = makeToken({ id: "target-token", x: 300, y: 100 });
+  const scene = makeScene([origin, target]);
+  installCanvasGlobals(t, scene);
+
+  const preview = ScCanvasActivityService.getMovementPreviewData(
+    makeActivity({ type: MOVEMENT_TYPES.EITHER }),
+    {
+      movementType: MOVEMENT_TYPES.PULL,
+      originTokenId: origin.id,
+      tokenIds: [target.id],
+      useExplicitTokenIds: true
+    }
+  );
+
+  assert.equal(preview.config.type, MOVEMENT_TYPES.PULL);
+  assert.deepEqual(preview.updates, [{ id: target.id, x: 100, y: 100 }]);
+});
+
 test("movement execution sends explicit self direction through the validated canvas request", async(t) => {
   const actor = { id: "actor-1", uuid: "Actor.actor-1" };
   const origin = makeToken({ id: "origin-token", name: "Origin", x: 200, y: 300, actor });
@@ -219,6 +259,56 @@ test("movement execution sends explicit self direction through the validated can
   assert.deepEqual(updates, [{
     documentName: "Token",
     documents: [{ _id: origin.id, x: 200, y: 500 }],
+    options: { animate: false }
+  }]);
+});
+
+test("movement execution validates and applies the push choice for either movement", async(t) => {
+  const actor = { id: "actor-1", uuid: "Actor.actor-1" };
+  const origin = makeToken({ id: "origin-token", x: 100, y: 100, actor });
+  const target = makeToken({ id: "target-token", x: 300, y: 100 });
+  const scene = makeScene([origin, target]);
+  const updates = [];
+  scene.updateEmbeddedDocuments = async(documentName, documents, options) => {
+    updates.push({ documentName, documents, options });
+    return documents;
+  };
+  installCanvasGlobals(t, scene);
+
+  const activity = {
+    uuid: "Activity.either-movement",
+    actor,
+    movement: {
+      distance: 10,
+      maxRange: 0,
+      maxTargets: 1,
+      snapToGrid: false,
+      targetSource: CANVAS_TARGET_SOURCES.TARGETS,
+      type: MOVEMENT_TYPES.EITHER
+    }
+  };
+
+  globalThis.game.user.isGM = true;
+  globalThis.game.scenes = { get: (id) => id === scene.id ? scene : null };
+  globalThis.game.users = { get: (id) => id === globalThis.game.user.id ? globalThis.game.user : null };
+  globalThis.ui = { notifications: { info() {}, warn() {}, error() {} } };
+  globalThis.fromUuid = async(uuid) => uuid === activity.uuid ? activity : null;
+
+  t.after(() => {
+    delete globalThis.fromUuid;
+    delete globalThis.ui;
+  });
+
+  const result = await ScCanvasActivityService.executeMovement(activity, {
+    movementType: MOVEMENT_TYPES.PUSH,
+    originTokenId: origin.id,
+    tokenIds: [target.id]
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(updates, [{
+    documentName: "Token",
+    documents: [{ _id: target.id, x: 500, y: 100 }],
     options: { animate: false }
   }]);
 });

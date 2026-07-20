@@ -29,6 +29,8 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
       ...options
     });
     this.activity = activity;
+    this.requiresMovementChoice = activity?.movement?.type === MOVEMENT_TYPES.EITHER;
+    this.movementType = this.requiresMovementChoice ? null : activity?.movement?.type;
     this.originTokenId = ScCanvasActivityService.getOriginTokenDocument(activity)?.id ?? null;
     this.selectedTargetIds = [];
     this.previewTemplate = null;
@@ -57,6 +59,9 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
         eligibleCount: 0,
         targets: [],
         tokenGroups: { selfTokens: [], otherTokens: [] },
+        requiresMovementChoice: this.requiresMovementChoice,
+        isPush: false,
+        isPull: false,
         requiresSelfDirection: false,
         hasSelfDirection: false,
         isChoosingSelfDirection: false,
@@ -69,9 +74,14 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
     return {
       isSubmitting: this.isSubmitting,
       originName: preview.origin?.name ?? preview.origin?.document?.name ?? "",
-      movementTypeLabel: preview.config.type === MOVEMENT_TYPES.PULL
-        ? Constants.localize("SCMOREACTIVITIES.Activities.ScMovement.Fields.Type.Choices.Pull", "Pull")
-        : Constants.localize("SCMOREACTIVITIES.Activities.ScMovement.Fields.Type.Choices.Push", "Push"),
+      movementTypeLabel: this.requiresMovementChoice && !this.movementType
+        ? Constants.localize("SCMOREACTIVITIES.Activities.ScMovement.Fields.Type.Choices.Either", "Either")
+        : preview.config.type === MOVEMENT_TYPES.PULL
+          ? Constants.localize("SCMOREACTIVITIES.Activities.ScMovement.Fields.Type.Choices.Pull", "Pull")
+          : Constants.localize("SCMOREACTIVITIES.Activities.ScMovement.Fields.Type.Choices.Push", "Push"),
+      requiresMovementChoice: this.requiresMovementChoice,
+      isPush: this.movementType === MOVEMENT_TYPES.PUSH,
+      isPull: this.movementType === MOVEMENT_TYPES.PULL,
       movementDistance: preview.config.distance,
       maxRange,
       maxTargets: preview.config.maxTargets,
@@ -92,7 +102,9 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
       requiresSelfDirection,
       hasSelfDirection: Boolean(this.selfDirectionPoint),
       isChoosingSelfDirection: this.isChoosingSelfDirection,
-      canExecute: !this.isSubmitting && (!requiresSelfDirection || Boolean(this.selfDirectionPoint))
+      canExecute: !this.isSubmitting
+        && (!this.requiresMovementChoice || Boolean(this.movementType))
+        && (!requiresSelfDirection || Boolean(this.selfDirectionPoint))
     };
   }
 
@@ -115,6 +127,16 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
     });
 
     this.element.querySelector(".sc-ma-movement-sync-targets")?.addEventListener("click", () => this.#useCurrentTargets());
+    this.element.querySelectorAll("[data-movement-type]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        const movementType = event.currentTarget.dataset.movementType;
+        if (![MOVEMENT_TYPES.PUSH, MOVEMENT_TYPES.PULL].includes(movementType)) {
+          return;
+        }
+        this.movementType = movementType;
+        this.render();
+      });
+    });
     this.element.querySelector(".sc-ma-movement-choose-self-direction")?.addEventListener("click", () => {
       this.#toggleSelfDirectionSelection();
     });
@@ -146,7 +168,8 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
   #prepopulateTargets() {
     try {
       const preview = ScCanvasActivityService.getMovementPreviewData(this.activity, {
-        originTokenId: this.originTokenId
+        originTokenId: this.originTokenId,
+        movementType: this.movementType
       });
       this.selectedTargetIds = preview.targets.map((entry) => entry.token?.id).filter(Boolean);
       this.previewError = null;
@@ -162,6 +185,7 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
       return ScCanvasActivityService.getMovementPreviewData(this.activity, {
         originTokenId: this.originTokenId,
         selfDirectionPoint: this.selfDirectionPoint,
+        movementType: this.movementType,
         tokenIds: this.selectedTargetIds,
         useExplicitTokenIds: true
       });
@@ -464,6 +488,14 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
       return;
     }
 
+    if (this.requiresMovementChoice && !this.movementType) {
+      ui.notifications?.warn?.(Constants.localize(
+        "SCMOREACTIVITIES.Activities.ScMovement.Warning.MissingMovementType",
+        "Choose whether to push or pull the targets."
+      ));
+      return;
+    }
+
     if (this.#requiresSelfDirection() && !this.selfDirectionPoint) {
       ui.notifications?.warn?.(Constants.localize(
         "SCMOREACTIVITIES.Activities.ScMovement.Warning.MissingSelfDirection",
@@ -478,6 +510,7 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
     const result = await ScCanvasActivityService.executeMovement(this.activity, {
       originTokenId: this.originTokenId,
       selfDirectionPoint: this.selfDirectionPoint,
+      movementType: this.movementType,
       tokenIds: this.selectedTargetIds
     });
     if (result?.ok) {

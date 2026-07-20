@@ -12,6 +12,19 @@
     </span>
   </div>
 
+  {{#if requiresMovementChoice}}
+    <div class="sc-ma-placement-controls">
+      <button type="button" data-movement-type="push" class="{{#if isPush}}placing{{/if}}" aria-pressed="{{isPush}}" {{#if isSubmitting}}disabled{{/if}}>
+        <i class="fas fa-arrow-right"></i>
+        {{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.ChoosePush" }}
+      </button>
+      <button type="button" data-movement-type="pull" class="{{#if isPull}}placing{{/if}}" aria-pressed="{{isPull}}" {{#if isSubmitting}}disabled{{/if}}>
+        <i class="fas fa-arrow-left"></i>
+        {{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.ChoosePull" }}
+      </button>
+    </div>
+  {{/if}}
+
   <div class="sc-ma-placement-summary">
     <span>{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Targets" }}: {{ targetCount }}</span>
     <span>{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Eligible" }}: {{ eligibleCount }}</span>

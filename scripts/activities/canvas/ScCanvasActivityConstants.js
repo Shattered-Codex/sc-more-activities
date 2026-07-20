@@ -11,7 +11,8 @@ export const TELEPORT_DESTINATION_SOURCES = Object.freeze({
 
 export const MOVEMENT_TYPES = Object.freeze({
   PUSH: "push",
-  PULL: "pull"
+  PULL: "pull",
+  EITHER: "either"
 });
 
 export const WALL_TARGET_SOURCES = Object.freeze({
