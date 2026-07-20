@@ -53,6 +53,7 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
         movementTypeLabel: "",
         movementDistance: 0,
         maxRange: 0,
+        rangeLabel: "",
         maxTargets: 0,
         hasRangeLimit: false,
         targetCount: 0,
@@ -65,12 +66,17 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
         requiresSelfDirection: false,
         hasSelfDirection: false,
         isChoosingSelfDirection: false,
-        canExecute: false
+        canExecute: false,
+        blockReason: ""
       };
     }
 
     const maxRange = preview.config.maxRange;
     const requiresSelfDirection = this.#requiresSelfDirection(preview);
+    const canExecute = !this.isSubmitting
+      && this.selectedTargetIds.length > 0
+      && (!this.requiresMovementChoice || Boolean(this.movementType))
+      && (!requiresSelfDirection || Boolean(this.selfDirectionPoint));
     return {
       isSubmitting: this.isSubmitting,
       originName: preview.origin?.name ?? preview.origin?.document?.name ?? "",
@@ -84,6 +90,9 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
       isPull: this.movementType === MOVEMENT_TYPES.PULL,
       movementDistance: preview.config.distance,
       maxRange,
+      rangeLabel: maxRange > 0
+        ? String(maxRange)
+        : Constants.localize("SCMOREACTIVITIES.Activities.ScMovement.App.Unlimited", "Unlimited"),
       maxTargets: preview.config.maxTargets,
       hasRangeLimit: maxRange > 0,
       targetCount: preview.targets.length,
@@ -102,9 +111,8 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
       requiresSelfDirection,
       hasSelfDirection: Boolean(this.selfDirectionPoint),
       isChoosingSelfDirection: this.isChoosingSelfDirection,
-      canExecute: !this.isSubmitting
-        && (!this.requiresMovementChoice || Boolean(this.movementType))
-        && (!requiresSelfDirection || Boolean(this.selfDirectionPoint))
+      canExecute,
+      blockReason: canExecute ? "" : this.#blockReason(requiresSelfDirection)
     };
   }
 
@@ -378,6 +386,35 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
   #pointMarkerPixelRadius() {
     const gridSize = Number(canvas?.scene?.grid?.size ?? canvas?.grid?.size ?? 100) || 100;
     return Math.max(Math.round(gridSize * 0.08), 6);
+  }
+
+  #blockReason(requiresSelfDirection) {
+    if (this.isSubmitting) {
+      return "";
+    }
+
+    if (!this.selectedTargetIds.length) {
+      return Constants.localize(
+        "SCMOREACTIVITIES.Activities.Canvas.Warning.MissingTargets",
+        "Select at least one target token."
+      );
+    }
+
+    if (this.requiresMovementChoice && !this.movementType) {
+      return Constants.localize(
+        "SCMOREACTIVITIES.Activities.ScMovement.Warning.MissingMovementType",
+        "Choose whether to push or pull the targets."
+      );
+    }
+
+    if (requiresSelfDirection && !this.selfDirectionPoint) {
+      return Constants.localize(
+        "SCMOREACTIVITIES.Activities.ScMovement.Warning.MissingSelfDirection",
+        "Choose a movement direction for the self target."
+      );
+    }
+
+    return "";
   }
 
   #requiresSelfDirection(preview = null) {
