@@ -719,7 +719,9 @@ export class ScCanvasActivityService {
       );
     }
 
-    await scene.updateEmbeddedDocuments("Token", updates, { animate: false });
+    await scene.updateEmbeddedDocuments("Token", updates, {
+      animate: payload.operation === "movement"
+    });
     return {
       ok: true,
       count: updates.length,

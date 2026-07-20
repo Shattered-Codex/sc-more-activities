@@ -259,7 +259,7 @@ test("movement execution sends explicit self direction through the validated can
   assert.deepEqual(updates, [{
     documentName: "Token",
     documents: [{ _id: origin.id, x: 200, y: 500 }],
-    options: { animate: false }
+    options: { animate: true }
   }]);
 });
 
@@ -309,6 +309,53 @@ test("movement execution validates and applies the push choice for either moveme
   assert.deepEqual(updates, [{
     documentName: "Token",
     documents: [{ _id: target.id, x: 500, y: 100 }],
+    options: { animate: true }
+  }]);
+});
+
+test("teleport execution remains instantaneous", async(t) => {
+  const actor = { id: "actor-1", uuid: "Actor.actor-1" };
+  const origin = makeToken({ id: "origin-token", x: 100, y: 100, actor });
+  const target = makeToken({ id: "target-token", x: 300, y: 100 });
+  actor.getActiveTokens = () => [{ document: origin }];
+  const scene = makeScene([origin, target]);
+  const updates = [];
+  scene.updateEmbeddedDocuments = async(documentName, documents, options) => {
+    updates.push({ documentName, documents, options });
+    return documents;
+  };
+  installCanvasGlobals(t, scene);
+
+  const activity = {
+    uuid: "Activity.teleport",
+    actor,
+    teleport: {
+      maxTargets: 1,
+      teleportDistance: 0,
+      snapToGrid: false
+    }
+  };
+
+  globalThis.game.user.isGM = true;
+  globalThis.game.scenes = { get: (id) => id === scene.id ? scene : null };
+  globalThis.game.users = { get: (id) => id === globalThis.game.user.id ? globalThis.game.user : null };
+  globalThis.ui = { notifications: { info() {}, warn() {}, error() {} } };
+  globalThis.fromUuid = async(uuid) => uuid === activity.uuid ? activity : null;
+
+  t.after(() => {
+    delete globalThis.fromUuid;
+    delete globalThis.ui;
+  });
+
+  const result = await ScCanvasActivityService.executeTeleportPlacement(activity, {
+    destination: { x: 650, y: 150 },
+    tokenIds: [target.id]
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(updates, [{
+    documentName: "Token",
+    documents: [{ _id: target.id, x: 600, y: 100 }],
     options: { animate: false }
   }]);
 });
