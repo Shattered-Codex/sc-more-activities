@@ -660,7 +660,7 @@
   "SCMOREACTIVITIES.Activities.ScTeleport.Fields.TargetSelf.Label": "Permitir si mesmo",
   "SCMOREACTIVITIES.Activities.ScTeleport.Fields.TargetSelf.Hint": "Permite selecionar o token do ator da atividade como alvo do teleporte.",
   "SCMOREACTIVITIES.Activities.ScTeleport.Fields.OnlyTargetSelf.Label": "Somente si mesmo",
-  "SCMOREACTIVITIES.Activities.ScTeleport.Fields.OnlyTargetSelf.Hint": "Quando o máximo de alvos for 1, pula a seleção e teleporta o ator da atividade.",
+  "SCMOREACTIVITIES.Activities.ScTeleport.Fields.OnlyTargetSelf.Hint": "Pula a seleção de alvos e teleporta apenas o ator da atividade.",
   "SCMOREACTIVITIES.Activities.ScTeleport.Fields.TargetRadius.Label": "Alcance dos alvos",
   "SCMOREACTIVITIES.Activities.ScTeleport.Fields.TargetRadius.Hint": "Distância máxima a partir do ator da atividade para tokens elegíveis. Use 0 para sem limite.",
   "SCMOREACTIVITIES.Activities.ScTeleport.Fields.TeleportDistance.Label": "Alcance do teleporte",

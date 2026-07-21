@@ -60,7 +60,7 @@ export class ScTeleportTargetApp extends HandlebarsApplicationMixin(ApplicationV
     }
 
     const config = this.#config();
-    if (origin && config.maxTargets === 1 && config.onlyTargetSelf) {
+    if (origin && config.onlyTargetSelf) {
       this.selectedTargets = [this.#targetData(origin, 0)];
       this.#openDestination();
       return;
@@ -219,7 +219,9 @@ export class ScTeleportTargetApp extends HandlebarsApplicationMixin(ApplicationV
     const config = this.activity?.teleport ?? {};
     const onlyTargetSelf = Boolean(config.onlyTargetSelf);
     return {
-      maxTargets: Math.max(1, Number(config.maxTargets ?? 1) || 1),
+      // "Only self" always teleports a single token (the actor), regardless of
+      // any previously configured maximum.
+      maxTargets: onlyTargetSelf ? 1 : Math.max(1, Number(config.maxTargets ?? 1) || 1),
       targetSelf: Boolean(config.targetSelf) || onlyTargetSelf,
       onlyTargetSelf,
       targetRadius: Math.max(0, Number(config.targetRadius ?? 15) || 0)

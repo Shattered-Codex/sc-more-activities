@@ -660,7 +660,7 @@
   "SCMOREACTIVITIES.Activities.ScTeleport.Fields.TargetSelf.Label": "Allow self",
   "SCMOREACTIVITIES.Activities.ScTeleport.Fields.TargetSelf.Hint": "Allow the activity actor token to be selected as a teleport target.",
   "SCMOREACTIVITIES.Activities.ScTeleport.Fields.OnlyTargetSelf.Label": "Only self",
-  "SCMOREACTIVITIES.Activities.ScTeleport.Fields.OnlyTargetSelf.Hint": "When maximum targets is 1, skip selection and teleport the activity actor.",
+  "SCMOREACTIVITIES.Activities.ScTeleport.Fields.OnlyTargetSelf.Hint": "Skip target selection and teleport only the activity actor.",
   "SCMOREACTIVITIES.Activities.ScTeleport.Fields.TargetRadius.Label": "Target range",
   "SCMOREACTIVITIES.Activities.ScTeleport.Fields.TargetRadius.Hint": "Maximum distance from the activity actor for eligible teleport targets. Use 0 for no limit.",
   "SCMOREACTIVITIES.Activities.ScTeleport.Fields.TeleportDistance.Label": "Teleport range",
