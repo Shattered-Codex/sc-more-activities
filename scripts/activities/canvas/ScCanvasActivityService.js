@@ -149,6 +149,52 @@ export class ScCanvasActivityService {
     }
   }
 
+  static getTeleportPlacementPreview(activity, { tokenIds = [], destination = null } = {}) {
+    const scene = canvas?.scene;
+    const origin = ScCanvasActivityService.#originTokenDocument(activity);
+    const point = ScCanvasActivityService.#validPoint(destination);
+    if (!scene || !origin || !point) {
+      return null;
+    }
+
+    const config = activity?.teleport ?? {};
+    const targets = ScCanvasActivityService.#limitedTargets(
+      ScCanvasActivityService.#tokenDocumentsFromIds(scene, ScCanvasActivityService.#uniqueIds(tokenIds)),
+      config.maxTargets
+    );
+    if (!targets.length) {
+      return null;
+    }
+
+    const originCenter = ScCanvasActivityService.#tokenCenter(origin, scene);
+    const distance = ScCanvasActivityService.euclideanSceneDistance(originCenter, point, scene);
+    const teleportDistance = Math.max(0, Number(config.teleportDistance ?? 0) || 0);
+    const inRange = teleportDistance <= 0 || distance <= teleportDistance;
+
+    const updates = ScCanvasActivityService.#placementTeleportUpdates(targets, point, config, scene);
+    const landings = updates.map((update) => {
+      const token = targets.find((candidate) => candidate.id === update.id);
+      const size = ScCanvasActivityService.#tokenPixelSize(token, scene);
+      return {
+        id: update.id,
+        size,
+        center: {
+          x: Number(update.x) + (size.width / 2),
+          y: Number(update.y) + (size.height / 2)
+        }
+      };
+    });
+
+    return {
+      originCenter,
+      destination: point,
+      distance,
+      teleportDistance,
+      inRange,
+      landings
+    };
+  }
+
   static async executeWallPlacement(activity, { walls = [], facing = null, originTokenId = null } = {}) {
     try {
       const scene = ScCanvasActivityService.#activeScene();
@@ -219,6 +265,17 @@ export class ScCanvasActivityService {
       return measuredDistance;
     }
 
+    const pixelDistance = Math.hypot(Number(pointB?.x) - Number(pointA?.x), Number(pointB?.y) - Number(pointA?.y));
+    const gridSize = Number(scene?.grid?.size ?? canvas?.grid?.size ?? 100) || 100;
+    const gridDistance = Number(scene?.grid?.distance ?? canvas?.grid?.distance ?? 5) || 5;
+    return pixelDistance / gridSize * gridDistance;
+  }
+
+  static euclideanSceneDistance(pointA, pointB, scene = canvas?.scene) {
+    // Straight-line distance in scene units, ignoring the grid's diagonal rules.
+    // This matches a drawn range circle (a Euclidean radius), unlike
+    // sceneDistanceBetweenPoints which follows grid measurement (a square on a
+    // 5e square grid).
     const pixelDistance = Math.hypot(Number(pointB?.x) - Number(pointA?.x), Number(pointB?.y) - Number(pointA?.y));
     const gridSize = Number(scene?.grid?.size ?? canvas?.grid?.size ?? 100) || 100;
     const gridDistance = Number(scene?.grid?.distance ?? canvas?.grid?.distance ?? 5) || 5;
@@ -793,7 +850,7 @@ export class ScCanvasActivityService {
     const teleportDistance = Number(config.teleportDistance ?? 0);
     if (explicitDestination && teleportDistance > 0) {
       const originCenter = ScCanvasActivityService.#tokenCenter(origin, scene);
-      const distance = ScCanvasActivityService.sceneDistanceBetweenPoints(originCenter, destination, scene);
+      const distance = ScCanvasActivityService.euclideanSceneDistance(originCenter, destination, scene);
       if (distance > teleportDistance) {
         return ScCanvasActivityService.#failure(
           "SCMOREACTIVITIES.Activities.ScTeleport.Warning.DestinationOutOfRange",
