@@ -330,7 +330,7 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
 
     const config = this.#config();
     const originCenter = ScCanvasActivityService.getTokenCenter(origin);
-    const distance = ScCanvasActivityService.sceneDistanceBetweenPoints(originCenter, destination);
+    const distance = ScCanvasActivityService.euclideanSceneDistance(originCenter, destination);
     if (config.teleportDistance > 0 && distance > config.teleportDistance) {
       ui.notifications?.warn?.(Constants.localize(
         "SCMOREACTIVITIES.Activities.ScTeleport.Warning.DestinationOutOfRange",

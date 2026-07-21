@@ -167,7 +167,7 @@ export class ScCanvasActivityService {
     }
 
     const originCenter = ScCanvasActivityService.#tokenCenter(origin, scene);
-    const distance = ScCanvasActivityService.sceneDistanceBetweenPoints(originCenter, point, scene);
+    const distance = ScCanvasActivityService.euclideanSceneDistance(originCenter, point, scene);
     const teleportDistance = Math.max(0, Number(config.teleportDistance ?? 0) || 0);
     const inRange = teleportDistance <= 0 || distance <= teleportDistance;
 
@@ -265,6 +265,17 @@ export class ScCanvasActivityService {
       return measuredDistance;
     }
 
+    const pixelDistance = Math.hypot(Number(pointB?.x) - Number(pointA?.x), Number(pointB?.y) - Number(pointA?.y));
+    const gridSize = Number(scene?.grid?.size ?? canvas?.grid?.size ?? 100) || 100;
+    const gridDistance = Number(scene?.grid?.distance ?? canvas?.grid?.distance ?? 5) || 5;
+    return pixelDistance / gridSize * gridDistance;
+  }
+
+  static euclideanSceneDistance(pointA, pointB, scene = canvas?.scene) {
+    // Straight-line distance in scene units, ignoring the grid's diagonal rules.
+    // This matches a drawn range circle (a Euclidean radius), unlike
+    // sceneDistanceBetweenPoints which follows grid measurement (a square on a
+    // 5e square grid).
     const pixelDistance = Math.hypot(Number(pointB?.x) - Number(pointA?.x), Number(pointB?.y) - Number(pointA?.y));
     const gridSize = Number(scene?.grid?.size ?? canvas?.grid?.size ?? 100) || 100;
     const gridDistance = Number(scene?.grid?.distance ?? canvas?.grid?.distance ?? 5) || 5;
@@ -839,7 +850,7 @@ export class ScCanvasActivityService {
     const teleportDistance = Number(config.teleportDistance ?? 0);
     if (explicitDestination && teleportDistance > 0) {
       const originCenter = ScCanvasActivityService.#tokenCenter(origin, scene);
-      const distance = ScCanvasActivityService.sceneDistanceBetweenPoints(originCenter, destination, scene);
+      const distance = ScCanvasActivityService.euclideanSceneDistance(originCenter, destination, scene);
       if (distance > teleportDistance) {
         return ScCanvasActivityService.#failure(
           "SCMOREACTIVITIES.Activities.ScTeleport.Warning.DestinationOutOfRange",

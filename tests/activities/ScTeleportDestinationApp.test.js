@@ -110,7 +110,7 @@ function patchCanvasService(t, calls, { distance = 0 } = {}) {
     getOriginTokenObject: ScCanvasActivityService.getOriginTokenObject,
     getTokenCenter: ScCanvasActivityService.getTokenCenter,
     snapCenterPoint: ScCanvasActivityService.snapCenterPoint,
-    sceneDistanceBetweenPoints: ScCanvasActivityService.sceneDistanceBetweenPoints,
+    euclideanSceneDistance: ScCanvasActivityService.euclideanSceneDistance,
     executeTeleportPlacement: ScCanvasActivityService.executeTeleportPlacement,
     getTeleportPlacementPreview: ScCanvasActivityService.getTeleportPlacementPreview
   };
@@ -118,7 +118,7 @@ function patchCanvasService(t, calls, { distance = 0 } = {}) {
   ScCanvasActivityService.getOriginTokenObject = () => ({ id: "origin-token" });
   ScCanvasActivityService.getTokenCenter = () => ({ x: 0, y: 0 });
   ScCanvasActivityService.snapCenterPoint = (point) => point;
-  ScCanvasActivityService.sceneDistanceBetweenPoints = () => distance;
+  ScCanvasActivityService.euclideanSceneDistance = () => distance;
   ScCanvasActivityService.executeTeleportPlacement = async(activity, placement) => {
     calls.push({ activity, placement });
     return { ok: true };
