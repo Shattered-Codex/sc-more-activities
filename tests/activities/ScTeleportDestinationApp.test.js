@@ -209,6 +209,130 @@ test("ignores non-primary buttons and out-of-range destinations", async(t) => {
   assert.equal(typeof handler("pointerup"), "function");
 });
 
+test("minimizes open sheets while picking and restores them on close", async(t) => {
+  const calls = [];
+  patchCanvasService(t, calls);
+  makeCanvas();
+
+  class DocumentSheetV2 {}
+  class FakeWindow {
+    constructor() {
+      this.minimized = false;
+      this.rendered = true;
+    }
+
+    minimize() {
+      this.minimized = true;
+    }
+
+    maximize() {
+      this.minimized = false;
+    }
+  }
+  class FakeSheet extends DocumentSheetV2 {
+    constructor() {
+      super();
+      this.minimized = false;
+      this.rendered = true;
+    }
+
+    minimize() {
+      this.minimized = true;
+    }
+
+    maximize() {
+      this.minimized = false;
+    }
+  }
+
+  const legacy = new FakeWindow();
+  const sheet = new FakeSheet();
+  const coreUi = new FakeWindow();
+
+  const previous = {
+    windows: globalThis.ui.windows,
+    documentSheet: foundry.applications.api.DocumentSheetV2,
+    instances: foundry.applications.instances
+  };
+  globalThis.ui.windows = { 1: legacy };
+  foundry.applications.api.DocumentSheetV2 = DocumentSheetV2;
+  foundry.applications.instances = new Map([["sheet", sheet], ["core", coreUi]]);
+
+  t.after(() => {
+    globalThis.ui.windows = previous.windows;
+    foundry.applications.api.DocumentSheetV2 = previous.documentSheet;
+    foundry.applications.instances = previous.instances;
+  });
+
+  const app = new ScTeleportDestinationApp({ teleport: {} }, [{ id: "target-token" }]);
+  await app._onRender({}, {});
+
+  assert.equal(legacy.minimized, true);
+  assert.equal(sheet.minimized, true);
+  // Core UI (not a document sheet) is left alone.
+  assert.equal(coreUi.minimized, false);
+
+  await app.close();
+
+  assert.equal(legacy.minimized, false);
+  assert.equal(sheet.minimized, false);
+  assert.equal(coreUi.minimized, false);
+});
+
+test("marks only blocking in-range walls and never reveals secret doors", async(t) => {
+  class Graphics {
+    constructor() {
+      this.commands = [];
+      this.parent = null;
+    }
+
+    clear() { return this; }
+    lineStyle() { return this; }
+    beginFill() { return this; }
+    drawCircle() { return this; }
+    drawRoundedRect() { return this; }
+    endFill() { return this; }
+    moveTo() { return this; }
+    lineTo(x, y) {
+      this.commands.push(["lineTo", x, y]);
+      return this;
+    }
+    destroy() {}
+  }
+
+  globalThis.PIXI = { Graphics };
+  globalThis.CONST = {
+    WALL_DOOR_TYPES: { NONE: 0, DOOR: 1, SECRET: 2 },
+    WALL_DOOR_STATES: { CLOSED: 0, OPEN: 1 },
+    WALL_MOVEMENT_TYPES: { NONE: 0, NORMAL: 20 }
+  };
+
+  const calls = [];
+  patchCanvasService(t, calls);
+  const { stageChildren } = makeCanvas();
+  globalThis.canvas.walls = {
+    placeables: [
+      { document: { c: [100, 0, 100, 200], door: 0, ds: 0, move: 20 } },    // blocking, in range → drawn
+      { document: { c: [5000, 0, 5000, 200], door: 0, ds: 0, move: 20 } },  // out of range → skipped
+      { document: { c: [100, 0, 100, 200], door: 2, ds: 0, move: 20 } },    // secret door → skipped
+      { document: { c: [100, 0, 100, 200], door: 1, ds: 1, move: 20 } },    // open door → skipped
+      { document: { c: [100, 0, 100, 200], door: 0, ds: 0, move: 0 } }      // does not block movement → skipped
+    ]
+  };
+
+  t.after(() => {
+    delete globalThis.PIXI;
+    delete globalThis.CONST;
+  });
+
+  const app = new ScTeleportDestinationApp({ teleport: { teleportDistance: 30, snapToGrid: false } }, [{ id: "target-token" }]);
+  await app._onRender({}, {});
+
+  const [graphics] = stageChildren;
+  const drawnWalls = graphics.commands.filter((command) => command[0] === "lineTo");
+  assert.deepEqual(drawnWalls, [["lineTo", 100, 200]]);
+});
+
 test("cancels the selection on right-click over the canvas", async(t) => {
   const calls = [];
   patchCanvasService(t, calls);

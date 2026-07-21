@@ -36,6 +36,7 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     this.canvasPointerMoveHandler = null;
     this.canvasContextMenuHandler = null;
     this.keydownHandler = null;
+    this.minimizedWindows = null;
   }
 
   async _prepareContext() {
@@ -52,13 +53,68 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     this.element.querySelector(".sc-ma-teleport-cancel")?.addEventListener("click", () => {
       this.close();
     });
+    if (this.minimizedWindows === null) {
+      this.#minimizeOpenWindows();
+    }
     this.#startDestinationSelection();
   }
 
   async close(options = {}) {
     this.#stopDestinationSelection();
     this.#destroyPreviewGraphics();
+    this.#restoreMinimizedWindows();
     await super.close(options);
+  }
+
+  #minimizeOpenWindows() {
+    const restore = [];
+    const consider = (app) => {
+      if (!app || app === this || app.minimized || app.rendered === false) {
+        return;
+      }
+      if (typeof app.minimize !== "function") {
+        return;
+      }
+      restore.push(app);
+    };
+
+    // Legacy (ApplicationV1) popout windows: dialogs and older sheets.
+    for (const app of Object.values(globalThis.ui?.windows ?? {})) {
+      consider(app);
+    }
+
+    // ApplicationV2 document sheets (actor/item/journal sheets). Restricting to
+    // document sheets keeps core UI (sidebar, scene controls, hotbar) untouched.
+    const DocumentSheetV2 = foundry.applications?.api?.DocumentSheetV2;
+    const instances = foundry.applications?.instances;
+    if (DocumentSheetV2 && instances?.values) {
+      for (const app of instances.values()) {
+        if (app instanceof DocumentSheetV2) {
+          consider(app);
+        }
+      }
+    }
+
+    this.minimizedWindows = restore;
+    for (const app of restore) {
+      try {
+        app.minimize?.();
+      } catch (error) {
+        // Ignore windows that refuse to minimize.
+      }
+    }
+  }
+
+  #restoreMinimizedWindows() {
+    const windows = this.minimizedWindows ?? [];
+    this.minimizedWindows = null;
+    for (const app of windows) {
+      try {
+        app.maximize?.();
+      } catch (error) {
+        // Ignore windows that refuse to restore.
+      }
+    }
   }
 
   #startDestinationSelection() {
@@ -213,16 +269,18 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     const outOfRangeFill = 0xff6b6b;
 
     const originCenter = ScCanvasActivityService.getTokenCenter(origin);
+    const distancePixels = Number(canvas?.dimensions?.distancePixels ?? 0);
+    const rangePixels = config.teleportDistance > 0 ? config.teleportDistance * distancePixels : Infinity;
     if (config.teleportDistance > 0 && originCenter) {
-      const distancePixels = Number(canvas?.dimensions?.distancePixels ?? 0);
-      const radius = config.teleportDistance * distancePixels;
-      if (Number.isFinite(radius) && radius > 0) {
+      if (Number.isFinite(rangePixels) && rangePixels > 0) {
         this.previewGraphics.lineStyle(2, borderColor, 0.9);
         this.previewGraphics.beginFill(fillColor, 0.12);
-        this.previewGraphics.drawCircle(originCenter.x, originCenter.y, radius);
+        this.previewGraphics.drawCircle(originCenter.x, originCenter.y, rangePixels);
         this.previewGraphics.endFill();
       }
     }
+
+    this.#drawWalls(originCenter, rangePixels);
 
     if (!this.hoverPoint) {
       return;
@@ -315,6 +373,73 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
       teleportDistance: Math.max(0, Number(config.teleportDistance ?? 30) || 0),
       snapToGrid: config.snapToGrid !== false
     };
+  }
+
+  #drawWalls(originCenter, rangePixels) {
+    const walls = canvas?.walls?.placeables ?? [];
+    if (!walls.length || !originCenter) {
+      return;
+    }
+
+    const CONST = globalThis.CONST;
+    const secretDoor = CONST?.WALL_DOOR_TYPES?.SECRET;
+    const openState = CONST?.WALL_DOOR_STATES?.OPEN;
+    const blockingMove = CONST?.WALL_MOVEMENT_TYPES?.NORMAL;
+
+    const segments = [];
+    for (const wall of walls) {
+      const document = wall?.document ?? wall;
+      const coordinates = document?.c ?? wall?.c;
+      if (!Array.isArray(coordinates) || coordinates.length < 4) {
+        continue;
+      }
+      // Never reveal secret doors, and skip passages that are currently open or
+      // do not block movement — only mark actual obstacles.
+      if (secretDoor !== undefined && document?.door === secretDoor) {
+        continue;
+      }
+      if (openState !== undefined && document?.ds === openState) {
+        continue;
+      }
+      if (blockingMove !== undefined && document?.move !== blockingMove) {
+        continue;
+      }
+
+      const a = { x: Number(coordinates[0]), y: Number(coordinates[1]) };
+      const b = { x: Number(coordinates[2]), y: Number(coordinates[3]) };
+      if (![a.x, a.y, b.x, b.y].every(Number.isFinite)) {
+        continue;
+      }
+      if (Number.isFinite(rangePixels)
+        && ScTeleportDestinationApp.#segmentDistanceToPoint(a, b, originCenter) > rangePixels) {
+        continue;
+      }
+      segments.push([a, b]);
+    }
+
+    if (!segments.length) {
+      return;
+    }
+
+    this.previewGraphics.lineStyle(4, 0xff7a45, 0.85);
+    for (const [a, b] of segments) {
+      this.previewGraphics.moveTo(a.x, a.y);
+      this.previewGraphics.lineTo(b.x, b.y);
+    }
+  }
+
+  static #segmentDistanceToPoint(a, b, point) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const lengthSquared = (dx * dx) + (dy * dy);
+    if (lengthSquared <= 0) {
+      return Math.hypot(point.x - a.x, point.y - a.y);
+    }
+
+    let t = (((point.x - a.x) * dx) + ((point.y - a.y) * dy)) / lengthSquared;
+    t = Math.max(0, Math.min(1, t));
+    const closest = { x: a.x + (t * dx), y: a.y + (t * dy) };
+    return Math.hypot(point.x - closest.x, point.y - closest.y);
   }
 
   static #markerRadius() {
