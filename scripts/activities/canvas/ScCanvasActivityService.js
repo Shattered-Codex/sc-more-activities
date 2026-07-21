@@ -149,6 +149,52 @@ export class ScCanvasActivityService {
     }
   }
 
+  static getTeleportPlacementPreview(activity, { tokenIds = [], destination = null } = {}) {
+    const scene = canvas?.scene;
+    const origin = ScCanvasActivityService.#originTokenDocument(activity);
+    const point = ScCanvasActivityService.#validPoint(destination);
+    if (!scene || !origin || !point) {
+      return null;
+    }
+
+    const config = activity?.teleport ?? {};
+    const targets = ScCanvasActivityService.#limitedTargets(
+      ScCanvasActivityService.#tokenDocumentsFromIds(scene, ScCanvasActivityService.#uniqueIds(tokenIds)),
+      config.maxTargets
+    );
+    if (!targets.length) {
+      return null;
+    }
+
+    const originCenter = ScCanvasActivityService.#tokenCenter(origin, scene);
+    const distance = ScCanvasActivityService.sceneDistanceBetweenPoints(originCenter, point, scene);
+    const teleportDistance = Math.max(0, Number(config.teleportDistance ?? 0) || 0);
+    const inRange = teleportDistance <= 0 || distance <= teleportDistance;
+
+    const updates = ScCanvasActivityService.#placementTeleportUpdates(targets, point, config, scene);
+    const landings = updates.map((update) => {
+      const token = targets.find((candidate) => candidate.id === update.id);
+      const size = ScCanvasActivityService.#tokenPixelSize(token, scene);
+      return {
+        id: update.id,
+        size,
+        center: {
+          x: Number(update.x) + (size.width / 2),
+          y: Number(update.y) + (size.height / 2)
+        }
+      };
+    });
+
+    return {
+      originCenter,
+      destination: point,
+      distance,
+      teleportDistance,
+      inRange,
+      landings
+    };
+  }
+
   static async executeWallPlacement(activity, { walls = [], facing = null, originTokenId = null } = {}) {
     try {
       const scene = ScCanvasActivityService.#activeScene();

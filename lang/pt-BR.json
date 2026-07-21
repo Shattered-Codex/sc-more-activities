@@ -689,6 +689,8 @@
   "SCMOREACTIVITIES.Activities.ScTeleport.App.Destination.Targets": "Alvos",
   "SCMOREACTIVITIES.Activities.ScTeleport.App.Destination.Range": "Alcance",
   "SCMOREACTIVITIES.Activities.ScTeleport.App.Destination.Hint": "Clique no canvas para definir o destino dos tokens selecionados.",
+  "SCMOREACTIVITIES.Activities.ScTeleport.App.Destination.Prompt": "Clique com o botão esquerdo para teleportar",
+  "SCMOREACTIVITIES.Activities.ScTeleport.App.Destination.Dismiss": "Botão direito ou Esc para cancelar",
   "SCMOREACTIVITIES.Activities.ScMovement.Title": "Movimento SC",
   "SCMOREACTIVITIES.Activities.ScMovement.Hint": "Empurra ou puxa tokens selecionados a partir do ator da atividade, com escolha opcional ao usar.",
   "SCMOREACTIVITIES.Activities.ScMovement.Sections.Configuration": "Movimento",

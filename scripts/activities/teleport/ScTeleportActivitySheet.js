@@ -13,16 +13,22 @@ export class ScTeleportActivitySheet extends dnd5e.applications.activity.Activit
 
   async _prepareEffectContext(context, options) {
     context = await super._prepareEffectContext(context, options);
+    const maxTargets = this.activity?.teleport?.maxTargets ?? 1;
+    const onlyTargetSelf = Boolean(this.activity?.teleport?.onlyTargetSelf);
     context.teleport = {
-      maxTargets: this.activity?.teleport?.maxTargets ?? 1,
+      maxTargets,
       targetSelf: Boolean(this.activity?.teleport?.targetSelf),
-      onlyTargetSelf: Boolean(this.activity?.teleport?.onlyTargetSelf),
+      onlyTargetSelf,
       targetRadius: this.activity?.teleport?.targetRadius ?? 15,
       teleportDistance: this.activity?.teleport?.teleportDistance ?? 30,
       keepArrangement: this.activity?.teleport?.keepArrangement !== false,
       clusterRadius: this.activity?.teleport?.clusterRadius ?? 5,
       snapToGrid: this.activity?.teleport?.snapToGrid !== false
     };
+    // Multi-token placement options only matter when more than one token can be
+    // teleported and the actor is not locked to teleporting only itself.
+    context.teleportShowsArrangement = maxTargets > 1 && !onlyTargetSelf;
+    context.teleportShowsTargeting = !onlyTargetSelf;
     return context;
   }
 

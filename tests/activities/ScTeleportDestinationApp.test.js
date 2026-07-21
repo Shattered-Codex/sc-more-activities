@@ -34,30 +34,56 @@ globalThis.game = {
 
 globalThis.ui = {
   notifications: {
-    warn() {}
+    warn() {},
+    info() {}
+  }
+};
+
+globalThis.window = {
+  handlers: new Map(),
+  addEventListener(name, handler) {
+    this.handlers.set(name, handler);
+  },
+  removeEventListener(name, handler) {
+    if (this.handlers.get(name) === handler) {
+      this.handlers.delete(name);
+    }
   }
 };
 
 const { ScCanvasActivityService } = await import("../../scripts/activities/canvas/ScCanvasActivityService.js");
 const { ScTeleportDestinationApp } = await import("../../scripts/activities/teleport/ScTeleportDestinationApp.js");
 
+// The canvas element used as the pointer-event target for the app's guard.
+const CANVAS_VIEW = { id: "canvas-view" };
+
+function handler(name) {
+  return globalThis.window.handlers.get(name);
+}
+
+function canvasEvent(props = {}) {
+  return {
+    target: CANVAS_VIEW,
+    preventDefault() {},
+    stopPropagation() {},
+    ...props
+  };
+}
+
 function makeCanvas() {
-  const stageHandlers = new Map();
   const stageChildren = [];
 
   globalThis.canvas = {
     dimensions: {
       distancePixels: 10
     },
+    scene: {
+      grid: { size: 100 }
+    },
+    app: {
+      view: CANVAS_VIEW
+    },
     stage: {
-      on(eventName, handler) {
-        stageHandlers.set(eventName, handler);
-      },
-      off(eventName, handler) {
-        if (stageHandlers.get(eventName) === handler) {
-          stageHandlers.delete(eventName);
-        }
-      },
       addChild(child) {
         stageChildren.push(child);
         child.parent = this;
@@ -72,45 +98,46 @@ function makeCanvas() {
       }
     },
     canvasCoordinatesFromClient(event) {
-      return { x: event.x + 10, y: event.y + 20 };
+      return { x: event.clientX, y: event.clientY };
     }
   };
 
-  return { stageHandlers, stageChildren };
+  return { stageChildren };
 }
 
-function patchCanvasService(t, calls) {
+function patchCanvasService(t, calls, { distance = 0 } = {}) {
   const originals = {
     getOriginTokenObject: ScCanvasActivityService.getOriginTokenObject,
     getTokenCenter: ScCanvasActivityService.getTokenCenter,
     snapCenterPoint: ScCanvasActivityService.snapCenterPoint,
     sceneDistanceBetweenPoints: ScCanvasActivityService.sceneDistanceBetweenPoints,
     executeTeleportPlacement: ScCanvasActivityService.executeTeleportPlacement,
-    removePreviewTemplate: ScCanvasActivityService.removePreviewTemplate
+    getTeleportPlacementPreview: ScCanvasActivityService.getTeleportPlacementPreview
   };
 
   ScCanvasActivityService.getOriginTokenObject = () => ({ id: "origin-token" });
   ScCanvasActivityService.getTokenCenter = () => ({ x: 0, y: 0 });
   ScCanvasActivityService.snapCenterPoint = (point) => point;
-  ScCanvasActivityService.sceneDistanceBetweenPoints = () => 0;
+  ScCanvasActivityService.sceneDistanceBetweenPoints = () => distance;
   ScCanvasActivityService.executeTeleportPlacement = async(activity, placement) => {
     calls.push({ activity, placement });
     return { ok: true };
   };
-  ScCanvasActivityService.removePreviewTemplate = async() => {};
+  ScCanvasActivityService.getTeleportPlacementPreview = () => null;
 
   t.after(() => {
     for (const [key, value] of Object.entries(originals)) {
       ScCanvasActivityService[key] = value;
     }
     delete globalThis.canvas;
+    globalThis.window.handlers.clear();
   });
 }
 
-test("places teleport destination from the PIXI canvas click event", async(t) => {
+test("places the teleport destination from a canvas pointer-up event", async(t) => {
   const calls = [];
   patchCanvasService(t, calls);
-  const { stageHandlers } = makeCanvas();
+  makeCanvas();
   const activity = {
     teleport: {
       snapToGrid: false,
@@ -121,19 +148,9 @@ test("places teleport destination from the PIXI canvas click event", async(t) =>
 
   await app._onRender({}, {});
 
-  assert.equal(typeof stageHandlers.get("click"), "function");
+  assert.equal(typeof handler("pointerup"), "function");
 
-  const clickEvent = {
-    data: {
-      originalEvent: { button: 0 },
-      getLocalPosition() {
-        return { x: 123, y: 456 };
-      }
-    }
-  };
-  stageHandlers.get("click")(clickEvent);
-  await Promise.resolve();
-  await Promise.resolve();
+  await handler("pointerup")(canvasEvent({ button: 0, clientX: 123, clientY: 456 }));
 
   assert.deepEqual(calls, [{
     activity,
@@ -143,31 +160,79 @@ test("places teleport destination from the PIXI canvas click event", async(t) =>
     }
   }]);
   assert.equal(app.closed, true);
-  assert.equal(stageHandlers.has("click"), false);
+  assert.equal(globalThis.window.handlers.has("pointerup"), false);
 });
 
-test("converts PointerEvent client coordinates for the Foundry canvas fallback", async(t) => {
+test("ignores events that are not on the canvas view", async(t) => {
   const calls = [];
   patchCanvasService(t, calls);
-  const { stageHandlers } = makeCanvas();
+  makeCanvas();
+  const app = new ScTeleportDestinationApp({ teleport: { snapToGrid: false } }, [{ id: "target-token" }]);
+
+  await app._onRender({}, {});
+
+  // A pointer-up whose target is not the canvas (e.g. the banner button) is
+  // left untouched so the rest of the UI keeps working.
+  await handler("pointerup")({
+    target: { id: "some-button" },
+    button: 0,
+    clientX: 1,
+    clientY: 1,
+    preventDefault() {},
+    stopPropagation() {}
+  });
+
+  assert.equal(calls.length, 0);
+  assert.equal(app.closed, false);
+});
+
+test("ignores non-primary buttons and out-of-range destinations", async(t) => {
+  const calls = [];
+  patchCanvasService(t, calls, { distance: 90 });
+  makeCanvas();
   const activity = {
     teleport: {
       snapToGrid: false,
-      teleportDistance: 0
+      teleportDistance: 30
     }
   };
   const app = new ScTeleportDestinationApp(activity, [{ id: "target-token" }]);
 
   await app._onRender({}, {});
-  stageHandlers.get("click")({
-    data: {
-      originalEvent: { button: 0, clientX: 123, clientY: 456 }
-    }
-  });
-  await Promise.resolve();
-  await Promise.resolve();
 
-  assert.deepEqual(calls[0]?.placement.destination, { x: 133, y: 476 });
+  await handler("pointerup")(canvasEvent({ button: 2, clientX: 10, clientY: 10 }));
+  assert.equal(calls.length, 0);
+
+  await handler("pointerup")(canvasEvent({ button: 0, clientX: 10, clientY: 10 }));
+  assert.equal(calls.length, 0);
+  assert.equal(app.closed, false);
+  assert.equal(typeof handler("pointerup"), "function");
+});
+
+test("cancels the selection on right-click over the canvas", async(t) => {
+  const calls = [];
+  patchCanvasService(t, calls);
+  makeCanvas();
+  const app = new ScTeleportDestinationApp({ teleport: {} }, [{ id: "target-token" }]);
+
+  await app._onRender({}, {});
+  handler("contextmenu")(canvasEvent());
+
+  assert.equal(app.closed, true);
+  assert.equal(calls.length, 0);
+  assert.equal(globalThis.window.handlers.has("pointerup"), false);
+});
+
+test("cancels the selection with the Escape key", async(t) => {
+  const calls = [];
+  patchCanvasService(t, calls);
+  makeCanvas();
+  const app = new ScTeleportDestinationApp({ teleport: {} }, [{ id: "target-token" }]);
+
+  await app._onRender({}, {});
+  handler("keydown")({ key: "Escape", preventDefault() {}, stopPropagation() {} });
+
+  assert.equal(app.closed, true);
 });
 
 test("draws a non-interactive teleport range ring and removes it on close", async(t) => {
@@ -178,6 +243,11 @@ test("draws a non-interactive teleport range ring and removes it on close", asyn
       this.commands = [];
       this.destroyed = false;
       this.parent = null;
+    }
+
+    clear() {
+      this.commands.push(["clear"]);
+      return this;
     }
 
     lineStyle(width, color, alpha) {
@@ -192,6 +262,11 @@ test("draws a non-interactive teleport range ring and removes it on close", asyn
 
     drawCircle(x, y, radius) {
       this.commands.push(["drawCircle", x, y, radius]);
+      return this;
+    }
+
+    drawRoundedRect(x, y, width, height, radius) {
+      this.commands.push(["drawRoundedRect", x, y, width, height, radius]);
       return this;
     }
 
@@ -228,8 +303,9 @@ test("draws a non-interactive teleport range ring and removes it on close", asyn
   assert.equal(ring.eventMode, "none");
   assert.equal(ring.interactive, false);
   assert.deepEqual(ring.commands, [
-    ["lineStyle", 3, 0x24b86a, 0.95],
-    ["beginFill", 0x39f08c, 0.2],
+    ["clear"],
+    ["lineStyle", 2, 0x24b86a, 0.9],
+    ["beginFill", 0x39f08c, 0.12],
     ["drawCircle", 0, 0, 300],
     ["endFill"]
   ]);
@@ -238,4 +314,49 @@ test("draws a non-interactive teleport range ring and removes it on close", asyn
 
   assert.equal(stageChildren.length, 0);
   assert.equal(ring.destroyed, true);
+});
+
+test("draws landing footprints from the placement preview on hover", async(t) => {
+  class Graphics {
+    constructor() {
+      this.commands = [];
+      this.parent = null;
+    }
+
+    clear() { return this; }
+    lineStyle() { return this; }
+    beginFill() { return this; }
+    drawCircle() { return this; }
+    drawRoundedRect(x, y, width, height) {
+      this.commands.push(["rect", x, y, width, height]);
+      return this;
+    }
+    endFill() { return this; }
+    destroy() {}
+  }
+
+  globalThis.PIXI = { Graphics };
+  const calls = [];
+  patchCanvasService(t, calls);
+  const { stageChildren } = makeCanvas();
+  ScCanvasActivityService.getTeleportPlacementPreview = () => ({
+    inRange: true,
+    destination: { x: 200, y: 200 },
+    landings: [{ center: { x: 200, y: 200 }, size: { width: 100, height: 100 } }]
+  });
+
+  t.after(() => {
+    delete globalThis.PIXI;
+  });
+
+  const app = new ScTeleportDestinationApp({ teleport: { snapToGrid: false } }, [{ id: "target-token" }]);
+  await app._onRender({}, {});
+
+  handler("pointermove")(canvasEvent({ clientX: 200, clientY: 200 }));
+
+  const [graphics] = stageChildren;
+  assert.deepEqual(app.hoverPoint, { x: 200, y: 200 });
+  assert.deepEqual(graphics.commands, [
+    ["rect", 150, 150, 100, 100]
+  ]);
 });

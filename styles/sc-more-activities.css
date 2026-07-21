@@ -2190,6 +2190,79 @@
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--sc-ma-accent, #39f08c) 45%, transparent 55%);
 }
 
+/* SC Teleport destination banner */
+.sc-ma-teleport-destination-app {
+  position: fixed !important;
+  top: 78px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  width: auto !important;
+  height: auto !important;
+  max-width: min(90vw, 32rem);
+  padding: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+  pointer-events: none;
+  z-index: 70;
+}
+
+.sc-ma-teleport-destination-app .sc-ma-teleport-banner {
+  align-items: center;
+  background: color-mix(in srgb, var(--sc-ma-bg-card, #232536) 92%, black 8%);
+  border: 1px solid var(--sc-ma-accent, #39f08c);
+  border-radius: 10px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
+  display: flex;
+  gap: var(--sc-ma-space-3, 0.75rem);
+  padding: 0.55rem 0.75rem;
+  pointer-events: auto;
+}
+
+.sc-ma-teleport-destination-app .sc-ma-teleport-banner-icon {
+  color: var(--sc-ma-accent, #39f08c);
+  font-size: 1.15rem;
+}
+
+.sc-ma-teleport-destination-app .sc-ma-teleport-banner-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.sc-ma-teleport-destination-app .sc-ma-teleport-banner-title {
+  color: var(--sc-ma-text-strong, #f0ecde);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.sc-ma-teleport-destination-app .sc-ma-teleport-banner-meta {
+  color: var(--sc-ma-text-dim, #aba494);
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
+.sc-ma-teleport-destination-app .sc-ma-teleport-cancel {
+  align-items: center;
+  background: color-mix(in srgb, var(--sc-ma-bg-card-soft, #1a1c28) 88%, black 12%);
+  border: 1px solid var(--sc-ma-border-soft, #323749);
+  border-radius: 6px;
+  color: var(--sc-ma-text, #ddd8cd);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 1.8rem;
+  justify-content: center;
+  padding: 0;
+  width: 1.8rem;
+}
+
+.sc-ma-teleport-destination-app .sc-ma-teleport-cancel:hover {
+  border-color: var(--sc-ma-accent, #39f08c);
+  color: var(--sc-ma-text-strong, #f0ecde);
+}
+
 /* SC Movement preview */
 .sc-more-activities .sc-ma-movement-preview {
   gap: var(--sc-ma-space-3, 0.75rem);

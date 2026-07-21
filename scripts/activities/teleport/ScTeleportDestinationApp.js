@@ -7,9 +7,13 @@ const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(ApplicationV2) {
   static DEFAULT_OPTIONS = {
     classes: ["dnd5e2", "sc-more-activities", "sc-ma-teleport-destination-app"],
-    tag: "form",
+    tag: "div",
+    window: {
+      frame: false,
+      positioned: false
+    },
     position: {
-      width: 320,
+      width: "auto",
       height: "auto"
     }
   };
@@ -21,24 +25,25 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
   };
 
   constructor(activity, selectedTargets, options = {}) {
-    super({
-      window: {
-        title: Constants.localize("SCMOREACTIVITIES.Activities.ScTeleport.App.Destination.Title", "Teleport Destination")
-      },
-      ...options
-    });
+    super({ ...options });
     this.activity = activity;
     this.selectedTargets = selectedTargets;
-    this.canvasClickHandler = null;
     this.isResolvingDestination = false;
     this.previewGraphics = null;
+    this.hoverPoint = null;
+    this.canvasPointerDownHandler = null;
+    this.canvasPointerUpHandler = null;
+    this.canvasPointerMoveHandler = null;
+    this.canvasContextMenuHandler = null;
+    this.keydownHandler = null;
   }
 
   async _prepareContext() {
     const config = this.#config();
     return {
       targetCount: this.selectedTargets.length,
-      teleportDistance: config.teleportDistance
+      teleportDistance: config.teleportDistance,
+      hasRangeLimit: config.teleportDistance > 0
     };
   }
 
@@ -47,20 +52,16 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     this.element.querySelector(".sc-ma-teleport-cancel")?.addEventListener("click", () => {
       this.close();
     });
-    await this.#startDestinationSelection();
+    this.#startDestinationSelection();
   }
 
   async close(options = {}) {
-    await super.close(options);
     this.#stopDestinationSelection();
     this.#destroyPreviewGraphics();
+    await super.close(options);
   }
 
-  async #startDestinationSelection() {
-    if (this.canvasClickHandler) {
-      return;
-    }
-
+  #startDestinationSelection() {
     const origin = ScCanvasActivityService.getOriginTokenObject(this.activity);
     if (!origin) {
       ui.notifications?.warn?.(Constants.localize(
@@ -71,46 +72,114 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
       return;
     }
 
-    const originCenter = ScCanvasActivityService.getTokenCenter(origin);
-    const config = this.#config();
-    if (config.teleportDistance > 0) {
-      this.#drawRangePreview(originCenter, config.teleportDistance);
+    if (this.canvasPointerUpHandler) {
+      return;
     }
 
-    this.canvasClickHandler = this.#onCanvasClick.bind(this);
-    canvas?.stage?.on?.("click", this.canvasClickHandler);
+    this.canvasPointerDownHandler = this.#onCanvasPointerDown.bind(this);
+    this.canvasPointerUpHandler = this.#onCanvasPointerUp.bind(this);
+    this.canvasPointerMoveHandler = this.#onCanvasPointerMove.bind(this);
+    this.canvasContextMenuHandler = this.#onCanvasContextMenu.bind(this);
+    this.keydownHandler = this.#onKeyDown.bind(this);
+
+    // Listen at the window level during the capture phase. This runs before the
+    // canvas element's own listeners, so consuming the event here keeps the
+    // click from reaching the canvas interaction layer (and any module hooked
+    // into it, such as Automated Animations) while we place the destination.
+    const target = globalThis.window;
+    target?.addEventListener?.("pointerdown", this.canvasPointerDownHandler, true);
+    target?.addEventListener?.("pointerup", this.canvasPointerUpHandler, true);
+    target?.addEventListener?.("pointermove", this.canvasPointerMoveHandler, true);
+    target?.addEventListener?.("contextmenu", this.canvasContextMenuHandler, true);
+    target?.addEventListener?.("keydown", this.keydownHandler, true);
+
+    this.#drawPreview();
   }
 
   #stopDestinationSelection() {
-    if (!this.canvasClickHandler) {
-      return;
+    const target = globalThis.window;
+    if (this.canvasPointerDownHandler) {
+      target?.removeEventListener?.("pointerdown", this.canvasPointerDownHandler, true);
+      this.canvasPointerDownHandler = null;
     }
-    canvas?.stage?.off?.("click", this.canvasClickHandler);
-    this.canvasClickHandler = null;
+    if (this.canvasPointerUpHandler) {
+      target?.removeEventListener?.("pointerup", this.canvasPointerUpHandler, true);
+      this.canvasPointerUpHandler = null;
+    }
+    if (this.canvasPointerMoveHandler) {
+      target?.removeEventListener?.("pointermove", this.canvasPointerMoveHandler, true);
+      this.canvasPointerMoveHandler = null;
+    }
+    if (this.canvasContextMenuHandler) {
+      target?.removeEventListener?.("contextmenu", this.canvasContextMenuHandler, true);
+      this.canvasContextMenuHandler = null;
+    }
+    if (this.keydownHandler) {
+      target?.removeEventListener?.("keydown", this.keydownHandler, true);
+      this.keydownHandler = null;
+    }
   }
 
-  #drawRangePreview(originCenter, distance) {
-    if (!globalThis.PIXI?.Graphics || this.previewGraphics || !originCenter) {
+  #isCanvasEvent(event) {
+    const view = canvas?.app?.view ?? null;
+    return Boolean(view) && event?.target === view;
+  }
+
+  #onCanvasPointerDown(event) {
+    if (!this.#isCanvasEvent(event) || Number(event?.button ?? 0) !== 0) {
       return;
     }
+    // Consume the press so the canvas does not pan and other modules do not
+    // react to it while the destination is being picked.
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+  }
 
-    const distancePixels = Number(canvas?.dimensions?.distancePixels ?? 0);
-    const radius = Number(distance) * distancePixels;
-    if (!Number.isFinite(radius) || radius <= 0) {
+  async #onCanvasPointerUp(event) {
+    if (!this.#isCanvasEvent(event) || Number(event?.button ?? 0) !== 0) {
       return;
     }
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    await this.#resolveDestination(event);
+  }
 
-    const previewColors = ModuleSettings.getTeleportRangeColors();
-    const borderColor = Number.parseInt(String(previewColors.borderColor ?? "#24b86a").slice(1), 16);
-    const fillColor = Number.parseInt(String(previewColors.fillColor ?? "#39f08c").slice(1), 16);
+  #onCanvasPointerMove(event) {
+    if (!this.#isCanvasEvent(event)) {
+      return;
+    }
+    const point = this.#destinationFromEvent(event);
+    if (!point) {
+      return;
+    }
+    this.hoverPoint = point;
+    this.#drawPreview();
+  }
 
+  #onCanvasContextMenu(event) {
+    if (!this.#isCanvasEvent(event)) {
+      return;
+    }
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    this.close();
+  }
+
+  #onKeyDown(event) {
+    if (event?.key === "Escape") {
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
+      this.close();
+    }
+  }
+
+  #ensurePreviewGraphics() {
+    if (!globalThis.PIXI?.Graphics || this.previewGraphics) {
+      return;
+    }
     this.previewGraphics = new PIXI.Graphics();
     this.previewGraphics.eventMode = "none";
     this.previewGraphics.interactive = false;
-    this.previewGraphics.lineStyle(3, borderColor, 0.95);
-    this.previewGraphics.beginFill(fillColor, 0.2);
-    this.previewGraphics.drawCircle(originCenter.x, originCenter.y, radius);
-    this.previewGraphics.endFill();
     canvas?.stage?.addChild?.(this.previewGraphics);
   }
 
@@ -118,14 +187,72 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     if (!this.previewGraphics) {
       return;
     }
-
     this.previewGraphics.parent?.removeChild?.(this.previewGraphics);
     this.previewGraphics.destroy();
     this.previewGraphics = null;
   }
 
-  async #onCanvasClick(event) {
-    await this.#resolveDestination(event);
+  #drawPreview() {
+    this.#ensurePreviewGraphics();
+    if (!this.previewGraphics) {
+      return;
+    }
+
+    this.previewGraphics.clear();
+
+    const origin = ScCanvasActivityService.getOriginTokenObject(this.activity);
+    if (!origin) {
+      return;
+    }
+
+    const config = this.#config();
+    const colors = ModuleSettings.getTeleportRangeColors();
+    const borderColor = ScTeleportDestinationApp.#hexToNumber(colors.borderColor, 0x24b86a);
+    const fillColor = ScTeleportDestinationApp.#hexToNumber(colors.fillColor, 0x39f08c);
+    const outOfRangeColor = 0xd32f2f;
+    const outOfRangeFill = 0xff6b6b;
+
+    const originCenter = ScCanvasActivityService.getTokenCenter(origin);
+    if (config.teleportDistance > 0 && originCenter) {
+      const distancePixels = Number(canvas?.dimensions?.distancePixels ?? 0);
+      const radius = config.teleportDistance * distancePixels;
+      if (Number.isFinite(radius) && radius > 0) {
+        this.previewGraphics.lineStyle(2, borderColor, 0.9);
+        this.previewGraphics.beginFill(fillColor, 0.12);
+        this.previewGraphics.drawCircle(originCenter.x, originCenter.y, radius);
+        this.previewGraphics.endFill();
+      }
+    }
+
+    if (!this.hoverPoint) {
+      return;
+    }
+
+    const preview = ScCanvasActivityService.getTeleportPlacementPreview(this.activity, {
+      tokenIds: this.selectedTargets.map((target) => target.id),
+      destination: this.hoverPoint
+    });
+    if (!preview) {
+      return;
+    }
+
+    const strokeColor = preview.inRange ? borderColor : outOfRangeColor;
+    const areaColor = preview.inRange ? fillColor : outOfRangeFill;
+
+    for (const landing of preview.landings) {
+      const x = landing.center.x - (landing.size.width / 2);
+      const y = landing.center.y - (landing.size.height / 2);
+      this.previewGraphics.lineStyle(2, strokeColor, 0.95);
+      this.previewGraphics.beginFill(areaColor, 0.25);
+      this.previewGraphics.drawRoundedRect(x, y, landing.size.width, landing.size.height, 6);
+      this.previewGraphics.endFill();
+    }
+
+    const markerRadius = ScTeleportDestinationApp.#markerRadius();
+    this.previewGraphics.lineStyle(2, strokeColor, 0.95);
+    this.previewGraphics.beginFill(areaColor, 0.55);
+    this.previewGraphics.drawCircle(preview.destination.x, preview.destination.y, markerRadius);
+    this.previewGraphics.endFill();
   }
 
   async #resolveDestination(event) {
@@ -138,10 +265,7 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
       return;
     }
 
-    const rawPosition = this.#eventCanvasPosition(event);
-    const destination = this.#config().snapToGrid
-      ? ScCanvasActivityService.snapCenterPoint(rawPosition)
-      : rawPosition;
+    const destination = this.#destinationFromEvent(event);
     if (!destination) {
       return;
     }
@@ -172,7 +296,17 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
       this.isResolvingDestination = false;
     }
 
-    await this.#startDestinationSelection();
+    this.#startDestinationSelection();
+  }
+
+  #destinationFromEvent(event) {
+    const rawPosition = canvas?.canvasCoordinatesFromClient?.(event);
+    if (!Number.isFinite(rawPosition?.x) || !Number.isFinite(rawPosition?.y)) {
+      return null;
+    }
+    return this.#config().snapToGrid
+      ? ScCanvasActivityService.snapCenterPoint(rawPosition)
+      : rawPosition;
   }
 
   #config() {
@@ -183,26 +317,13 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     };
   }
 
-  #eventCanvasPosition(event) {
-    const button = event?.data?.originalEvent?.button ?? event?.button;
-    if (button !== undefined && button !== 0) {
-      return null;
-    }
+  static #markerRadius() {
+    const gridSize = Number(canvas?.scene?.grid?.size ?? canvas?.grid?.size ?? 100) || 100;
+    return Math.max(Math.round(gridSize * 0.08), 6);
+  }
 
-    const localPosition = event?.data?.getLocalPosition?.(canvas?.tokens ?? canvas?.stage);
-    if (Number.isFinite(localPosition?.x) && Number.isFinite(localPosition?.y)) {
-      return localPosition;
-    }
-
-    const originalEvent = event?.data?.originalEvent ?? event;
-    const clientPosition = canvas?.canvasCoordinatesFromClient?.({
-      x: originalEvent?.x ?? originalEvent?.clientX,
-      y: originalEvent?.y ?? originalEvent?.clientY
-    });
-    if (Number.isFinite(clientPosition?.x) && Number.isFinite(clientPosition?.y)) {
-      return clientPosition;
-    }
-
-    return null;
+  static #hexToNumber(value, fallback) {
+    const parsed = Number.parseInt(String(value ?? "").replace(/^#/, ""), 16);
+    return Number.isFinite(parsed) ? parsed : fallback;
   }
 }

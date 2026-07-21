@@ -689,6 +689,8 @@
   "SCMOREACTIVITIES.Activities.ScTeleport.App.Destination.Targets": "Targets",
   "SCMOREACTIVITIES.Activities.ScTeleport.App.Destination.Range": "Range",
   "SCMOREACTIVITIES.Activities.ScTeleport.App.Destination.Hint": "Click the canvas destination for the selected tokens.",
+  "SCMOREACTIVITIES.Activities.ScTeleport.App.Destination.Prompt": "Left-click the canvas to teleport",
+  "SCMOREACTIVITIES.Activities.ScTeleport.App.Destination.Dismiss": "Right-click or Esc to cancel",
   "SCMOREACTIVITIES.Activities.ScMovement.Title": "SC Movement",
   "SCMOREACTIVITIES.Activities.ScMovement.Hint": "Push or pull selected tokens from the activity actor, with an optional choice when used.",
   "SCMOREACTIVITIES.Activities.ScMovement.Sections.Configuration": "Movement",
