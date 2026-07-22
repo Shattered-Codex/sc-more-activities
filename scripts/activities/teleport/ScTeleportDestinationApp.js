@@ -30,6 +30,7 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     this.selectedTargets = selectedTargets;
     this.isResolvingDestination = false;
     this.previewGraphics = null;
+    this.previewLabels = null;
     this.hoverPoint = null;
     this.canvasPointerDownHandler = null;
     this.canvasPointerUpHandler = null;
@@ -44,6 +45,7 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     return {
       targetCount: this.selectedTargets.length,
       teleportDistance: config.teleportDistance,
+      rangeUnits: ScTeleportDestinationApp.#gridUnits(),
       hasRangeLimit: config.teleportDistance > 0
     };
   }
@@ -230,16 +232,31 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
   }
 
   #ensurePreviewGraphics() {
-    if (!globalThis.PIXI?.Graphics || this.previewGraphics) {
+    if (!globalThis.PIXI?.Graphics) {
       return;
     }
-    this.previewGraphics = new PIXI.Graphics();
-    this.previewGraphics.eventMode = "none";
-    this.previewGraphics.interactive = false;
-    canvas?.stage?.addChild?.(this.previewGraphics);
+    if (!this.previewGraphics) {
+      this.previewGraphics = new PIXI.Graphics();
+      this.previewGraphics.eventMode = "none";
+      this.previewGraphics.interactive = false;
+      canvas?.stage?.addChild?.(this.previewGraphics);
+    }
+    // Labels live in their own container so a Graphics#clear does not drop
+    // them; they are rebuilt on every redraw.
+    if (!this.previewLabels && PIXI.Container && PIXI.Text && PIXI.TextStyle) {
+      this.previewLabels = new PIXI.Container();
+      this.previewLabels.eventMode = "none";
+      this.previewLabels.interactive = false;
+      canvas?.stage?.addChild?.(this.previewLabels);
+    }
   }
 
   #destroyPreviewGraphics() {
+    if (this.previewLabels) {
+      this.previewLabels.parent?.removeChild?.(this.previewLabels);
+      this.previewLabels.destroy({ children: true });
+      this.previewLabels = null;
+    }
     if (!this.previewGraphics) {
       return;
     }
@@ -255,6 +272,7 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     }
 
     this.previewGraphics.clear();
+    this.#clearLabels();
 
     const origin = ScCanvasActivityService.getOriginTokenObject(this.activity);
     if (!origin) {
@@ -311,6 +329,61 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     this.previewGraphics.beginFill(areaColor, 0.55);
     this.previewGraphics.drawCircle(preview.destination.x, preview.destination.y, markerRadius);
     this.previewGraphics.endFill();
+
+    this.#drawDistanceLabel(preview, originCenter, config.teleportDistance, markerRadius);
+  }
+
+  /**
+   * Label the destination marker with the distance travelled, so the player can
+   * read the cost of the jump without measuring it by hand.
+   */
+  #drawDistanceLabel(preview, originCenter, teleportDistance, markerRadius) {
+    if (!this.previewLabels || !originCenter) {
+      return;
+    }
+
+    const distance = ScCanvasActivityService.euclideanSceneDistance(originCenter, preview.destination);
+    if (!Number.isFinite(distance)) {
+      return;
+    }
+
+    const units = ScTeleportDestinationApp.#gridUnits();
+    const rounded = Math.round(distance);
+    const text = teleportDistance > 0
+      ? `${rounded} / ${teleportDistance} ${units}`
+      : `${rounded} ${units}`;
+
+    const gridSize = Number(canvas?.scene?.grid?.size ?? canvas?.grid?.size ?? 100) || 100;
+    const label = new PIXI.Text(text, new PIXI.TextStyle({
+      fontFamily: "Signika, sans-serif",
+      fontSize: Math.max(Math.round(gridSize * 0.22), 14),
+      fill: preview.inRange ? 0xffffff : 0xff6b6b,
+      stroke: 0x000000,
+      strokeThickness: 4,
+      align: "center"
+    }));
+    label.eventMode = "none";
+    label.interactive = false;
+    label.anchor?.set?.(0.5, 1);
+
+    // Sit just above the highest landing footprint, falling back to the
+    // destination marker when the preview reports no landings.
+    let top = preview.destination.y - markerRadius;
+    for (const landing of preview.landings ?? []) {
+      top = Math.min(top, landing.center.y - (landing.size.height / 2));
+    }
+    label.x = preview.destination.x;
+    label.y = top - Math.round(gridSize * 0.1);
+    this.previewLabels.addChild?.(label);
+  }
+
+  #clearLabels() {
+    this.previewLabels?.removeChildren?.().forEach((child) => child.destroy?.());
+  }
+
+  static #gridUnits() {
+    const units = String(canvas?.scene?.grid?.units ?? canvas?.grid?.units ?? "").trim();
+    return units || "ft";
   }
 
   async #resolveDestination(event) {
