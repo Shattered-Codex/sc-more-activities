@@ -333,6 +333,88 @@ test("marks only blocking in-range walls and never reveals secret doors", async(
   assert.deepEqual(drawnWalls, [["lineTo", 100, 200]]);
 });
 
+test("labels the destination footprint with the travelled distance", async(t) => {
+  class Graphics {
+    constructor() {
+      this.parent = null;
+    }
+
+    clear() { return this; }
+    lineStyle() { return this; }
+    beginFill() { return this; }
+    drawCircle() { return this; }
+    drawRoundedRect() { return this; }
+    endFill() { return this; }
+    destroy() {}
+  }
+  class Container {
+    constructor() {
+      this.children = [];
+      this.parent = null;
+    }
+
+    addChild(child) {
+      this.children.push(child);
+      return child;
+    }
+
+    removeChildren() {
+      const removed = this.children;
+      this.children = [];
+      return removed;
+    }
+
+    destroy() {}
+  }
+  class Text {
+    constructor(text, style) {
+      this.text = text;
+      this.style = style;
+      this.anchor = { set() {} };
+    }
+
+    destroy() {}
+  }
+  class TextStyle {
+    constructor(options) {
+      Object.assign(this, options);
+    }
+  }
+
+  globalThis.PIXI = { Graphics, Container, Text, TextStyle };
+  const calls = [];
+  patchCanvasService(t, calls, { distance: 15 });
+  const { stageChildren } = makeCanvas();
+  ScCanvasActivityService.getTeleportPlacementPreview = () => ({
+    inRange: true,
+    destination: { x: 200, y: 200 },
+    landings: [{ center: { x: 200, y: 200 }, size: { width: 100, height: 100 } }]
+  });
+
+  t.after(() => {
+    delete globalThis.PIXI;
+  });
+
+  const app = new ScTeleportDestinationApp(
+    { teleport: { snapToGrid: false, teleportDistance: 30 } },
+    [{ id: "target-token" }]
+  );
+  await app._onRender({}, {});
+  handler("pointermove")(canvasEvent({ clientX: 200, clientY: 200 }));
+
+  const labels = stageChildren.find((child) => child instanceof Container);
+  assert.equal(labels.children.length, 1);
+  const [label] = labels.children;
+  assert.equal(label.text, "15 / 30 ft");
+  assert.equal(label.x, 200);
+  // Sits above the landing footprint (top edge 150) with a small gap.
+  assert.equal(label.y, 140);
+
+  // Redrawing replaces the label instead of stacking new ones.
+  handler("pointermove")(canvasEvent({ clientX: 210, clientY: 210 }));
+  assert.equal(labels.children.length, 1);
+});
+
 test("cancels the selection on right-click over the canvas", async(t) => {
   const calls = [];
   patchCanvasService(t, calls);
