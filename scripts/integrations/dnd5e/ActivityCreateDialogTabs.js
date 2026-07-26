@@ -90,8 +90,8 @@ export class ActivityCreateDialogTabs {
       return { group, tab, panel };
     });
 
-    layout.append(panels);
-    header.after(nav, layout);
+    layout.append(nav, panels);
+    header.after(layout);
     list.remove();
 
     const setDialogCreateType = (type) => {
@@ -174,7 +174,7 @@ export class ActivityCreateDialogTabs {
       ? groupElements.find((entry) => entry.panel.contains(selectedRadio))?.group.key
       : null;
     activate(selectedGroup ?? groupElements[0].group.key, { selectFirst: !selectedRadio });
-    dialog.setPosition?.(dialog.position ?? {});
+    dialog.setPosition?.({ height: "auto" });
   }
 
   static #isActivityCreateDialog(dialog, root) {
@@ -299,7 +299,7 @@ export class ActivityCreateDialogTabs {
     tab.dataset.scGroup = group.key;
     tab.setAttribute("data-tooltip", "");
     tab.title = group.label;
-    tab.setAttribute("data-tooltip-direction", "LEFT");
+    tab.setAttribute("data-tooltip-direction", "RIGHT");
     tab.setAttribute("aria-controls", panelId);
     tab.setAttribute("aria-label", group.label);
     tab.setAttribute("aria-selected", "false");

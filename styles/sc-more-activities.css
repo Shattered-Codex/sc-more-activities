@@ -2008,42 +2008,30 @@
   padding: var(--sc-ma-space-2);
 }
 
-.sc-ma-create-dialog,
-.sc-ma-create-dialog .window-content,
-.sc-ma-create-dialog .sc-ma-create-dialog-content {
-  overflow: visible;
-}
-
-.sc-ma-create-dialog .sc-ma-create-dialog-content {
-  position: relative;
-}
-
 .sc-ma-create-dialog .sc-ma-create-layout {
-  display: block;
+  align-items: stretch;
+  display: flex;
+  gap: var(--sc-ma-space-2, 0.5rem);
 }
 
 .sc-ma-create-dialog .sc-ma-create-panels {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
   min-width: 0;
 }
 
 .sc-ma-create-dialog .sc-ma-create-tabs {
-  --tab-full-width: 41px;
   --sc-ma-create-tab-size: 30px;
-  align-items: stretch;
+  align-items: center;
   background: var(--dnd5e-color-black, var(--sc-ma-bg-base));
   border: 1px solid color-mix(in srgb, var(--sc-ma-accent) 46%, var(--sc-ma-border) 54%);
-  border-left: 0;
-  border-radius: 0 6px 6px 0;
+  border-radius: 6px;
   contain: content;
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
   gap: 0;
-  left: 100%;
-  overflow: hidden;
-  position: absolute;
-  top: 3.25rem;
-  width: var(--tab-full-width);
-  z-index: 1;
 }
 
 .sc-ma-create-dialog .sc-ma-create-tab {
@@ -2106,10 +2094,13 @@
 }
 
 .sc-ma-create-dialog .sc-ma-create-panel.active:not([hidden]) {
-  display: block;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
 }
 
 .sc-ma-create-dialog .sc-ma-create-panel ol.card {
+  flex: 1;
   margin: 0;
 }
 
