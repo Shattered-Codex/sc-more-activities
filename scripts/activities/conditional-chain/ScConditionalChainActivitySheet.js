@@ -162,7 +162,6 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
           ? this.#resultPathDescription(conditionPath)
           : "",
         routeOptions,
-        valueBranchOperatorOptions: isRollValue ? context.rollValueOperatorOptions : context.operatorOptions,
         choices: node.choices.map((choice, choiceIndex) => ({ ...choice, choiceIndex })),
         valueBranches: node.valueBranches.map((branch, branchIndex) => ({ ...branch, branchIndex }))
       };
