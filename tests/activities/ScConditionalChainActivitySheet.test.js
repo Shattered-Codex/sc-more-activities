@@ -202,3 +202,46 @@ test("offers macro return paths for multi-value routing", async() => {
   assert.ok(suggestionValues(node.pathSuggestionGroups).includes("value"));
   assert.ok(suggestionValues(node.pathSuggestionGroups).includes("macro.value"));
 });
+
+test("prepares value branch controls for value-routed roll checks", async() => {
+  const flow = ScConditionalChainFlow.normalizeFlow({
+    startNode: "decision",
+    nodes: [{
+      nodeId: "decision",
+      conditionType: FLOW_CONDITION_TYPES.ROLL_CHECK,
+      condition: { rollMode: "value", rollType: "custom", formula: "1d3" },
+      routes: { fallback: FLOW_END },
+      valueBranches: [{ key: "one", operator: "eq", value: "1", next: FLOW_END }]
+    }]
+  });
+  const sheet = makeSheet(flow);
+  const context = await sheet._prepareEffectContext({}, {});
+  const node = context.nodes[0];
+
+  assert.deepEqual(context.rollModeOptions.map((option) => option.value), ["boolean", "value"]);
+  assert.equal(node.isRollCheck, true);
+  assert.equal(node.isRollValue, true);
+  assert.equal(node.isRollBoolean, false);
+  assert.equal(node.usesValueBranches, true);
+  assert.deepEqual(node.valueBranches.map((branch) => branch.key), ["one"]);
+  assert.ok(node.valueBranchOperatorOptions.some((option) => option.value === "between"));
+  assert.ok(!node.valueBranchOperatorOptions.some((option) => option.value === "includes"));
+});
+
+test("keeps legacy roll checks on the boolean sheet controls", async() => {
+  const node = await prepareNode(ScConditionalChainFlow.normalizeFlow({
+    startNode: "decision",
+    nodes: [{
+      nodeId: "decision",
+      conditionType: FLOW_CONDITION_TYPES.ROLL_CHECK,
+      condition: { rollType: "ability-check", ability: "str", dcFormula: "12" },
+      routes: { onTrue: FLOW_END, onFalse: FLOW_END }
+    }]
+  }));
+
+  assert.equal(node.condition.rollMode, "boolean");
+  assert.equal(node.isRollCheck, true);
+  assert.equal(node.isRollBoolean, true);
+  assert.equal(node.isRollValue, false);
+  assert.equal(node.usesValueBranches, false);
+});

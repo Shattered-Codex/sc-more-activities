@@ -4,7 +4,9 @@ import { FLOW_PROPERTY_OPERATORS } from "./ScConditionalChainConditions.js";
 import {
   FLOW_CONDITION_TYPES,
   FLOW_END,
+  FLOW_ROLL_MODES,
   FLOW_ROLL_TYPES,
+  FLOW_ROLL_VALUE_OPERATORS,
   ScConditionalChainFlow
 } from "./ScConditionalChainFlow.js";
 
@@ -76,11 +78,17 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
       [FLOW_PROPERTY_OPERATORS.BETWEEN]: "Between",
       [FLOW_PROPERTY_OPERATORS.INCLUDES]: "Includes"
     });
+    context.rollValueOperatorOptions = context.operatorOptions
+      .filter((option) => FLOW_ROLL_VALUE_OPERATORS.includes(option.value));
     context.rollTypeOptions = this.#localizedOptions("RollTypes", {
       [FLOW_ROLL_TYPES.ABILITY_CHECK]: "AbilityCheck",
       [FLOW_ROLL_TYPES.SAVING_THROW]: "SavingThrow",
       [FLOW_ROLL_TYPES.SKILL]: "Skill",
       [FLOW_ROLL_TYPES.CUSTOM]: "Custom"
+    });
+    context.rollModeOptions = this.#localizedOptions("RollModes", {
+      [FLOW_ROLL_MODES.BOOLEAN]: "Boolean",
+      [FLOW_ROLL_MODES.VALUE]: "Value"
     });
     context.abilityOptions = Object.entries(CONFIG.DND5E?.abilities ?? {}).map(([value, config]) => ({
       value,
@@ -104,6 +112,8 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
         FLOW_CONDITION_TYPES.LAST_ACTIVITY_RESULT
       ].includes(node.conditionType);
       const isLastActivityValue = node.conditionType === FLOW_CONDITION_TYPES.LAST_ACTIVITY_VALUE;
+      const isRollCheck = node.conditionType === FLOW_CONDITION_TYPES.ROLL_CHECK;
+      const isRollValue = isRollCheck && node.condition.rollMode === FLOW_ROLL_MODES.VALUE;
       const isLastActivityResult = node.conditionType === FLOW_CONDITION_TYPES.LAST_ACTIVITY_RESULT
         || isLastActivityValue;
       const suggestionActivity = availableActivityIndex.get(node.activityId) ?? null;
@@ -129,7 +139,10 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
         isActorProperty: node.conditionType === FLOW_CONDITION_TYPES.ACTOR_PROPERTY,
         isLastActivityResult,
         isLastActivityValue,
-        isRollCheck: node.conditionType === FLOW_CONDITION_TYPES.ROLL_CHECK,
+        isRollCheck,
+        isRollBoolean: isRollCheck && !isRollValue,
+        isRollValue,
+        usesValueBranches: isLastActivityValue || isRollValue,
         isChoice: node.conditionType === FLOW_CONDITION_TYPES.CHOICE,
         usesPathCondition,
         usesBinaryPathCondition,
@@ -149,6 +162,7 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
           ? this.#resultPathDescription(conditionPath)
           : "",
         routeOptions,
+        valueBranchOperatorOptions: isRollValue ? context.rollValueOperatorOptions : context.operatorOptions,
         choices: node.choices.map((choice, choiceIndex) => ({ ...choice, choiceIndex })),
         valueBranches: node.valueBranches.map((branch, branchIndex) => ({ ...branch, branchIndex }))
       };

@@ -6,6 +6,7 @@ import { ScConditionalChainConditions } from "./ScConditionalChainConditions.js"
 import {
   FLOW_CONDITION_TYPES,
   FLOW_END,
+  FLOW_ROLL_MODES,
   FLOW_ROLL_TYPES,
   ScConditionalChainFlow
 } from "./ScConditionalChainFlow.js";
@@ -373,11 +374,15 @@ export class ScConditionalChainActivityService {
       return { valid: false };
     }
 
-    const dc = ScConditionalChainActivityService.#resolveDc(activity, actor, node.condition.dcFormula, lastResult);
-    if (!Number.isFinite(dc)) {
-      ScConditionalChainActivityService.#warnFormat("Warning.InvalidDc", { node: node.label || node.nodeId },
-        `Conditional chain step has an invalid DC formula: ${node.label || node.nodeId}`);
-      return { valid: false };
+    const valueMode = node.condition.rollMode === FLOW_ROLL_MODES.VALUE;
+    let dc = null;
+    if (!valueMode) {
+      dc = ScConditionalChainActivityService.#resolveDc(activity, actor, node.condition.dcFormula, lastResult);
+      if (!Number.isFinite(dc)) {
+        ScConditionalChainActivityService.#warnFormat("Warning.InvalidDc", { node: node.label || node.nodeId },
+          `Conditional chain step has an invalid DC formula: ${node.label || node.nodeId}`);
+        return { valid: false };
+      }
     }
 
     let rolls;
@@ -407,18 +412,48 @@ export class ScConditionalChainActivityService {
       return { valid: false };
     }
 
-    return { valid: true, kind: "boolean", value: total >= dc };
+    if (!valueMode) {
+      return { valid: true, kind: "boolean", value: total >= dc };
+    }
+
+    for (const branch of node.valueBranches) {
+      const expected = ScConditionalChainActivityService.#resolveExpectedValue(
+        activity,
+        actor,
+        branch.value,
+        lastResult
+      );
+      const evaluation = ScConditionalChainConditions.compare(branch.operator, total, expected);
+      if (!evaluation.valid) {
+        ScConditionalChainActivityService.#warnFormat(
+          "Warning.InvalidRoll",
+          { node: node.label || node.nodeId, error: evaluation.reason ?? "invalid comparison" },
+          `Could not route conditional chain roll total (${evaluation.reason ?? "invalid comparison"}).`
+        );
+        return { valid: false };
+      }
+      if (evaluation.result) {
+        return { valid: true, kind: "value-branch", key: branch.key };
+      }
+    }
+    return { valid: true, kind: "value-fallback" };
   }
 
   static async #rollForNode(actor, activity, condition, dc, lastResult) {
     if (condition.rollType === FLOW_ROLL_TYPES.SKILL && typeof actor?.rollSkill === "function") {
-      return actor.rollSkill({ skill: condition.skill, target: dc }, {}, {});
+      const config = { skill: condition.skill };
+      if (Number.isFinite(dc)) config.target = dc;
+      return actor.rollSkill(config, {}, {});
     }
     if (condition.rollType === FLOW_ROLL_TYPES.SAVING_THROW && typeof actor?.rollSavingThrow === "function") {
-      return actor.rollSavingThrow({ ability: condition.ability, target: dc }, {}, {});
+      const config = { ability: condition.ability };
+      if (Number.isFinite(dc)) config.target = dc;
+      return actor.rollSavingThrow(config, {}, {});
     }
     if (condition.rollType === FLOW_ROLL_TYPES.ABILITY_CHECK && typeof actor?.rollAbilityCheck === "function") {
-      return actor.rollAbilityCheck({ ability: condition.ability, target: dc }, {}, {});
+      const config = { ability: condition.ability };
+      if (Number.isFinite(dc)) config.target = dc;
+      return actor.rollAbilityCheck(config, {}, {});
     }
     if (condition.rollType === FLOW_ROLL_TYPES.CUSTOM) {
       const rollData = ScConditionalChainActivityService.#withLastResultRollData(
@@ -427,9 +462,12 @@ export class ScConditionalChainActivityService {
       );
       const roll = new Roll(condition.formula, rollData);
       await roll.evaluate();
+      const flavor = Number.isFinite(dc)
+        ? Constants.format(`${LANG}.Chat.CustomRoll`, { dc }, `Conditional chain check (DC ${dc})`)
+        : Constants.localize(`${LANG}.Chat.CustomRollValue`, "Conditional chain roll");
       await roll.toMessage?.({
         speaker: ChatMessage.implementation?.getSpeaker?.({ actor }) ?? ChatMessage.getSpeaker({ actor }),
-        flavor: Constants.format(`${LANG}.Chat.CustomRoll`, { dc }, `Conditional chain check (DC ${dc})`)
+        flavor
       });
       return [roll];
     }

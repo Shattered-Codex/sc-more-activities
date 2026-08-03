@@ -1,4 +1,4 @@
-import { FLOW_CONDITION_TYPES, FLOW_END, FLOW_ROLL_TYPES } from "./ScConditionalChainFlow.js";
+import { FLOW_CONDITION_TYPES, FLOW_END, FLOW_ROLL_MODES, FLOW_ROLL_TYPES } from "./ScConditionalChainFlow.js";
 import { FLOW_PROPERTY_OPERATORS } from "./ScConditionalChainConditions.js";
 
 export class ScConditionalChainActivityData extends dnd5e.dataModels.activity.BaseActivityData {
@@ -76,6 +76,11 @@ export class ScConditionalChainActivityData extends dnd5e.dataModels.activity.Ba
               required: false,
               initial: FLOW_ROLL_TYPES.ABILITY_CHECK,
               choices: Object.values(FLOW_ROLL_TYPES)
+            }),
+            rollMode: new fields.StringField({
+              required: false,
+              initial: FLOW_ROLL_MODES.BOOLEAN,
+              choices: Object.values(FLOW_ROLL_MODES)
             }),
             ability: new fields.StringField({
               required: false,

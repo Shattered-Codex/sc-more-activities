@@ -127,7 +127,19 @@
           </div>
         {{/if}}
 
-        {{#if node.isLastActivityValue}}
+        {{#if node.isRollCheck}}
+          <div class="form-group">
+            <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.RollMode.Label" }}</label>
+            <div class="form-fields">
+              <select name="flow.nodes.{{ node.index }}.condition.rollMode">
+                {{ selectOptions ../rollModeOptions selected=node.condition.rollMode valueAttr="value" labelAttr="label" }}
+              </select>
+            </div>
+            <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.RollMode.Hint" }}</p>
+          </div>
+        {{/if}}
+
+        {{#if node.usesValueBranches}}
           <div class="sc-ma-flow-choices">
             <div class="sc-ma-flow-choices-header">
               <span>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.ValueBranches.Label" }}</span>
@@ -142,7 +154,7 @@
               <li class="sc-ma-flow-choice-row sc-ma-flow-value-branch-row">
                 <input type="hidden" name="flow.nodes.{{ node.index }}.valueBranches.{{ branch.branchIndex }}.key" value="{{ branch.key }}">
                 <select name="flow.nodes.{{ node.index }}.valueBranches.{{ branch.branchIndex }}.operator" class="sc-ma-flow-operator">
-                  {{ selectOptions ../../operatorOptions selected=branch.operator valueAttr="value" labelAttr="label" }}
+                  {{ selectOptions ../valueBranchOperatorOptions selected=branch.operator valueAttr="value" labelAttr="label" }}
                 </select>
                 <input type="text" name="flow.nodes.{{ node.index }}.valueBranches.{{ branch.branchIndex }}.value" value="{{ branch.value }}"
                        placeholder="{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Value.Placeholder" }}" spellcheck="false">
@@ -198,14 +210,16 @@
               </div>
             </div>
           {{/if}}
-          <div class="form-group">
-            <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Dc.Label" }}</label>
-            <div class="form-fields">
-              <input type="text" name="flow.nodes.{{ node.index }}.condition.dcFormula" value="{{ node.condition.dcFormula }}"
-                     placeholder="15" spellcheck="false">
+          {{#if node.isRollBoolean}}
+            <div class="form-group">
+              <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Dc.Label" }}</label>
+              <div class="form-fields">
+                <input type="text" name="flow.nodes.{{ node.index }}.condition.dcFormula" value="{{ node.condition.dcFormula }}"
+                       placeholder="15" spellcheck="false">
+              </div>
+              <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Dc.Hint" }}</p>
             </div>
-            <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Dc.Hint" }}</p>
-          </div>
+          {{/if}}
         {{/if}}
 
         {{#if node.usesBinaryPathCondition}}
@@ -227,7 +241,7 @@
           </div>
         {{/if}}
 
-        {{#if node.isRollCheck}}
+        {{#if node.isRollBoolean}}
           <div class="form-group sc-ma-flow-routes">
             <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Routes.OnSuccess" }}</label>
             <div class="form-fields">

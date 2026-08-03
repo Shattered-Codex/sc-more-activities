@@ -1,5 +1,8 @@
 import { ScChainExecutionContext } from "../chain/ScChainExecutionContext.js";
-import { ScConditionalChainConditions } from "./ScConditionalChainConditions.js";
+import {
+  FLOW_PROPERTY_OPERATORS,
+  ScConditionalChainConditions
+} from "./ScConditionalChainConditions.js";
 
 export const FLOW_END = "#end";
 
@@ -18,6 +21,21 @@ export const FLOW_ROLL_TYPES = Object.freeze({
   SKILL: "skill",
   CUSTOM: "custom"
 });
+
+export const FLOW_ROLL_MODES = Object.freeze({
+  BOOLEAN: "boolean",
+  VALUE: "value"
+});
+
+export const FLOW_ROLL_VALUE_OPERATORS = Object.freeze([
+  FLOW_PROPERTY_OPERATORS.EQ,
+  FLOW_PROPERTY_OPERATORS.NE,
+  FLOW_PROPERTY_OPERATORS.GT,
+  FLOW_PROPERTY_OPERATORS.GTE,
+  FLOW_PROPERTY_OPERATORS.LT,
+  FLOW_PROPERTY_OPERATORS.LTE,
+  FLOW_PROPERTY_OPERATORS.BETWEEN
+]);
 
 export class ScConditionalChainFlow {
   static normalizeFlow(raw) {
@@ -40,6 +58,9 @@ export class ScConditionalChainFlow {
     const rollType = Object.values(FLOW_ROLL_TYPES).includes(raw?.condition?.rollType)
       ? raw.condition.rollType
       : FLOW_ROLL_TYPES.ABILITY_CHECK;
+    const rollMode = Object.values(FLOW_ROLL_MODES).includes(raw?.condition?.rollMode)
+      ? raw.condition.rollMode
+      : FLOW_ROLL_MODES.BOOLEAN;
     const choices = Array.isArray(raw?.choices) ? raw.choices : [];
     const valueBranches = Array.isArray(raw?.valueBranches) ? raw.valueBranches : [];
     return {
@@ -52,6 +73,7 @@ export class ScConditionalChainFlow {
         operator: String(raw?.condition?.operator ?? "eq").trim() || "eq",
         value: String(raw?.condition?.value ?? "").trim(),
         rollType,
+        rollMode,
         ability: String(raw?.condition?.ability ?? "str").trim() || "str",
         skill: String(raw?.condition?.skill ?? "ath").trim() || "ath",
         formula: String(raw?.condition?.formula ?? "").trim(),
@@ -204,7 +226,7 @@ export class ScConditionalChainFlow {
         target: choice.next
       }));
     }
-    if (node.conditionType === FLOW_CONDITION_TYPES.LAST_ACTIVITY_VALUE) {
+    if (ScConditionalChainFlow.#usesValueBranches(node)) {
       return [
         ...node.valueBranches.map((branch, index) => ({
           name: `value:${branch.key || index}`,
@@ -236,7 +258,7 @@ export class ScConditionalChainFlow {
       }
     }
 
-    if (node.conditionType === FLOW_CONDITION_TYPES.LAST_ACTIVITY_VALUE) {
+    if (ScConditionalChainFlow.#usesValueBranches(node)) {
       if (!node.valueBranches.length) {
         issues.push({ code: "missing-value-branches", nodeId: nodeName });
       }
@@ -250,6 +272,10 @@ export class ScConditionalChainFlow {
         seenKeys.add(branch.key);
         if (!ScConditionalChainConditions.isOperator(branch.operator)) {
           issues.push({ code: "invalid-operator", nodeId: nodeName, ref: branch.operator });
+        } else if (node.conditionType === FLOW_CONDITION_TYPES.ROLL_CHECK
+          && node.condition.rollMode === FLOW_ROLL_MODES.VALUE
+          && !FLOW_ROLL_VALUE_OPERATORS.includes(branch.operator)) {
+          issues.push({ code: "unsupported-roll-value-operator", nodeId: nodeName, ref: branch.operator });
         } else if (branch.operator === "between"
           && !ScConditionalChainConditions.numericInterval(branch.operator, branch.value)) {
           issues.push({ code: "invalid-value-range", nodeId: nodeName, ref: branch.value });
@@ -276,7 +302,7 @@ export class ScConditionalChainFlow {
       if (condition.rollType === FLOW_ROLL_TYPES.CUSTOM && !condition.formula) {
         issues.push({ code: "missing-formula", nodeId: nodeName });
       }
-      if (!condition.dcFormula) {
+      if (condition.rollMode === FLOW_ROLL_MODES.BOOLEAN && !condition.dcFormula) {
         issues.push({ code: "missing-dc", nodeId: nodeName });
       }
     }
@@ -303,5 +329,11 @@ export class ScConditionalChainFlow {
 
   static #branchDescription(branch, index) {
     return `#${index + 1} (${branch.operator} ${branch.value})`;
+  }
+
+  static #usesValueBranches(node) {
+    return node.conditionType === FLOW_CONDITION_TYPES.LAST_ACTIVITY_VALUE
+      || (node.conditionType === FLOW_CONDITION_TYPES.ROLL_CHECK
+        && node.condition?.rollMode === FLOW_ROLL_MODES.VALUE);
   }
 }

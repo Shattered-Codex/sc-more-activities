@@ -147,10 +147,15 @@ The **First step** field at the top selects where the flow begins.
 | Actor property | Compares an actor data path (e.g. `system.attributes.hp.value`) against a value | When true / false |
 | Last activity result | Compares the most recent child activity result against a value | When true / false |
 | Last activity value (multiple paths) | Checks an ordered list of comparisons against one result path | First matching path / fallback |
-| Roll | Rolls an ability check, saving throw, skill check, or custom formula against a DC | On success / failure |
+| Roll | Rolls an ability check, saving throw, skill check, or custom formula; routes by success/failure or by the rolled total | On success / failure or first matching value / fallback |
 | Manual choice | Opens a dialog and lets the user pick the route | One per option |
 
 Canceling a roll or a manual choice always ends the flow.
+
+For a random multi-route outcome, configure **Roll** with a custom formula such as `1d3`, choose routing by
+**Rolled total**, then add `= 1`, `= 2`, and `= 3` value paths. The same roll selects the first matching
+path, so no helper macro is required. Existing roll steps continue to use **Success / failure** by default
+and retain their DC-based behavior.
 
 ### Branching On The Last Activity Result
 

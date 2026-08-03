@@ -57,6 +57,7 @@ test("normalizes a raw flow with defaults and trimming", () => {
   assert.equal(node.conditionType, "always");
   assert.equal(node.condition.operator, "eq");
   assert.equal(node.condition.value, "10");
+  assert.equal(node.condition.rollMode, "boolean");
   assert.equal(node.routes.next, "b");
   assert.deepEqual(node.choices, [{ key: "k1", label: "Attack", next: "" }]);
 });
@@ -223,6 +224,88 @@ test("validates roll-check configuration", () => {
     }]
   });
   assert.deepEqual(codes(ScConditionalChainFlow.validateFlow(flow, [])), ["missing-dc", "missing-formula"]);
+});
+
+test("normalizes roll-check routing mode with a backward-compatible boolean default", () => {
+  const legacy = makeNode({
+    conditionType: FLOW_CONDITION_TYPES.ROLL_CHECK,
+    condition: { rollType: "custom", formula: "1d20", dcFormula: "10" },
+    routes: { onTrue: FLOW_END, onFalse: FLOW_END }
+  });
+  const byValue = makeNode({
+    conditionType: FLOW_CONDITION_TYPES.ROLL_CHECK,
+    condition: { rollMode: "value", rollType: "custom", formula: "1d3" },
+    routes: { fallback: FLOW_END },
+    valueBranches: [{ key: "one", operator: "eq", value: "1", next: FLOW_END }]
+  });
+  const invalid = makeNode({
+    conditionType: FLOW_CONDITION_TYPES.ROLL_CHECK,
+    condition: { rollMode: "unsupported", rollType: "custom", formula: "1d20", dcFormula: "10" },
+    routes: { onTrue: FLOW_END, onFalse: FLOW_END }
+  });
+
+  assert.equal(legacy.condition.rollMode, "boolean");
+  assert.equal(byValue.condition.rollMode, "value");
+  assert.equal(invalid.condition.rollMode, "boolean");
+});
+
+test("validates value-routed rolls without requiring a DC", () => {
+  const valid = makeFlow({
+    nodes: [{
+      nodeId: "a",
+      conditionType: FLOW_CONDITION_TYPES.ROLL_CHECK,
+      condition: { rollMode: "value", rollType: "custom", formula: "1d3", dcFormula: "" },
+      routes: { fallback: FLOW_END },
+      valueBranches: [
+        { key: "one", operator: "eq", value: "1", next: FLOW_END },
+        { key: "two", operator: "eq", value: "2", next: FLOW_END },
+        { key: "three", operator: "eq", value: "3", next: FLOW_END }
+      ]
+    }]
+  });
+  assert.deepEqual(ScConditionalChainFlow.validateFlow(valid, []), []);
+
+  const missingBranches = makeFlow({
+    nodes: [{
+      nodeId: "a",
+      conditionType: FLOW_CONDITION_TYPES.ROLL_CHECK,
+      condition: { rollMode: "value", rollType: "custom", formula: "1d3" },
+      routes: { fallback: FLOW_END },
+      valueBranches: []
+    }]
+  });
+  assert.deepEqual(codes(ScConditionalChainFlow.validateFlow(missingBranches, [])), ["missing-value-branches"]);
+});
+
+test("rejects collection operators for numeric roll value routes", () => {
+  const flow = makeFlow({
+    nodes: [{
+      nodeId: "a",
+      conditionType: FLOW_CONDITION_TYPES.ROLL_CHECK,
+      condition: { rollMode: "value", rollType: "custom", formula: "1d3" },
+      routes: { fallback: FLOW_END },
+      valueBranches: [{ key: "one", operator: "includes", value: "1", next: FLOW_END }]
+    }]
+  });
+
+  assert.deepEqual(
+    codes(ScConditionalChainFlow.validateFlow(flow, [])),
+    ["unsupported-roll-value-operator"]
+  );
+});
+
+test("uses value routes only for value-routed roll checks", () => {
+  const flow = makeFlow({
+    nodes: [{
+      nodeId: "a",
+      conditionType: FLOW_CONDITION_TYPES.ROLL_CHECK,
+      condition: { rollMode: "value", rollType: "custom", formula: "1d3" },
+      routes: { onTrue: "ghost-true", onFalse: "ghost-false", fallback: FLOW_END },
+      valueBranches: [{ key: "one", operator: "eq", value: "1", next: FLOW_END }]
+    }]
+  });
+
+  assert.deepEqual(ScConditionalChainFlow.validateFlow(flow, []), []);
 });
 
 test("validates choice configuration", () => {
