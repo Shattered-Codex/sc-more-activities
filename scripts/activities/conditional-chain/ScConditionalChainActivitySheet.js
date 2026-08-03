@@ -6,6 +6,7 @@ import {
   FLOW_END,
   FLOW_ROLL_MODES,
   FLOW_ROLL_TYPES,
+  FLOW_ROLL_VALUE_OPERATORS,
   ScConditionalChainFlow
 } from "./ScConditionalChainFlow.js";
 
@@ -77,6 +78,8 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
       [FLOW_PROPERTY_OPERATORS.BETWEEN]: "Between",
       [FLOW_PROPERTY_OPERATORS.INCLUDES]: "Includes"
     });
+    context.rollValueOperatorOptions = context.operatorOptions
+      .filter((option) => FLOW_ROLL_VALUE_OPERATORS.includes(option.value));
     context.rollTypeOptions = this.#localizedOptions("RollTypes", {
       [FLOW_ROLL_TYPES.ABILITY_CHECK]: "AbilityCheck",
       [FLOW_ROLL_TYPES.SAVING_THROW]: "SavingThrow",
@@ -159,6 +162,7 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
           ? this.#resultPathDescription(conditionPath)
           : "",
         routeOptions,
+        valueBranchOperatorOptions: isRollValue ? context.rollValueOperatorOptions : context.operatorOptions,
         choices: node.choices.map((choice, choiceIndex) => ({ ...choice, choiceIndex })),
         valueBranches: node.valueBranches.map((branch, branchIndex) => ({ ...branch, branchIndex }))
       };

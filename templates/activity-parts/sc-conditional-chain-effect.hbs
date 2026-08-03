@@ -154,7 +154,7 @@
               <li class="sc-ma-flow-choice-row sc-ma-flow-value-branch-row">
                 <input type="hidden" name="flow.nodes.{{ node.index }}.valueBranches.{{ branch.branchIndex }}.key" value="{{ branch.key }}">
                 <select name="flow.nodes.{{ node.index }}.valueBranches.{{ branch.branchIndex }}.operator" class="sc-ma-flow-operator">
-                  {{ selectOptions ../../operatorOptions selected=branch.operator valueAttr="value" labelAttr="label" }}
+                  {{ selectOptions ../valueBranchOperatorOptions selected=branch.operator valueAttr="value" labelAttr="label" }}
                 </select>
                 <input type="text" name="flow.nodes.{{ node.index }}.valueBranches.{{ branch.branchIndex }}.value" value="{{ branch.value }}"
                        placeholder="{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.Value.Placeholder" }}" spellcheck="false">

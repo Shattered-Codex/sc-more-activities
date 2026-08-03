@@ -476,6 +476,7 @@
   "SCMOREACTIVITIES.Activities.ScConditionalChain.Issues.SelfRoute": "Step \"{node}\" routes to itself ({route}).",
   "SCMOREACTIVITIES.Activities.ScConditionalChain.Issues.MissingPath": "Step \"{node}\" needs a data path.",
   "SCMOREACTIVITIES.Activities.ScConditionalChain.Issues.InvalidOperator": "Step \"{node}\" has an invalid operator ({ref}).",
+  "SCMOREACTIVITIES.Activities.ScConditionalChain.Issues.UnsupportedRollValueOperator": "Step \"{node}\" cannot use the {ref} operator to route a numeric roll total.",
   "SCMOREACTIVITIES.Activities.ScConditionalChain.Issues.MissingFormula": "Step \"{node}\" needs a custom roll formula.",
   "SCMOREACTIVITIES.Activities.ScConditionalChain.Issues.MissingDc": "Step \"{node}\" needs a DC formula.",
   "SCMOREACTIVITIES.Activities.ScConditionalChain.Issues.MissingChoices": "Step \"{node}\" needs at least one option.",

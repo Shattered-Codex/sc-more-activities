@@ -1,5 +1,8 @@
 import { ScChainExecutionContext } from "../chain/ScChainExecutionContext.js";
-import { ScConditionalChainConditions } from "./ScConditionalChainConditions.js";
+import {
+  FLOW_PROPERTY_OPERATORS,
+  ScConditionalChainConditions
+} from "./ScConditionalChainConditions.js";
 
 export const FLOW_END = "#end";
 
@@ -23,6 +26,16 @@ export const FLOW_ROLL_MODES = Object.freeze({
   BOOLEAN: "boolean",
   VALUE: "value"
 });
+
+export const FLOW_ROLL_VALUE_OPERATORS = Object.freeze([
+  FLOW_PROPERTY_OPERATORS.EQ,
+  FLOW_PROPERTY_OPERATORS.NE,
+  FLOW_PROPERTY_OPERATORS.GT,
+  FLOW_PROPERTY_OPERATORS.GTE,
+  FLOW_PROPERTY_OPERATORS.LT,
+  FLOW_PROPERTY_OPERATORS.LTE,
+  FLOW_PROPERTY_OPERATORS.BETWEEN
+]);
 
 export class ScConditionalChainFlow {
   static normalizeFlow(raw) {
@@ -259,6 +272,10 @@ export class ScConditionalChainFlow {
         seenKeys.add(branch.key);
         if (!ScConditionalChainConditions.isOperator(branch.operator)) {
           issues.push({ code: "invalid-operator", nodeId: nodeName, ref: branch.operator });
+        } else if (node.conditionType === FLOW_CONDITION_TYPES.ROLL_CHECK
+          && node.condition.rollMode === FLOW_ROLL_MODES.VALUE
+          && !FLOW_ROLL_VALUE_OPERATORS.includes(branch.operator)) {
+          issues.push({ code: "unsupported-roll-value-operator", nodeId: nodeName, ref: branch.operator });
         } else if (branch.operator === "between"
           && !ScConditionalChainConditions.numericInterval(branch.operator, branch.value)) {
           issues.push({ code: "invalid-value-range", nodeId: nodeName, ref: branch.value });

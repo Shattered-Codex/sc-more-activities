@@ -277,6 +277,23 @@ test("validates value-routed rolls without requiring a DC", () => {
   assert.deepEqual(codes(ScConditionalChainFlow.validateFlow(missingBranches, [])), ["missing-value-branches"]);
 });
 
+test("rejects collection operators for numeric roll value routes", () => {
+  const flow = makeFlow({
+    nodes: [{
+      nodeId: "a",
+      conditionType: FLOW_CONDITION_TYPES.ROLL_CHECK,
+      condition: { rollMode: "value", rollType: "custom", formula: "1d3" },
+      routes: { fallback: FLOW_END },
+      valueBranches: [{ key: "one", operator: "includes", value: "1", next: FLOW_END }]
+    }]
+  });
+
+  assert.deepEqual(
+    codes(ScConditionalChainFlow.validateFlow(flow, [])),
+    ["unsupported-roll-value-operator"]
+  );
+});
+
 test("uses value routes only for value-routed roll checks", () => {
   const flow = makeFlow({
     nodes: [{

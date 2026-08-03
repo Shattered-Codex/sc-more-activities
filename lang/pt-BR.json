@@ -476,6 +476,7 @@
   "SCMOREACTIVITIES.Activities.ScConditionalChain.Issues.SelfRoute": "O passo \"{node}\" roteia para si mesmo ({route}).",
   "SCMOREACTIVITIES.Activities.ScConditionalChain.Issues.MissingPath": "O passo \"{node}\" precisa de um caminho de dados.",
   "SCMOREACTIVITIES.Activities.ScConditionalChain.Issues.InvalidOperator": "O passo \"{node}\" tem um operador inválido ({ref}).",
+  "SCMOREACTIVITIES.Activities.ScConditionalChain.Issues.UnsupportedRollValueOperator": "O passo \"{node}\" não pode usar o operador {ref} para rotear o total numérico de uma rolagem.",
   "SCMOREACTIVITIES.Activities.ScConditionalChain.Issues.MissingFormula": "O passo \"{node}\" precisa de uma fórmula de rolagem personalizada.",
   "SCMOREACTIVITIES.Activities.ScConditionalChain.Issues.MissingDc": "O passo \"{node}\" precisa de uma fórmula de CD.",
   "SCMOREACTIVITIES.Activities.ScConditionalChain.Issues.MissingChoices": "O passo \"{node}\" precisa de pelo menos uma opção.",

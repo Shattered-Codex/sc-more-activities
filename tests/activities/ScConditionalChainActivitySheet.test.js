@@ -224,6 +224,8 @@ test("prepares value branch controls for value-routed roll checks", async() => {
   assert.equal(node.isRollBoolean, false);
   assert.equal(node.usesValueBranches, true);
   assert.deepEqual(node.valueBranches.map((branch) => branch.key), ["one"]);
+  assert.ok(node.valueBranchOperatorOptions.some((option) => option.value === "between"));
+  assert.ok(!node.valueBranchOperatorOptions.some((option) => option.value === "includes"));
 });
 
 test("keeps legacy roll checks on the boolean sheet controls", async() => {
