@@ -474,6 +474,156 @@ test("can evaluate an inherited last result before the first node executes a chi
   assert.deepEqual(calls, ["grant-hit"]);
 });
 
+for (const [total, expected] of [[1, "one"], [2, "two"], [3, "three"], [4, "fallback"]]) {
+  test(`routes a roll-check total of ${total} through its matching value path`, async() => {
+    const calls = [];
+    const rollConfigs = [];
+    const branchIds = ["one", "two", "three", "fallback"];
+    const activities = new Map(branchIds.map((id) => [id, makeChildActivity({
+      id,
+      onUse() {
+        calls.push(id);
+        return makeUseResults(id);
+      }
+    })]));
+    const flow = ScConditionalChainFlow.normalizeFlow({
+      startNode: "decision",
+      nodes: [{
+        nodeId: "decision",
+        conditionType: FLOW_CONDITION_TYPES.ROLL_CHECK,
+        condition: { rollMode: "value", rollType: "ability-check", ability: "str" },
+        routes: { fallback: "fallback-step" },
+        valueBranches: [
+          { key: "one", operator: "eq", value: "1", next: "one-step" },
+          { key: "two", operator: "eq", value: "2", next: "two-step" },
+          { key: "three", operator: "eq", value: "3", next: "three-step" }
+        ]
+      }, ...branchIds.map((id) => ({
+        nodeId: `${id}-step`, activityId: id, routes: { next: FLOW_END }
+      }))]
+    });
+    const root = makeRootActivity(flow, activities);
+    root.actor.rollAbilityCheck = async(config) => {
+      rollConfigs.push(config);
+      return [{ total }];
+    };
+
+    await ScConditionalChainActivityService.execute(root, { usage: {} });
+
+    assert.deepEqual(calls, [expected]);
+    assert.deepEqual(rollConfigs, [{ ability: "str" }]);
+  });
+}
+
+test("rolls a custom die formula directly for value routing without a DC", async() => {
+  const calls = [];
+  const messages = [];
+  const formulas = [];
+  const originalRoll = globalThis.Roll;
+  const originalChatMessage = globalThis.ChatMessage;
+  class FakeRoll {
+    constructor(formula, data) {
+      this.formula = formula;
+      this.data = data;
+      this.total = 3;
+      formulas.push(formula);
+    }
+
+    async evaluate() {
+      return this;
+    }
+
+    async toMessage(message) {
+      messages.push(message);
+    }
+  }
+  globalThis.Roll = FakeRoll;
+  globalThis.ChatMessage = {
+    implementation: { getSpeaker: () => ({ alias: "Test Actor" }) },
+    getSpeaker: () => ({ alias: "Test Actor" })
+  };
+
+  try {
+    const effect = makeChildActivity({
+      id: "effect-three",
+      onUse() {
+        calls.push("effect-three");
+        return makeUseResults("effect-three");
+      }
+    });
+    const activities = new Map([["effect-three", effect]]);
+    const flow = ScConditionalChainFlow.normalizeFlow({
+      startNode: "decision",
+      nodes: [{
+        nodeId: "decision",
+        conditionType: FLOW_CONDITION_TYPES.ROLL_CHECK,
+        condition: { rollMode: "value", rollType: "custom", formula: "1d3" },
+        routes: { fallback: FLOW_END },
+        valueBranches: [{ key: "three", operator: "eq", value: "3", next: "three-step" }]
+      }, {
+        nodeId: "three-step", activityId: "effect-three", routes: { next: FLOW_END }
+      }]
+    });
+
+    await ScConditionalChainActivityService.execute(makeRootActivity(flow, activities), { usage: {} });
+
+    assert.deepEqual(calls, ["effect-three"]);
+    assert.deepEqual(formulas, ["1d3"]);
+    assert.equal(messages.length, 1);
+    assert.doesNotMatch(messages[0].flavor, /DC/i);
+  } finally {
+    if (originalRoll === undefined) delete globalThis.Roll;
+    else globalThis.Roll = originalRoll;
+    if (originalChatMessage === undefined) delete globalThis.ChatMessage;
+    else globalThis.ChatMessage = originalChatMessage;
+  }
+});
+
+test("keeps legacy roll-checks on boolean success and failure routes", async() => {
+  const calls = [];
+  const rollConfigs = [];
+  const success = makeChildActivity({
+    id: "success",
+    onUse() {
+      calls.push("success");
+      return makeUseResults("success");
+    }
+  });
+  const failure = makeChildActivity({
+    id: "failure",
+    onUse() {
+      calls.push("failure");
+      return makeUseResults("failure");
+    }
+  });
+  const activities = new Map([["success", success], ["failure", failure]]);
+  const flow = ScConditionalChainFlow.normalizeFlow({
+    startNode: "decision",
+    nodes: [{
+      nodeId: "decision",
+      conditionType: FLOW_CONDITION_TYPES.ROLL_CHECK,
+      // Existing documents have no rollMode and must continue to compare against a DC.
+      condition: { rollType: "ability-check", ability: "str", dcFormula: "@dc" },
+      routes: { onTrue: "success-step", onFalse: "failure-step" }
+    }, {
+      nodeId: "success-step", activityId: "success", routes: { next: FLOW_END }
+    }, {
+      nodeId: "failure-step", activityId: "failure", routes: { next: FLOW_END }
+    }]
+  });
+  const root = makeRootActivity(flow, activities);
+  root.actor.getRollData = () => ({ dc: 10 });
+  root.actor.rollAbilityCheck = async(config) => {
+    rollConfigs.push(config);
+    return [{ total: 9 }];
+  };
+
+  await ScConditionalChainActivityService.execute(root, { usage: {} });
+
+  assert.deepEqual(calls, ["failure"]);
+  assert.deepEqual(rollConfigs, [{ ability: "str", target: 10 }]);
+});
+
 for (const [total, expected] of [[4, "low"], [5, "middle"], [10, "middle"], [11, "high"]]) {
   test(`routes roll total ${total} through the matching ordered value path`, async() => {
     const calls = [];
