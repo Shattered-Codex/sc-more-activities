@@ -1,5 +1,6 @@
 import { Constants } from "../../constants/Constants.js";
 import { ModuleSettings } from "../../settings/ModuleSettings.js";
+import { ScDocumentWindowMinimizer } from "../../applications/ScDocumentWindowMinimizer.js";
 import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -56,7 +57,7 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
       this.close();
     });
     if (this.minimizedWindows === null) {
-      this.#minimizeOpenWindows();
+      this.minimizedWindows = ScDocumentWindowMinimizer.minimizeOpenWindows(this);
     }
     this.#startDestinationSelection();
   }
@@ -64,59 +65,9 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
   async close(options = {}) {
     this.#stopDestinationSelection();
     this.#destroyPreviewGraphics();
-    this.#restoreMinimizedWindows();
-    await super.close(options);
-  }
-
-  #minimizeOpenWindows() {
-    const restore = [];
-    const consider = (app) => {
-      if (!app || app === this || app.minimized || app.rendered === false) {
-        return;
-      }
-      if (typeof app.minimize !== "function") {
-        return;
-      }
-      restore.push(app);
-    };
-
-    // Legacy (ApplicationV1) popout windows: dialogs and older sheets.
-    for (const app of Object.values(globalThis.ui?.windows ?? {})) {
-      consider(app);
-    }
-
-    // ApplicationV2 document sheets (actor/item/journal sheets). Restricting to
-    // document sheets keeps core UI (sidebar, scene controls, hotbar) untouched.
-    const DocumentSheetV2 = foundry.applications?.api?.DocumentSheetV2;
-    const instances = foundry.applications?.instances;
-    if (DocumentSheetV2 && instances?.values) {
-      for (const app of instances.values()) {
-        if (app instanceof DocumentSheetV2) {
-          consider(app);
-        }
-      }
-    }
-
-    this.minimizedWindows = restore;
-    for (const app of restore) {
-      try {
-        app.minimize?.();
-      } catch (error) {
-        // Ignore windows that refuse to minimize.
-      }
-    }
-  }
-
-  #restoreMinimizedWindows() {
-    const windows = this.minimizedWindows ?? [];
+    ScDocumentWindowMinimizer.restoreWindows(this.minimizedWindows ?? []);
     this.minimizedWindows = null;
-    for (const app of windows) {
-      try {
-        app.maximize?.();
-      } catch (error) {
-        // Ignore windows that refuse to restore.
-      }
-    }
+    await super.close(options);
   }
 
   #startDestinationSelection() {
