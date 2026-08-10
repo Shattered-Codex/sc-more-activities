@@ -714,6 +714,29 @@ Current public capabilities:
 - `activityAvailability`
 - `migration`
 
+### Decorating SC Wall Documents
+
+External modules can decorate the raw Wall creation data produced by an `sc-wall` activity with the
+public `sc-more-activities.prepareWallDocuments` hook. The hook runs on the executing GM after SC More
+Activities validates the request and immediately before `Scene#createEmbeddedDocuments("Wall", ...)`.
+It covers both target-based wall creation and walls drawn through the placement application.
+
+```js
+Hooks.on("sc-more-activities.prepareWallDocuments", ({ activity, scene, user, walls }) => {
+  for (const wall of walls) {
+    wall.flags ??= {};
+    wall.flags["my-module"] = { decorated: true };
+  }
+});
+```
+
+The listener must be synchronous. Decorate only module-owned metadata such as `flags` on the existing
+objects in `walls`; do not add or remove entries, change coordinates or other structural Wall fields,
+replace the array, create Wall documents yourself, or rely on a returned value. Structural fields have
+already passed GM-side validation when this hook runs. The payload also exposes the validated activity,
+target scene, and requesting user for context. The hook name is available from
+`game.modules.get("sc-more-activities")?.api?.hooks?.PREPARE_WALL_DOCUMENTS` after API publication.
+
 The registry is collected during `init`, then locked before normal play. Late registrations are rejected with a structured failure result instead of silently patching `dnd5e`.
 
 Real example:

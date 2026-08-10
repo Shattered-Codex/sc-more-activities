@@ -1,5 +1,6 @@
 import { Constants } from "../../constants/Constants.js";
 import { ModuleSettings } from "../../settings/ModuleSettings.js";
+import { ScDocumentWindowMinimizer } from "../../applications/ScDocumentWindowMinimizer.js";
 import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
 import { ScWallConfig } from "./ScWallConfig.js";
 import { ScWallGeometry } from "./ScWallGeometry.js";
@@ -48,6 +49,7 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
     this.originTokenId = ScCanvasActivityService.getOriginTokenDocument(activity)?.id ?? null;
     this.selectedFacing = this.config.facing === "any" ? "away" : this.config.facing;
     this.pendingCircularDrag = null;
+    this.minimizedWindows = null;
   }
 
   async _prepareContext() {
@@ -117,6 +119,10 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
       return;
     }
 
+    if (this.minimizedWindows === null) {
+      this.minimizedWindows = ScDocumentWindowMinimizer.minimizeOpenWindows(this);
+    }
+
     this.element.querySelector(".sc-ma-wall-place")?.addEventListener("click", () => this.#togglePlacement());
     this.element.querySelector(".sc-ma-wall-facing")?.addEventListener("change", (event) => {
       this.selectedFacing = event.currentTarget.value;
@@ -140,6 +146,8 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
     this.#stopCanvasListener();
     this.#destroyPreviewGraphics();
     await this.#clearPlacementRangeMarker();
+    ScDocumentWindowMinimizer.restoreWindows(this.minimizedWindows ?? []);
+    this.minimizedWindows = null;
     await super.close(options);
   }
 

@@ -1,4 +1,5 @@
 import { Constants } from "../../constants/Constants.js";
+import { HOOKS } from "../../constants/Hooks.js";
 import { Logger } from "../../support/Logger.js";
 import { ScWallConfig } from "../wall/ScWallConfig.js";
 import { ScWallGeometry } from "../wall/ScWallGeometry.js";
@@ -802,6 +803,12 @@ export class ScCanvasActivityService {
       return operation;
     }
 
+    Hooks.callAll(HOOKS.PREPARE_WALL_DOCUMENTS, {
+      activity,
+      scene,
+      user,
+      walls: operation.walls
+    });
     await scene.createEmbeddedDocuments("Wall", operation.walls, { isUndo: true });
     return {
       ok: true,
