@@ -57,6 +57,16 @@
     </header>
 
     <section class="sc-ma-migration-progress" data-migration-progress {{#unless busy}}hidden{{/unless}}>
+      {{!-- Phase changes are announced here instead of on the visible label,
+            which also carries the per-item detail and would flood a screen
+            reader with one announcement per scanned item. --}}
+      <span
+        class="sc-ma-visually-hidden"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        data-progress-status
+      ></span>
       <div class="sc-ma-migration-progress-meta">
         <span class="sc-ma-migration-progress-label" data-progress-label>
           {{ localize "SCMOREACTIVITIES.Migration.Progress.Starting" }}

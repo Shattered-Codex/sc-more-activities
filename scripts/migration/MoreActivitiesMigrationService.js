@@ -19,12 +19,25 @@ export class MoreActivitiesMigrationService {
     return this.#analyzer.analyze({ previewId, onProgress });
   }
 
-  async migrateMoreActivities({ preview, onProgress = null } = {}) {
+  async migrateMoreActivities({ preview, onProgress = null, allowIncompleteScope = false } = {}) {
     MoreActivitiesMigrationService.#assertGm();
     if (!preview?.previewId || !Array.isArray(preview?.entries)) {
       throw new Error(Constants.localize(
         "SCMOREACTIVITIES.Migration.Error.PreviewRequired",
         "Run a migration preview before applying changes."
+      ));
+    }
+
+    // A preview that could not read every pack in scope may be missing legacy
+    // entries entirely, so applying it needs an explicit acknowledgement.
+    const failedPacks = preview.failedPacks ?? [];
+    if (failedPacks.length && allowIncompleteScope !== true) {
+      const labels = failedPacks.map((pack) => pack.label ?? pack.id).join(", ");
+      throw new Error(Constants.format(
+        "SCMOREACTIVITIES.Migration.Error.IncompleteScope",
+        { count: failedPacks.length, packs: labels },
+        `This preview could not read ${failedPacks.length} compendium(s) (${labels}), so its scope is incomplete. `
+        + "Run the preview again, or pass allowIncompleteScope: true to migrate what was scanned anyway."
       ));
     }
 
@@ -45,18 +58,23 @@ export class MoreActivitiesMigrationService {
       skippedActivities: 0,
       failedItems: 0,
       unlockedPacks: [],
+      failedUnlocks: [],
+      failedRelocks: [],
+      incompleteScope: failedPacks.length > 0,
+      failedPacks: [...failedPacks],
       items: [],
       warnings: [...(preview.warnings ?? [])]
     };
 
     const packIds = MoreActivitiesMigrationService.#collectPackIds(preview.entries);
-    const unlockedPackIds = await MoreActivitiesMigrationService.#unlockIfEnabled(packIds);
-    report.unlockedPacks = [...unlockedPackIds];
+    const { unlocked, failed } = await MoreActivitiesMigrationService.#unlockIfEnabled(packIds);
+    report.unlockedPacks = [...unlocked];
+    report.failedUnlocks = [...failed];
 
     try {
       await this.#applyEntries(preview, report, onProgress);
     } finally {
-      await MoreActivitiesMigrationPackScanner.relockPacks(unlockedPackIds);
+      await MoreActivitiesMigrationService.#relockAndReport(unlocked, report);
     }
 
     Logger.info(
@@ -105,7 +123,11 @@ export class MoreActivitiesMigrationService {
       return;
     }
 
-    const lockedPackId = MoreActivitiesMigrationService.#lockedPackIdFor(entry);
+    // Only entries that would actually be written care about the pack lock. An
+    // entry whose legacy activities are all blocked needs no unlock, so reporting
+    // it as a pack-locked failure would be noise.
+    const hasConvertible = (entry.activities ?? []).some((activity) => activity.convertible);
+    const lockedPackId = hasConvertible ? MoreActivitiesMigrationService.#lockedPackIdFor(entry) : null;
     if (lockedPackId) {
       Logger.warn(`Migration skipped "${entry.itemName}" because compendium "${lockedPackId}" is locked.`);
       report.failedItems += 1;
@@ -228,13 +250,16 @@ export class MoreActivitiesMigrationService {
       restoredItems: 0,
       failedItems: 0,
       unlockedPacks: [],
+      failedUnlocks: [],
+      failedRelocks: [],
       items: []
     };
 
     const entries = backup.items ?? [];
-    const packIds = MoreActivitiesMigrationService.#collectPackIds(entries);
-    const unlockedPackIds = await MoreActivitiesMigrationService.#unlockIfEnabled(packIds);
-    report.unlockedPacks = [...unlockedPackIds];
+    const packIds = MoreActivitiesMigrationService.#collectPackIds(entries, { requireConvertible: false });
+    const { unlocked, failed } = await MoreActivitiesMigrationService.#unlockIfEnabled(packIds);
+    report.unlockedPacks = [...unlocked];
+    report.failedUnlocks = [...failed];
 
     try {
       for (const [index, entry] of entries.entries()) {
@@ -257,7 +282,7 @@ export class MoreActivitiesMigrationService {
         await MoreActivitiesMigrationService.#yieldToUi(index);
       }
     } finally {
-      await MoreActivitiesMigrationPackScanner.relockPacks(unlockedPackIds);
+      await MoreActivitiesMigrationService.#relockAndReport(unlocked, report);
     }
 
     Logger.info(`Migration restore finished: ${report.restoredItems} restored, ${report.failedItems} failed.`);
@@ -346,21 +371,42 @@ export class MoreActivitiesMigrationService {
     return context;
   }
 
-  static #collectPackIds(entries = []) {
-    return [...new Set(entries.map((entry) => entry?.packId).filter(Boolean))];
+  static #collectPackIds(entries = [], { requireConvertible = true } = {}) {
+    // Unlocking a pack whose entries are all blocked would edit world state for
+    // nothing, so only packs that will actually be written are collected.
+    const relevant = requireConvertible
+      ? entries.filter((entry) => (entry?.activities ?? []).some((activity) => activity?.convertible))
+      : entries;
+    return [...new Set(relevant.map((entry) => entry?.packId).filter(Boolean))];
   }
 
   static async #unlockIfEnabled(packIds) {
     if (!packIds.length) {
-      return [];
+      return { unlocked: [], failed: [] };
     }
 
     if (!ModuleSettings.isMigrationPackUnlockEnabled()) {
       Logger.debug("Automatic compendium unlocking is disabled; locked packs will be reported as failures.", { packIds });
-      return [];
+      return { unlocked: [], failed: [] };
     }
 
     return MoreActivitiesMigrationPackScanner.unlockPacks(packIds);
+  }
+
+  /**
+   * Re-locks the packs this run unlocked and records anything that stayed
+   * editable on the report, so the UI can tell the GM which packs need a manual
+   * re-lock instead of reporting a clean success.
+   */
+  static async #relockAndReport(unlockedPackIds, report) {
+    const { failed } = await MoreActivitiesMigrationPackScanner.relockPacks(unlockedPackIds);
+    report.failedRelocks = [...failed];
+    if (failed.length) {
+      Logger.error(
+        `${failed.length} compendium(s) could not be re-locked and are still editable: `
+        + `${failed.map((entry) => entry.packId).join(", ")}.`
+      );
+    }
   }
 
   static #lockedPackIdFor(entry) {

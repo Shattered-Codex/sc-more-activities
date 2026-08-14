@@ -54,10 +54,16 @@ function legacyMacroActivity(name = "Legacy Macro") {
 }
 
 function installGlobals(t, { items = [], actors = [], packs = [] } = {}) {
-  const silencedInfo = console.info;
-  const silencedDebug = console.debug;
+  const silenced = {
+    info: console.info,
+    debug: console.debug,
+    warn: console.warn,
+    error: console.error
+  };
   console.info = () => {};
   console.debug = () => {};
+  console.warn = () => {};
+  console.error = () => {};
 
   globalThis.game = {
     i18n: {
@@ -72,8 +78,7 @@ function installGlobals(t, { items = [], actors = [], packs = [] } = {}) {
   };
 
   t.after(() => {
-    console.info = silencedInfo;
-    console.debug = silencedDebug;
+    Object.assign(console, silenced);
     delete globalThis.game;
   });
 }
@@ -178,6 +183,57 @@ test("reports locked packs that hold convertible entries", async(t) => {
   assert.equal(report.entries[0].packLocked, true);
 });
 
+test("leaves a locked pack out of the warning when nothing in it is convertible", async(t) => {
+  const packItem = makeItem({
+    id: "item11",
+    name: "Blocked Blade",
+    // Legacy hook activities are always blocked, so this pack is never written.
+    activities: { act1: { _id: "act1", type: "hook", name: "Legacy Hook" } }
+  });
+  installGlobals(t, {
+    packs: [makePack({
+      collection: "world.locked",
+      label: "Locked Gear",
+      locked: true,
+      documents: [packItem]
+    })]
+  });
+
+  const report = await new MoreActivitiesMigrationAnalyzer().analyze({ previewId: "p11" });
+
+  assert.equal(report.entries.length, 1);
+  assert.equal(report.blocked, 1);
+  assert.deepEqual([...report.lockedPacks], []);
+  assert.ok(!report.warnings.some((warning) => warning.includes("Locked Gear")));
+});
+
+test("discards partial results when a pack fails halfway through", async(t) => {
+  const readable = makeItem({
+    id: "item12",
+    name: "First Blade",
+    activities: { act1: legacyMacroActivity() }
+  });
+  const broken = makeItem({ id: "item13", name: "Broken Blade" });
+  broken.toObject = () => {
+    throw new Error("document is corrupt");
+  };
+
+  installGlobals(t, {
+    packs: [makePack({ collection: "world.gear", label: "World Gear", documents: [readable, broken] })]
+  });
+
+  const report = await new MoreActivitiesMigrationAnalyzer().analyze({ previewId: "p12" });
+
+  // The pack is either fully scanned or reported as failed, never both.
+  assert.equal(report.scannedPacks, 0);
+  assert.equal(report.scannedCompendiumItems, 0);
+  assert.equal(report.compendiumItems, 0);
+  assert.equal(report.entries.length, 0);
+  assert.equal(report.activitiesByType.macro, 0);
+  assert.equal(report.failedPacks.length, 1);
+  assert.equal(report.completeScope, false);
+});
+
 test("skips compendium scanning when disabled", async(t) => {
   const packItem = makeItem({
     id: "item5",
@@ -226,6 +282,44 @@ test("still scans world items and reports progress phases", async(t) => {
   assert.ok(phases.includes("world-items"));
   assert.ok(phases.includes("compendiums"));
   assert.ok(phases.includes("done"));
+});
+
+test("reports compendiums that could not be read instead of finishing silently", async(t) => {
+  const readable = makeItem({
+    id: "item7",
+    name: "Readable Blade",
+    activities: { act1: legacyMacroActivity() }
+  });
+  const broken = makePack({ collection: "world.broken", label: "Broken Gear" });
+  broken.getDocuments = async() => {
+    throw new Error("pack is corrupt");
+  };
+
+  installGlobals(t, {
+    packs: [broken, makePack({ collection: "world.gear", label: "World Gear", documents: [readable] })]
+  });
+
+  const report = await new MoreActivitiesMigrationAnalyzer().analyze({ previewId: "p9" });
+
+  assert.equal(report.scannedPacks, 1);
+  assert.equal(report.completeScope, false);
+  assert.equal(report.failedPacks.length, 1);
+  assert.equal(report.failedPacks[0].id, "world.broken");
+  assert.equal(report.failedPacks[0].reason, "pack is corrupt");
+  assert.ok(report.warnings.some((warning) => warning.includes("Broken Gear")));
+  // The readable pack after it still gets scanned.
+  assert.equal(report.compendiumItems, 1);
+});
+
+test("marks the scope complete when every pack in scope was read", async(t) => {
+  installGlobals(t, {
+    packs: [makePack({ collection: "world.gear", documents: [] })]
+  });
+
+  const report = await new MoreActivitiesMigrationAnalyzer().analyze({ previewId: "p10" });
+
+  assert.equal(report.completeScope, true);
+  assert.deepEqual([...report.failedPacks], []);
 });
 
 test("ignores packs that hold neither items nor actors", async(t) => {

@@ -195,8 +195,31 @@ export class MoreActivitiesMigrationConverter {
     // after that step, posts the trigger buttons, and resumes on the steps whose
     // listeners match. sc-chain is strictly linear and cannot express that, so
     // branching chains go to sc-conditional-chain instead.
+    //
+    // A step only ever posted its triggers when the runtime got that far:
+    // executeChainedActivity returned early when the step's activity id did not
+    // resolve, and the buttons were guarded on `index < chainedActivityIds.length
+    // - 1`. Triggers on a blank step, on the last step, or past the end of the
+    // chain therefore never fired and do not make the chain branch.
     const triggers = MoreActivitiesMigrationConverter.#chainMatrix(activitySource?.chainTriggers);
-    const branching = triggers.some((entry) => entry.length > 0);
+    const activityIds = MoreActivitiesMigrationConverter.#chainActivityIdsRaw(activitySource);
+    const lastIndex = activityIds.length - 1;
+    const branching = triggers.some((entry, index) => (
+      entry.length > 0 && index < lastIndex && Boolean(activityIds[index])
+    ));
+
+    // No activity at all means nothing to run and nothing to branch on, whatever
+    // the trigger matrix says. Converting it would produce an empty sc-chain
+    // that only warns when used.
+    if (!activityIds.some(Boolean)) {
+      return MoreActivitiesMigrationConverter.#blocked(
+        "chain",
+        LEGACY_MORE_ACTIVITIES_TARGET_TYPES.chain,
+        "empty-legacy-chain",
+        "This legacy chain declares no chained activities."
+      );
+    }
+
     return branching
       ? MoreActivitiesMigrationConverter.#convertBranchingChain(activitySource, context, includeSource, triggers)
       : MoreActivitiesMigrationConverter.#convertLinearChain(activitySource, context, includeSource);
@@ -207,7 +230,8 @@ export class MoreActivitiesMigrationConverter {
     const warnings = [];
     const unmapped = {};
     const convertedSource = MoreActivitiesMigrationConverter.#baseSource(activitySource, targetType);
-    const activityIds = MoreActivitiesMigrationConverter.#chainActivityIds(activitySource);
+    const rawIds = MoreActivitiesMigrationConverter.#chainActivityIdsRaw(activitySource);
+    const activityIds = rawIds.filter(Boolean);
     convertedSource.chain = {
       activityIds: activityIds.join("\n"),
       maxDepth: 5,
@@ -215,6 +239,32 @@ export class MoreActivitiesMigrationConverter {
       stopOnCancel: true
     };
 
+    // The legacy runtime only ever executed the first step of a chain without
+    // triggers: executeChainedActivity ran one activity and returned, and only a
+    // trigger button resumed it. A blank first step made it return before running
+    // anything at all. sc-chain runs the whole sequence, which is what the legacy
+    // sheet always implied but never did, so the remaining steps become live.
+    // That is a deliberate behaviour change and has to be flagged loudly.
+    const legacyExecuted = rawIds[0] ?? "";
+    const neverExecuted = legacyExecuted ? activityIds.slice(1) : [...activityIds];
+    if (neverExecuted.length) {
+      warnings.push(legacyExecuted
+        ? `Legacy chains without triggers only ever executed the first step ("${legacyExecuted}"); `
+          + `sc-chain runs all ${activityIds.length} steps in order. `
+          + "Damage, consumption, and effects on the later steps never fired before and will fire now — review them."
+        : "This legacy chain's first step had no activity id, so the legacy runtime executed nothing at all; "
+          + `sc-chain runs all ${activityIds.length} step(s) listed here. `
+          + "Damage, consumption, and effects that never fired before will fire now — review them.");
+      unmapped.unexecutedLegacySteps = neverExecuted;
+    }
+
+    if (MoreActivitiesMigrationConverter.#chainMatrix(activitySource?.chainTriggers).some((entry) => entry.length)) {
+      warnings.push(
+        "Legacy chain triggers on the last step, or past the end of the chain, were never posted by the legacy "
+        + "runtime and were preserved under migration flags."
+      );
+      unmapped.chainTriggers = MoreActivitiesMigrationConverter.#clone(activitySource.chainTriggers);
+    }
     if (MoreActivitiesMigrationConverter.#chainMatrix(activitySource?.chainListeners).some((entry) => entry.length)) {
       warnings.push("Legacy chain listeners without matching triggers can never fire and were preserved under migration flags.");
       unmapped.chainListeners = MoreActivitiesMigrationConverter.#clone(activitySource.chainListeners);
@@ -242,17 +292,11 @@ export class MoreActivitiesMigrationConverter {
     // Triggers and listeners are indexed against the raw legacy array, so this
     // path must not compact it: dropping a blank id would shift every branch.
     const activityIds = MoreActivitiesMigrationConverter.#chainActivityIdsRaw(activitySource);
-    if (!activityIds.some(Boolean)) {
-      return MoreActivitiesMigrationConverter.#blocked(
-        "chain",
-        targetType,
-        "empty-legacy-chain",
-        "This legacy chain declares branch triggers but no chained activities."
-      );
-    }
-
     const listeners = MoreActivitiesMigrationConverter.#chainMatrix(activitySource?.chainListeners);
     const names = Array.isArray(activitySource?.chainedActivityNames) ? activitySource.chainedActivityNames : [];
+    // Every listener key a choice can actually fire. Anything left over belongs
+    // to a trigger the migration did not turn into a choice.
+    const consumedKeys = new Set();
     const nodes = activityIds.map((activityId, index) => MoreActivitiesMigrationConverter.#chainNode({
       index,
       activityId,
@@ -260,9 +304,46 @@ export class MoreActivitiesMigrationConverter {
       stepTriggers: triggers[index] ?? [],
       listeners,
       total: activityIds.length,
+      consumedKeys,
       warnings,
       unmapped
     }));
+
+    // Nodes only exist for the steps the legacy chain declared, so triggers
+    // stored past the end are never read above. Preserve them rather than
+    // dropping data the flags promise to keep.
+    const trailingTriggers = {};
+    for (let index = activityIds.length; index < triggers.length; index += 1) {
+      if (triggers[index].length) {
+        trailingTriggers[index] = [...triggers[index]];
+      }
+    }
+    if (Object.keys(trailingTriggers).length) {
+      warnings.push(
+        "Legacy triggers stored past the end of the chain could never fire and were preserved under migration flags."
+      );
+      unmapped.trailingTriggers = trailingTriggers;
+    }
+
+    // The dead triggers are preserved above, but a GM rebuilding those branches
+    // by hand needs the trigger -> listener link too, and the flags only keep it
+    // for the keys a choice ended up owning. Everything else — listeners on an
+    // ignored trigger, on a repeated label, or on a key no trigger ever had — is
+    // recorded here rather than dropped.
+    const unconsumedListeners = {};
+    listeners.forEach((stepListeners, index) => {
+      const dead = stepListeners.filter((key) => !consumedKeys.has(key));
+      if (dead.length) {
+        unconsumedListeners[index] = dead;
+      }
+    });
+    if (Object.keys(unconsumedListeners).length) {
+      warnings.push(
+        "Legacy listeners keyed to a trigger that never became a choice can never fire and were preserved "
+        + "under migration flags."
+      );
+      unmapped.unconsumedListeners = unconsumedListeners;
+    }
 
     const convertedSource = MoreActivitiesMigrationConverter.#baseSource(activitySource, targetType);
     convertedSource.flow = {
@@ -279,6 +360,21 @@ export class MoreActivitiesMigrationConverter {
       "Legacy branch triggers were converted into conditional chain choice steps. "
       + "The legacy module posted those buttons on the chat card; sc-conditional-chain asks for the choice in a dialog instead."
     );
+    if (nodes.some((node) => node.conditionType === FLOW_CONDITION_TYPES.ALWAYS)) {
+      warnings.push(
+        "The legacy runtime ran a single step and stopped unless that step posted trigger buttons, "
+        + "so every step without triggers now ends the flow. Route them manually if the chain should continue."
+      );
+    }
+
+    const unreachable = MoreActivitiesMigrationConverter.#unreachableChainNodes(nodes);
+    if (unreachable.length) {
+      warnings.push(
+        `${unreachable.length} legacy step(s) cannot be reached from the first step and never ran in the legacy module either. `
+        + "They were kept as flow steps so nothing is lost; wire or delete them manually."
+      );
+      unmapped.unreachableSteps = unreachable.map((node) => node.nodeId);
+    }
 
     return MoreActivitiesMigrationConverter.#success({
       legacyType: "chain",
@@ -292,7 +388,7 @@ export class MoreActivitiesMigrationConverter {
     });
   }
 
-  static #chainNode({ index, activityId, label, stepTriggers, listeners, total, warnings, unmapped }) {
+  static #chainNode({ index, activityId, label, stepTriggers, listeners, total, consumedKeys, warnings, unmapped }) {
     const node = {
       nodeId: MoreActivitiesMigrationConverter.#chainNodeId(index),
       label,
@@ -309,14 +405,80 @@ export class MoreActivitiesMigrationConverter {
     };
 
     if (!stepTriggers.length) {
-      node.routes.next = index + 1 < total ? MoreActivitiesMigrationConverter.#chainNodeId(index + 1) : FLOW_END;
+      // The legacy runtime never advanced on its own: executeChainedActivity ran
+      // exactly one step and returned, and only a trigger button resumed the
+      // chain. Falling through to index + 1 here would run the opposite branch
+      // of a "Hit / Miss" chain, so a step without triggers ends the flow.
+      return node;
+    }
+
+    const quotedTriggers = stepTriggers.map((triggerLabel) => `"${triggerLabel}"`).join(", ");
+
+    if (!activityId) {
+      // executeChainedActivity looked the activity up first and returned when it
+      // did not resolve, before adding the trigger buttons. A choice node here
+      // would offer branches the legacy chain never reached, making the steps
+      // behind them executable for the first time.
+      warnings.push(
+        `Legacy trigger(s) ${quotedTriggers} sit on a step with no activity id, which the legacy runtime `
+        + "never got past. They were preserved under migration flags instead of becoming a choice step."
+      );
+      unmapped.ignoredEmptyStepTriggers ??= {};
+      unmapped.ignoredEmptyStepTriggers[MoreActivitiesMigrationConverter.#chainNodeId(index)] = [...stepTriggers];
+      return node;
+    }
+
+    if (index === total - 1) {
+      // The runtime posted trigger buttons only while `index <
+      // chainedActivityIds.length - 1`, so triggers on the last step never
+      // fired and no later step could listen to them. A choice node here would
+      // pop a dialog the legacy chain never showed, after the activity already
+      // ran, and dismissing it would look like a cancelled execution.
+      warnings.push(
+        `Legacy trigger(s) ${quotedTriggers} sit on the last step, `
+        + "which the legacy runtime never offered. They were preserved under migration flags instead of "
+        + "becoming a choice step."
+      );
+      unmapped.ignoredLastStepTriggers ??= {};
+      unmapped.ignoredLastStepTriggers[MoreActivitiesMigrationConverter.#chainNodeId(index)] = [...stepTriggers];
       return node;
     }
 
     node.conditionType = FLOW_CONDITION_TYPES.CHOICE;
-    node.choices = stepTriggers.map((triggerLabel, triggerIndex) => {
+    const firstKeyByLabel = new Map();
+    for (const [triggerIndex, triggerLabel] of stepTriggers.entries()) {
       const key = `${index}:${triggerIndex}`;
-      const targets = MoreActivitiesMigrationConverter.#chainListenerTargets(listeners, key, index);
+
+      // continueChainFrom resolved a clicked button with
+      // sourceTriggers.indexOf(label), so every button sharing a label always
+      // resumed the first occurrence. One choice per position would make the
+      // steps behind the repeats executable for the first time.
+      const resolvedKey = firstKeyByLabel.get(triggerLabel);
+      if (resolvedKey) {
+        warnings.push(
+          `Legacy trigger "${triggerLabel}" is repeated on this step. The legacy runtime resolved every button `
+          + `with that label to "${resolvedKey}", so the repeat never fired. It was preserved under migration `
+          + "flags instead of becoming a second choice."
+        );
+        unmapped.duplicateTriggers ??= {};
+        unmapped.duplicateTriggers[key] = { label: triggerLabel, resolvedKey };
+        continue;
+      }
+      firstKeyByLabel.set(triggerLabel, key);
+      consumedKeys.add(key);
+
+      const { targets, beyond } = MoreActivitiesMigrationConverter.#chainListenerTargets(listeners, key, index, total);
+      if (beyond.length) {
+        // Routing to a node that was never built would fail validateFlow with
+        // unknown-route and block the whole chain at runtime.
+        warnings.push(
+          `Legacy trigger "${triggerLabel}" was listened to by step(s) past the end of the chain `
+          + `(${beyond.map((target) => target + 1).join(", ")}), which never existed. `
+          + "Those listeners were preserved under migration flags."
+        );
+        unmapped.outOfRangeListeners ??= {};
+        unmapped.outOfRangeListeners[key] = [...beyond];
+      }
       if (targets.length > 1) {
         // The legacy runtime opened a branch picker when several steps listened
         // to the same trigger. A choice route resolves to exactly one node.
@@ -332,24 +494,55 @@ export class MoreActivitiesMigrationConverter {
         warnings.push(`Legacy trigger "${triggerLabel}" had no listening step and now ends the flow.`);
       }
 
-      return {
+      node.choices.push({
         key,
         label: triggerLabel,
         next: targets.length ? MoreActivitiesMigrationConverter.#chainNodeId(targets[0]) : FLOW_END
-      };
-    });
+      });
+    }
 
     return node;
   }
 
-  static #chainListenerTargets(listeners, key, fromIndex) {
+  static #unreachableChainNodes(nodes) {
+    const byId = new Map(nodes.map((node) => [node.nodeId, node]));
+    const reached = new Set();
+    const queue = nodes.length ? [nodes[0].nodeId] : [];
+
+    while (queue.length) {
+      const nodeId = queue.shift();
+      if (!nodeId || nodeId === FLOW_END || reached.has(nodeId)) {
+        continue;
+      }
+      reached.add(nodeId);
+      const node = byId.get(nodeId);
+      if (!node) {
+        continue;
+      }
+      queue.push(node.routes.next, ...node.choices.map((choice) => choice.next));
+    }
+
+    return nodes.filter((node) => node.activityId && !reached.has(node.nodeId));
+  }
+
+  /**
+   * Splits the steps listening to `key` into the ones that map to a real flow
+   * node and the ones the legacy data placed past the end of the chain.
+   */
+  static #chainListenerTargets(listeners, key, fromIndex, total) {
     const targets = [];
+    const beyond = [];
     for (let index = fromIndex + 1; index < listeners.length; index += 1) {
-      if (listeners[index].includes(key)) {
+      if (!listeners[index].includes(key)) {
+        continue;
+      }
+      if (index < total) {
         targets.push(index);
+      } else {
+        beyond.push(index);
       }
     }
-    return targets;
+    return { targets, beyond };
   }
 
   static #chainActivityIds(activitySource) {

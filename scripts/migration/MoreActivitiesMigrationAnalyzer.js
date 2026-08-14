@@ -31,7 +31,8 @@ export class MoreActivitiesMigrationAnalyzer {
       scannedCompendiumItems: 0,
       scannedPacks: 0,
       lockedPacks: [],
-      skippedExternalPacks: []
+      skippedExternalPacks: [],
+      failedPacks: []
     };
 
     const worldItemCount = game?.items?.contents?.length ?? 0;
@@ -86,8 +87,16 @@ export class MoreActivitiesMigrationAnalyzer {
       compendiumItems: state.compendiumItems,
       activitiesByType: state.activitiesByType,
       lockedPacks: state.lockedPacks.map((pack) => pack.id),
-      skippedExternalPacks: state.skippedExternalPacks.map((pack) => pack.id)
+      skippedExternalPacks: state.skippedExternalPacks.map((pack) => pack.id),
+      failedPacks: state.failedPacks.map((pack) => pack.id)
     });
+
+    if (state.failedPacks.length) {
+      Logger.warn(
+        `Migration preview could not read ${state.failedPacks.length} compendium(s): `
+        + `${state.failedPacks.map((pack) => pack.id).join(", ")}. The preview scope is incomplete.`
+      );
+    }
 
     if (!totalItems) {
       Logger.info(
@@ -118,6 +127,8 @@ export class MoreActivitiesMigrationAnalyzer {
       blocked: state.blocked,
       lockedPacks: Object.freeze([...state.lockedPacks]),
       skippedExternalPacks: Object.freeze([...state.skippedExternalPacks]),
+      failedPacks: Object.freeze([...state.failedPacks]),
+      completeScope: state.failedPacks.length === 0,
       entries: Object.freeze(state.entries),
       warnings: Object.freeze(MoreActivitiesMigrationAnalyzer.#buildWarnings(state, { scanCompendiums }))
     });
@@ -202,15 +213,19 @@ export class MoreActivitiesMigrationAnalyzer {
       await MoreActivitiesMigrationAnalyzer.#yieldToUi(0, 1);
 
       const packStartedAt = MoreActivitiesMigrationAnalyzer.#now();
-      let packEntries = 0;
 
       try {
         const loaded = await MoreActivitiesMigrationPackScanner.loadPackItems(pack);
-        state.scannedPacks += 1;
         Logger.debug(`Compendium "${descriptor.id}" loaded ${loaded.length} item(s); inspecting…`);
 
+        // Results are buffered and merged only once the whole pack is inspected,
+        // so a pack that throws halfway is reported as failed instead of also
+        // counting as scanned and leaving partial entries behind.
+        const packEntries = [];
+        let inspected = 0;
+
         for (const [itemIndex, { item, actor }] of loaded.entries()) {
-          state.scannedCompendiumItems += 1;
+          inspected += 1;
           MoreActivitiesMigrationAnalyzer.#heartbeat(
             `Compendium "${descriptor.id}"`,
             itemIndex + 1,
@@ -224,22 +239,53 @@ export class MoreActivitiesMigrationAnalyzer {
             pack: descriptor
           });
           if (entry) {
-            state.compendiumItems += 1;
-            packEntries += 1;
-            MoreActivitiesMigrationAnalyzer.#pushEntry(state, entry);
+            packEntries.push(entry);
+          }
+
+          // #analyzeItem usually settles on a microtask, which never lets the
+          // browser paint. A big pack has to yield on an interval like the world
+          // item and actor loops do, or the window freezes until it finishes.
+          if (itemIndex > 0 && itemIndex % UI_YIELD_INTERVAL === 0) {
+            MoreActivitiesMigrationAnalyzer.#emitProgress(onProgress, {
+              phase: "compendiums",
+              current: index,
+              total: packs.length,
+              detail: `${descriptor.label} (${itemIndex + 1}/${loaded.length})`
+            });
+            await MoreActivitiesMigrationAnalyzer.#yieldToUi(0, 1);
           }
         }
 
-        if (packEntries && descriptor.locked) {
+        state.scannedPacks += 1;
+        state.scannedCompendiumItems += inspected;
+        for (const entry of packEntries) {
+          state.compendiumItems += 1;
+          MoreActivitiesMigrationAnalyzer.#pushEntry(state, entry);
+        }
+
+        // Only packs that will actually be written are reported as locked: the
+        // apply leaves a pack holding nothing convertible untouched, so warning
+        // that it will be unlocked would contradict what happens.
+        const convertibleEntries = packEntries
+          .filter((entry) => entry.activities.some((activity) => activity.convertible)).length;
+        if (convertibleEntries && descriptor.locked) {
           state.lockedPacks.push(descriptor);
         }
 
         Logger.debug(
           `Compendium "${descriptor.id}" scanned in ${Math.round(MoreActivitiesMigrationAnalyzer.#now() - packStartedAt)}ms: `
-          + `${loaded.length} item(s), ${packEntries} with legacy activities.`
+          + `${loaded.length} item(s), ${packEntries.length} with legacy activities `
+          + `(${convertibleEntries} with something convertible).`
         );
       } catch (error) {
+        // A pack that cannot be read leaves the preview scope incomplete, so it
+        // is reported instead of only logged: applying a partial scan silently
+        // would look like a finished migration.
         Logger.error(`Failed to scan compendium "${descriptor.id}".`, error);
+        state.failedPacks.push(Object.freeze({
+          ...descriptor,
+          reason: error?.message ?? String(error)
+        }));
       }
 
       MoreActivitiesMigrationAnalyzer.#emitProgress(onProgress, {
@@ -339,6 +385,16 @@ export class MoreActivitiesMigrationAnalyzer {
       warnings.push(Constants.localize(
         "SCMOREACTIVITIES.Migration.Warning.CompendiumScanDisabled",
         "Compendium scanning is disabled in the module settings, so packs were not inspected."
+      ));
+    }
+
+    if (state.failedPacks.length) {
+      const labels = state.failedPacks.map((pack) => pack.label).join(", ");
+      warnings.push(Constants.format(
+        "SCMOREACTIVITIES.Migration.Warning.PackScanFailed",
+        { count: state.failedPacks.length, packs: labels },
+        `${state.failedPacks.length} compendium(s) could not be read, so this preview is incomplete: ${labels}. `
+        + "Fix or exclude them and run the preview again before applying."
       ));
     }
 

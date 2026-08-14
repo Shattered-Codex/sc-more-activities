@@ -14,6 +14,7 @@ export class MoreActivitiesMigrationApp extends HandlebarsApplicationMixin(Appli
   #busy = false;
   #activeTab = "overview";
   #progressKey = null;
+  #progressPhase = null;
 
   static DEFAULT_OPTIONS = {
     id: `${Constants.MODULE_ID}-migration-app`,
@@ -141,10 +142,16 @@ export class MoreActivitiesMigrationApp extends HandlebarsApplicationMixin(Appli
         return;
       }
 
+      const allowIncompleteScope = await this.#confirmIncompleteScope();
+      if (allowIncompleteScope === null) {
+        return;
+      }
+
       await this.#runBusy(async() => {
         this.#restoreReport = null;
         this.#report = await this.#migrationApi().migrateMoreActivities({
           preview: this.#preview,
+          allowIncompleteScope,
           onProgress: (payload) => this.#updateProgress(payload)
         });
         this.#activeTab = "apply";
@@ -153,6 +160,7 @@ export class MoreActivitiesMigrationApp extends HandlebarsApplicationMixin(Appli
           { items: this.#report.updatedItems ?? 0, activities: this.#report.convertedActivities ?? 0 },
           `Updated ${this.#report.updatedItems ?? 0} item(s) and converted ${this.#report.convertedActivities ?? 0} activity entries.`
         ));
+        MoreActivitiesMigrationApp.#notifyFailedRelocks(this.#report);
       });
     });
 
@@ -169,6 +177,7 @@ export class MoreActivitiesMigrationApp extends HandlebarsApplicationMixin(Appli
           { items: this.#restoreReport.restoredItems ?? 0 },
           `Restored ${this.#restoreReport.restoredItems ?? 0} item(s) from backup.`
         ));
+        MoreActivitiesMigrationApp.#notifyFailedRelocks(this.#restoreReport);
       });
     });
 
@@ -196,6 +205,83 @@ export class MoreActivitiesMigrationApp extends HandlebarsApplicationMixin(Appli
     return game?.modules?.get?.(Constants.MODULE_ID)?.api?.migration ?? {};
   }
 
+  /**
+   * A preview that could not read every pack in scope may be missing legacy
+   * entries, so applying it is an explicit decision.
+   *
+   * @returns {Promise<boolean|null>} whether to allow the incomplete scope, or
+   *   null when the GM cancelled the apply.
+   */
+  async #confirmIncompleteScope() {
+    const failedPacks = this.#preview?.failedPacks ?? [];
+    if (!failedPacks.length) {
+      return false;
+    }
+
+    const labels = failedPacks.map((pack) => pack.label ?? pack.id).join(", ");
+    const message = Constants.format(
+      "SCMOREACTIVITIES.Migration.Confirm.IncompleteScope",
+      { count: failedPacks.length, packs: labels },
+      `${failedPacks.length} compendium(s) could not be read during the preview (${labels}), so legacy activities may be missing `
+      + "from this migration. Apply it to what was scanned anyway?"
+    );
+    const title = Constants.localize(
+      "SCMOREACTIVITIES.Migration.Confirm.IncompleteScopeTitle",
+      "Incomplete migration scope"
+    );
+
+    const DialogV2 = globalThis.foundry?.applications?.api?.DialogV2;
+    if (typeof DialogV2?.confirm !== "function") {
+      return globalThis.confirm?.(`${title}\n\n${message}`) === true ? true : null;
+    }
+
+    try {
+      // rejectClose belongs in this config object: DialogV2.confirm forwards its
+      // own argument straight to wait(), so a second argument is dropped.
+      const confirmed = await DialogV2.confirm({
+        window: { title, icon: "fa-solid fa-triangle-exclamation" },
+        content: `<p>${MoreActivitiesMigrationApp.#escape(message)}</p>`,
+        modal: true,
+        rejectClose: false
+      });
+      return confirmed === true ? true : null;
+    } catch (error) {
+      // This runs outside #runBusy, so a rejected dialog would surface as an
+      // unhandled rejection. A dialog that never answered is not a yes.
+      Logger.warn("Incomplete migration scope was not confirmed; the apply was cancelled.", error);
+      return null;
+    }
+  }
+
+  static #escape(value) {
+    const text = String(value ?? "");
+    const escapeHTML = globalThis.foundry?.utils?.escapeHTML;
+    if (typeof escapeHTML === "function") {
+      return escapeHTML(text);
+    }
+    return text.replace(/[&<>"']/g, (char) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      "\"": "&quot;",
+      "'": "&#39;"
+    })[char]);
+  }
+
+  static #notifyFailedRelocks(report) {
+    const failed = report?.failedRelocks ?? [];
+    if (!failed.length) {
+      return;
+    }
+
+    const labels = failed.map((entry) => entry.label ?? entry.packId).join(", ");
+    ui.notifications?.error?.(Constants.format(
+      "SCMOREACTIVITIES.Migration.Warning.RelockFailed",
+      { count: failed.length, packs: labels },
+      `${failed.length} compendium(s) could not be re-locked and are still editable: ${labels}. Re-lock them manually.`
+    ), { permanent: true });
+  }
+
   async #runBusy(task) {
     if (this.#busy) {
       return;
@@ -203,6 +289,7 @@ export class MoreActivitiesMigrationApp extends HandlebarsApplicationMixin(Appli
 
     this.#busy = true;
     this.#progressKey = null;
+    this.#progressPhase = null;
     await this.render();
     this.#resetProgress();
     try {
@@ -213,6 +300,7 @@ export class MoreActivitiesMigrationApp extends HandlebarsApplicationMixin(Appli
     } finally {
       this.#busy = false;
       this.#progressKey = null;
+      this.#progressPhase = null;
       this.render();
     }
   }
@@ -233,6 +321,10 @@ export class MoreActivitiesMigrationApp extends HandlebarsApplicationMixin(Appli
     const count = root.querySelector("[data-progress-count]");
     if (count) {
       count.textContent = "";
+    }
+    const status = root.querySelector("[data-progress-status]");
+    if (status) {
+      status.textContent = "";
     }
   }
 
@@ -258,15 +350,25 @@ export class MoreActivitiesMigrationApp extends HandlebarsApplicationMixin(Appli
     }
     root.querySelector("[data-progress-track]")?.setAttribute("aria-valuenow", String(percent));
 
+    const phaseLabel = MoreActivitiesMigrationApp.#phaseLabel(phase);
     const label = root.querySelector("[data-progress-label]");
     if (label) {
-      const phaseLabel = MoreActivitiesMigrationApp.#phaseLabel(phase);
       label.textContent = payload.detail ? `${phaseLabel} — ${payload.detail}` : phaseLabel;
     }
 
     const count = root.querySelector("[data-progress-count]");
     if (count) {
       count.textContent = total > 0 ? `${current}/${total} (${percent}%)` : `${percent}%`;
+    }
+
+    // Only phase transitions reach the live region; announcing every item would
+    // make the tool unusable with a screen reader.
+    if (phase !== this.#progressPhase) {
+      this.#progressPhase = phase;
+      const status = root.querySelector("[data-progress-status]");
+      if (status) {
+        status.textContent = phaseLabel;
+      }
     }
   }
 
@@ -294,7 +396,7 @@ export class MoreActivitiesMigrationApp extends HandlebarsApplicationMixin(Appli
       return [];
     }
 
-    return [
+    const chips = [
       {
         icon: "fa-solid fa-box-open",
         label: Constants.localize("SCMOREACTIVITIES.Migration.Scope.WorldItems", "World items"),
@@ -321,6 +423,16 @@ export class MoreActivitiesMigrationApp extends HandlebarsApplicationMixin(Appli
         value: `${preview.durationMs ?? 0}ms`
       }
     ];
+
+    if (preview.failedPacks?.length) {
+      chips.push({
+        icon: "fa-solid fa-triangle-exclamation",
+        label: Constants.localize("SCMOREACTIVITIES.Migration.Scope.FailedPacks", "Packs unreadable"),
+        value: preview.failedPacks.length
+      });
+    }
+
+    return chips;
   }
 
   static #flattenPreviewEntries(preview) {

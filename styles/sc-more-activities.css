@@ -199,6 +199,17 @@
   opacity: 0.45;
 }
 
+.sc-more-activities .sc-ma-visually-hidden {
+  block-size: 1px;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  inline-size: 1px;
+  margin: -1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+}
+
 .sc-ma-migration-progress {
   background: var(--sc-ma-bg-panel);
   border: 1px solid color-mix(in srgb, var(--sc-ma-accent) 26%, var(--sc-ma-border) 74%);
