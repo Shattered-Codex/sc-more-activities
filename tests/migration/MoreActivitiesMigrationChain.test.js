@@ -270,6 +270,46 @@ test("keeps a chain whose only triggers sit on the last step on sc-chain", () =>
   assert.deepEqual(migration.unmapped.chainTriggers, [[], ["Again"]]);
 });
 
+test("blocks a chain that waits on a blank trigger button", () => {
+  // executeChainedActivity guarded on the trigger row being non-empty, not on
+  // the label being usable, so the legacy chain stopped here and waited for a
+  // click. sc-chain would run a2 on its own and sc-conditional-chain has no
+  // label to put on the prompt, so neither target is faithful.
+  const result = MoreActivitiesMigrationConverter.preview({
+    _id: "chain22",
+    type: "chain",
+    name: "Blank Button Wait",
+    chainedActivityIds: ["a1", "a2"],
+    chainTriggers: [[""], []],
+    chainListeners: [[], ["0:0"]]
+  });
+
+  assert.equal(result.convertible, false);
+  assert.equal(result.reason, "blank-legacy-trigger");
+  assert.ok(result.warnings.some((warning) => warning.includes("blank")));
+});
+
+test("still converts blank triggers the legacy runtime never posted", () => {
+  for (const [name, chainedActivityIds, chainTriggers] of [
+    // On the last step the buttons were never offered.
+    ["blank trigger on the last step", ["a1", "a2"], [[], [""]]],
+    // The runtime returned before posting anything on a step with no activity.
+    ["blank trigger on an empty step", ["", "a2"], [[""], []]]
+  ]) {
+    const result = MoreActivitiesMigrationConverter.preview({
+      _id: "chain23",
+      type: "chain",
+      name,
+      chainedActivityIds,
+      chainTriggers,
+      chainListeners: [[], []]
+    });
+
+    assert.equal(result.convertible, true, name);
+    assert.equal(result.targetType, "sc-chain", name);
+  }
+});
+
 test("reports legacy steps that no branch can reach", () => {
   const result = MoreActivitiesMigrationConverter.convert({
     _id: "chain9",
@@ -427,6 +467,77 @@ test("never turns a repeated trigger label into a second reachable branch", () =
   assert.deepEqual(migration.unmapped.unreachableSteps, ["node-2"]);
 
   // a3 stays out of reach exactly like it was in the legacy module.
+  assert.deepEqual(runFlow(flow, ["Go"]), ["a1", "a2"]);
+});
+
+test("keys choices by the stored trigger position, not the compacted one", () => {
+  // The legacy runtime resolved a click with sourceTriggers.indexOf("Go") over
+  // the row as stored, which is 1 — dropping the blank first would key "Go" as
+  // "0:0" and hand it the branch that belonged to the blank button.
+  const result = MoreActivitiesMigrationConverter.convert({
+    _id: "chain19",
+    type: "chain",
+    name: "Blank Trigger First",
+    chainedActivityIds: ["a1", "a2", "a3"],
+    chainTriggers: [["", "Go"], [], []],
+    chainListeners: [[], ["0:0"], ["0:1"]]
+  });
+
+  const flow = ScConditionalChainFlow.normalizeFlow(result.convertedSource.flow);
+
+  assert.deepEqual(flow.nodes[0].choices, [{ key: "0:1", label: "Go", next: "node-2" }]);
+  assert.deepEqual(runFlow(flow, ["Go"]), ["a1", "a3"]);
+
+  const migration = result.convertedSource.flags["sc-more-activities"].migration;
+  assert.deepEqual(migration.unmapped.blankTriggers, { "0:0": "" });
+  assert.deepEqual(migration.unmapped.unconsumedListeners, { 1: ["0:0"] });
+});
+
+test("keeps a trailing space from collapsing two distinct legacy triggers", () => {
+  // indexOf matched the stored string, so "Go" and "Go " were separate buttons
+  // resolving to separate keys. Trimming before the dedup would drop one.
+  const result = MoreActivitiesMigrationConverter.convert({
+    _id: "chain20",
+    type: "chain",
+    name: "Near Duplicate Triggers",
+    chainedActivityIds: ["a1", "a2", "a3"],
+    chainTriggers: [["Go", "Go "], [], []],
+    chainListeners: [[], ["0:0"], ["0:1"]]
+  });
+
+  const flow = ScConditionalChainFlow.normalizeFlow(result.convertedSource.flow);
+
+  assert.deepEqual(flow.nodes[0].choices, [
+    { key: "0:0", label: "Go", next: "node-1" },
+    { key: "0:1", label: "Go", next: "node-2" }
+  ]);
+  assert.equal(result.convertedSource.flags["sc-more-activities"].migration.unmapped.duplicateTriggers, undefined);
+});
+
+test("ends the flow on a step whose triggers are all blank", () => {
+  const result = MoreActivitiesMigrationConverter.convert({
+    _id: "chain21",
+    type: "chain",
+    name: "Blank Trigger Step",
+    chainedActivityIds: ["a1", "a2", "a3"],
+    chainTriggers: [["Go"], ["", ""], []],
+    chainListeners: [[], ["0:0"], ["1:0"]]
+  });
+
+  const flow = ScConditionalChainFlow.normalizeFlow(result.convertedSource.flow);
+  const [, blank] = flow.nodes;
+
+  assert.equal(blank.conditionType, FLOW_CONDITION_TYPES.ALWAYS);
+  assert.deepEqual(blank.choices, []);
+  assert.equal(blank.routes.next, FLOW_END);
+
+  const migration = result.convertedSource.flags["sc-more-activities"].migration;
+  assert.deepEqual(migration.unmapped.blankTriggers, { "1:0": "" });
+  // Both buttons were blank, so indexOf resolved the second to the first — it
+  // is a repeat rather than a second dead label.
+  assert.deepEqual(migration.unmapped.duplicateTriggers, { "1:1": { label: "", resolvedKey: "1:0" } });
+  assert.deepEqual(migration.unmapped.unconsumedListeners, { 2: ["1:0"] });
+
   assert.deepEqual(runFlow(flow, ["Go"]), ["a1", "a2"]);
 });
 

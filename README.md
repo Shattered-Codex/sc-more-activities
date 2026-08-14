@@ -431,6 +431,7 @@ The migration picks the target type from the data:
 | Legacy chain | Target | Why |
 | --- | --- | --- |
 | no activity ids | blocked (`empty-legacy-chain`) | Nothing to run and nothing to branch on |
+| only blank labels on a trigger that could fire | blocked (`blank-legacy-trigger`) | The chain waited on a button, so `sc-chain` would run the steps behind it on its own, and there is no label to put on a prompt |
 | no triggers that could fire | `sc-chain` | A plain sequence; the simpler activity and sheet fit it |
 | any trigger that could fire | `sc-conditional-chain` | `sc-chain` is strictly linear and cannot represent branches |
 
@@ -475,6 +476,7 @@ These stay lossy and are reported as preview warnings, with the legacy data kept
 | triggers on the last step, which the runtime never offered | `ignoredLastStepTriggers` |
 | triggers stored past the end of the chain | `trailingTriggers` |
 | a trigger label repeated on one step: `continueChainFrom` resolved every button with that label to the first occurrence, so the repeats never fired | `duplicateTriggers` |
+| a trigger whose label was cleared, which cannot become a choice the player picks | `blankTriggers` |
 | listeners pointing past the end of the chain | `outOfRangeListeners` |
 | listeners keyed to a trigger no choice offers — an ignored trigger, a repeated label, or a key no trigger ever had | `unconsumedListeners` |
 

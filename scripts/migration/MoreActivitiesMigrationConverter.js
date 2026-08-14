@@ -208,6 +208,11 @@ export class MoreActivitiesMigrationConverter {
       entry.length > 0 && index < lastIndex && Boolean(activityIds[index])
     ));
 
+    // The runtime guard was on the row being non-empty, not on the labels being
+    // usable, so a blank button stopped the chain just as a labelled one did.
+    const stopsOnTrigger = MoreActivitiesMigrationConverter.#chainMatrixRaw(activitySource?.chainTriggers)
+      .some((entry, index) => entry.length > 0 && index < lastIndex && Boolean(activityIds[index]));
+
     // No activity at all means nothing to run and nothing to branch on, whatever
     // the trigger matrix says. Converting it would produce an empty sc-chain
     // that only warns when used.
@@ -217,6 +222,21 @@ export class MoreActivitiesMigrationConverter {
         LEGACY_MORE_ACTIVITIES_TARGET_TYPES.chain,
         "empty-legacy-chain",
         "This legacy chain declares no chained activities."
+      );
+    }
+
+    if (stopsOnTrigger && !branching) {
+      // The chain stopped on a button the player had to click, but every label
+      // on it is blank, so there is no choice to offer. sc-chain would run the
+      // steps behind that button on its own — steps that needed the click — and
+      // sc-conditional-chain has nothing to put on the prompt. Neither shape is
+      // faithful, so this one needs a human before it can be migrated.
+      return MoreActivitiesMigrationConverter.#blocked(
+        "chain",
+        LEGACY_MORE_ACTIVITIES_TARGET_TYPES.chain,
+        "blank-legacy-trigger",
+        "This legacy chain waits on a trigger button whose label is blank, so the steps behind it cannot be "
+        + "routed automatically. Give the trigger a label, or delete it, and run the migration again."
       );
     }
 
@@ -294,6 +314,10 @@ export class MoreActivitiesMigrationConverter {
     const activityIds = MoreActivitiesMigrationConverter.#chainActivityIdsRaw(activitySource);
     const listeners = MoreActivitiesMigrationConverter.#chainMatrix(activitySource?.chainListeners);
     const names = Array.isArray(activitySource?.chainedActivityNames) ? activitySource.chainedActivityNames : [];
+    // `triggers` is the compacted view, used to decide which steps carry a
+    // trigger worth reporting. Choice keys have to follow the stored positions
+    // instead, so the nodes are built from the raw rows.
+    const rawTriggers = MoreActivitiesMigrationConverter.#chainMatrixRaw(activitySource?.chainTriggers);
     // Every listener key a choice can actually fire. Anything left over belongs
     // to a trigger the migration did not turn into a choice.
     const consumedKeys = new Set();
@@ -301,7 +325,7 @@ export class MoreActivitiesMigrationConverter {
       index,
       activityId,
       label: String(names[index] ?? "").trim(),
-      stepTriggers: triggers[index] ?? [],
+      stepTriggers: rawTriggers[index] ?? [],
       listeners,
       total: activityIds.length,
       consumedKeys,
@@ -412,7 +436,11 @@ export class MoreActivitiesMigrationConverter {
       return node;
     }
 
-    const quotedTriggers = stepTriggers.map((triggerLabel) => `"${triggerLabel}"`).join(", ");
+    const quotedTriggers = stepTriggers
+      .map((triggerLabel) => triggerLabel.trim())
+      .filter(Boolean)
+      .map((triggerLabel) => `"${triggerLabel}"`)
+      .join(", ");
 
     if (!activityId) {
       // executeChainedActivity looked the activity up first and returned when it
@@ -446,14 +474,19 @@ export class MoreActivitiesMigrationConverter {
 
     node.conditionType = FLOW_CONDITION_TYPES.CHOICE;
     const firstKeyByLabel = new Map();
-    for (const [triggerIndex, triggerLabel] of stepTriggers.entries()) {
+    for (const [triggerIndex, rawLabel] of stepTriggers.entries()) {
+      // The key follows the stored position, never the position this trigger
+      // would have after the blanks are dropped: that is what the legacy
+      // listeners were written against.
       const key = `${index}:${triggerIndex}`;
+      const triggerLabel = rawLabel.trim();
 
       // continueChainFrom resolved a clicked button with
-      // sourceTriggers.indexOf(label), so every button sharing a label always
-      // resumed the first occurrence. One choice per position would make the
-      // steps behind the repeats executable for the first time.
-      const resolvedKey = firstKeyByLabel.get(triggerLabel);
+      // sourceTriggers.indexOf(label) over the stored strings, so every button
+      // sharing a label always resumed the first occurrence. One choice per
+      // position would make the steps behind the repeats executable for the
+      // first time.
+      const resolvedKey = firstKeyByLabel.get(rawLabel);
       if (resolvedKey) {
         warnings.push(
           `Legacy trigger "${triggerLabel}" is repeated on this step. The legacy runtime resolved every button `
@@ -464,7 +497,20 @@ export class MoreActivitiesMigrationConverter {
         unmapped.duplicateTriggers[key] = { label: triggerLabel, resolvedKey };
         continue;
       }
-      firstKeyByLabel.set(triggerLabel, key);
+      firstKeyByLabel.set(rawLabel, key);
+
+      if (!triggerLabel) {
+        // The legacy sheet let a label be cleared, leaving a button with no
+        // text that indexOf still resolved. There is nothing to put on a choice
+        // the player has to pick from, so it is preserved instead.
+        warnings.push(
+          `Legacy trigger "${key}" has a blank label, which cannot become a choice. `
+          + "It was preserved under migration flags."
+        );
+        unmapped.blankTriggers ??= {};
+        unmapped.blankTriggers[key] = rawLabel;
+        continue;
+      }
       consumedKeys.add(key);
 
       const { targets, beyond } = MoreActivitiesMigrationConverter.#chainListenerTargets(listeners, key, index, total);
@@ -499,6 +545,12 @@ export class MoreActivitiesMigrationConverter {
         label: triggerLabel,
         next: targets.length ? MoreActivitiesMigrationConverter.#chainNodeId(targets[0]) : FLOW_END
       });
+    }
+
+    if (!node.choices.length) {
+      // Every trigger on the step was blank, so there is no question to ask and
+      // the step ends the flow exactly like one without triggers.
+      node.conditionType = FLOW_CONDITION_TYPES.ALWAYS;
     }
 
     return node;
@@ -561,6 +613,21 @@ export class MoreActivitiesMigrationConverter {
     }
     return value.map((entry) => (Array.isArray(entry)
       ? entry.map((item) => String(item ?? "").trim()).filter(Boolean)
+      : []));
+  }
+
+  /**
+   * The trigger matrix exactly as stored. Listener keys are `step:triggerIndex`
+   * against this row and the legacy runtime matched the stored string with
+   * indexOf, so trimming or compacting it — as #chainMatrix does — shifts the
+   * positions the keys point at and hands one button's listeners to another.
+   */
+  static #chainMatrixRaw(value) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value.map((entry) => (Array.isArray(entry)
+      ? entry.map((item) => String(item ?? ""))
       : []));
   }
 
