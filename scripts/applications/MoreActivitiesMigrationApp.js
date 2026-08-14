@@ -1,4 +1,5 @@
 import { Constants } from "../constants/Constants.js";
+import { Logger } from "../support/Logger.js";
 
 const api = foundry?.applications?.api ?? {};
 const { ApplicationV2, HandlebarsApplicationMixin } = api;
@@ -12,6 +13,8 @@ export class MoreActivitiesMigrationApp extends HandlebarsApplicationMixin(Appli
   #restoreReport = null;
   #busy = false;
   #activeTab = "overview";
+  #progressKey = null;
+  #progressPhase = null;
 
   static DEFAULT_OPTIONS = {
     id: `${Constants.MODULE_ID}-migration-app`,
@@ -47,7 +50,9 @@ export class MoreActivitiesMigrationApp extends HandlebarsApplicationMixin(Appli
     const preview = this.#preview;
     const report = this.#report;
     const restoreReport = this.#restoreReport;
-    const previewItemCount = (preview?.worldItems ?? 0) + (preview?.actorItems ?? 0);
+    const previewItemCount = (preview?.worldItems ?? 0)
+      + (preview?.actorItems ?? 0)
+      + (preview?.compendiumItems ?? 0);
 
     return {
       isGm: game?.user?.isGM === true,
@@ -71,6 +76,7 @@ export class MoreActivitiesMigrationApp extends HandlebarsApplicationMixin(Appli
         }
         : null,
       previewItemCount,
+      scopeChips: MoreActivitiesMigrationApp.#buildScopeChips(preview),
       tableTabs: MoreActivitiesMigrationApp.#buildTableTabs({
         overview: {
           icon: "fa-solid fa-house",
@@ -119,7 +125,9 @@ export class MoreActivitiesMigrationApp extends HandlebarsApplicationMixin(Appli
       await this.#runBusy(async() => {
         this.#restoreReport = null;
         this.#report = null;
-        this.#preview = await this.#migrationApi().previewMoreActivitiesMigration();
+        this.#preview = await this.#migrationApi().previewMoreActivitiesMigration({
+          onProgress: (payload) => this.#updateProgress(payload)
+        });
         this.#activeTab = "preview";
       });
     });
@@ -134,15 +142,25 @@ export class MoreActivitiesMigrationApp extends HandlebarsApplicationMixin(Appli
         return;
       }
 
+      const allowIncompleteScope = await this.#confirmIncompleteScope();
+      if (allowIncompleteScope === null) {
+        return;
+      }
+
       await this.#runBusy(async() => {
         this.#restoreReport = null;
-        this.#report = await this.#migrationApi().migrateMoreActivities({ preview: this.#preview });
+        this.#report = await this.#migrationApi().migrateMoreActivities({
+          preview: this.#preview,
+          allowIncompleteScope,
+          onProgress: (payload) => this.#updateProgress(payload)
+        });
         this.#activeTab = "apply";
         ui.notifications?.info?.(Constants.format(
           "SCMOREACTIVITIES.Migration.Info.ApplyComplete",
           { items: this.#report.updatedItems ?? 0, activities: this.#report.convertedActivities ?? 0 },
           `Updated ${this.#report.updatedItems ?? 0} item(s) and converted ${this.#report.convertedActivities ?? 0} activity entries.`
         ));
+        MoreActivitiesMigrationApp.#notifyFailedRelocks(this.#report);
       });
     });
 
@@ -150,13 +168,16 @@ export class MoreActivitiesMigrationApp extends HandlebarsApplicationMixin(Appli
       event.preventDefault();
       await this.#runBusy(async() => {
         this.#report = null;
-        this.#restoreReport = await this.#migrationApi().restoreMoreActivitiesMigrationBackup({});
+        this.#restoreReport = await this.#migrationApi().restoreMoreActivitiesMigrationBackup({
+          onProgress: (payload) => this.#updateProgress(payload)
+        });
         this.#activeTab = "backups";
         ui.notifications?.info?.(Constants.format(
           "SCMOREACTIVITIES.Migration.Info.RestoreComplete",
           { items: this.#restoreReport.restoredItems ?? 0 },
           `Restored ${this.#restoreReport.restoredItems ?? 0} item(s) from backup.`
         ));
+        MoreActivitiesMigrationApp.#notifyFailedRelocks(this.#restoreReport);
       });
     });
 
@@ -184,31 +205,243 @@ export class MoreActivitiesMigrationApp extends HandlebarsApplicationMixin(Appli
     return game?.modules?.get?.(Constants.MODULE_ID)?.api?.migration ?? {};
   }
 
+  /**
+   * A preview that could not read every pack in scope may be missing legacy
+   * entries, so applying it is an explicit decision.
+   *
+   * @returns {Promise<boolean|null>} whether to allow the incomplete scope, or
+   *   null when the GM cancelled the apply.
+   */
+  async #confirmIncompleteScope() {
+    const failedPacks = this.#preview?.failedPacks ?? [];
+    if (!failedPacks.length) {
+      return false;
+    }
+
+    const labels = failedPacks.map((pack) => pack.label ?? pack.id).join(", ");
+    const message = Constants.format(
+      "SCMOREACTIVITIES.Migration.Confirm.IncompleteScope",
+      { count: failedPacks.length, packs: labels },
+      `${failedPacks.length} compendium(s) could not be read during the preview (${labels}), so legacy activities may be missing `
+      + "from this migration. Apply it to what was scanned anyway?"
+    );
+    const title = Constants.localize(
+      "SCMOREACTIVITIES.Migration.Confirm.IncompleteScopeTitle",
+      "Incomplete migration scope"
+    );
+
+    const DialogV2 = globalThis.foundry?.applications?.api?.DialogV2;
+    if (typeof DialogV2?.confirm !== "function") {
+      return globalThis.confirm?.(`${title}\n\n${message}`) === true ? true : null;
+    }
+
+    try {
+      // rejectClose belongs in this config object: DialogV2.confirm forwards its
+      // own argument straight to wait(), so a second argument is dropped.
+      const confirmed = await DialogV2.confirm({
+        window: { title, icon: "fa-solid fa-triangle-exclamation" },
+        content: `<p>${MoreActivitiesMigrationApp.#escape(message)}</p>`,
+        modal: true,
+        rejectClose: false
+      });
+      return confirmed === true ? true : null;
+    } catch (error) {
+      // This runs outside #runBusy, so a rejected dialog would surface as an
+      // unhandled rejection. A dialog that never answered is not a yes.
+      Logger.warn("Incomplete migration scope was not confirmed; the apply was cancelled.", error);
+      return null;
+    }
+  }
+
+  static #escape(value) {
+    const text = String(value ?? "");
+    const escapeHTML = globalThis.foundry?.utils?.escapeHTML;
+    if (typeof escapeHTML === "function") {
+      return escapeHTML(text);
+    }
+    return text.replace(/[&<>"']/g, (char) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      "\"": "&quot;",
+      "'": "&#39;"
+    })[char]);
+  }
+
+  static #notifyFailedRelocks(report) {
+    const failed = report?.failedRelocks ?? [];
+    if (!failed.length) {
+      return;
+    }
+
+    const labels = failed.map((entry) => entry.label ?? entry.packId).join(", ");
+    ui.notifications?.error?.(Constants.format(
+      "SCMOREACTIVITIES.Migration.Warning.RelockFailed",
+      { count: failed.length, packs: labels },
+      `${failed.length} compendium(s) could not be re-locked and are still editable: ${labels}. Re-lock them manually.`
+    ), { permanent: true });
+  }
+
   async #runBusy(task) {
     if (this.#busy) {
       return;
     }
 
     this.#busy = true;
-    this.render();
+    this.#progressKey = null;
+    this.#progressPhase = null;
+    await this.render();
+    this.#resetProgress();
     try {
       await task();
     } catch (error) {
-      console.error(`[${Constants.MODULE_ID}] Migration action failed.`, error);
+      Logger.error("Migration action failed.", error);
       ui.notifications?.error?.(error?.message ?? String(error));
     } finally {
       this.#busy = false;
+      this.#progressKey = null;
+      this.#progressPhase = null;
       this.render();
     }
+  }
+
+  #resetProgress() {
+    const root = this.element;
+    const bar = root?.querySelector("[data-progress-bar]");
+    if (!bar) {
+      return;
+    }
+
+    bar.style.width = "0%";
+    root.querySelector("[data-progress-track]")?.setAttribute("aria-valuenow", "0");
+    const label = root.querySelector("[data-progress-label]");
+    if (label) {
+      label.textContent = Constants.localize("SCMOREACTIVITIES.Migration.Progress.Starting", "Starting…");
+    }
+    const count = root.querySelector("[data-progress-count]");
+    if (count) {
+      count.textContent = "";
+    }
+    const status = root.querySelector("[data-progress-status]");
+    if (status) {
+      status.textContent = "";
+    }
+  }
+
+  #updateProgress(payload = {}) {
+    const root = this.element;
+    if (!root) {
+      return;
+    }
+
+    const total = Math.max(0, Math.trunc(Number(payload.total ?? 0)));
+    const current = Math.min(total, Math.max(0, Math.trunc(Number(payload.current ?? 0))));
+    const percent = total > 0 ? Math.round((current / total) * 100) : 0;
+    const phase = String(payload.phase ?? "");
+    const key = `${phase}:${percent}:${payload.detail ?? ""}`;
+    if (key === this.#progressKey) {
+      return;
+    }
+    this.#progressKey = key;
+
+    const bar = root.querySelector("[data-progress-bar]");
+    if (bar) {
+      bar.style.width = `${percent}%`;
+    }
+    root.querySelector("[data-progress-track]")?.setAttribute("aria-valuenow", String(percent));
+
+    const phaseLabel = MoreActivitiesMigrationApp.#phaseLabel(phase);
+    const label = root.querySelector("[data-progress-label]");
+    if (label) {
+      label.textContent = payload.detail ? `${phaseLabel} — ${payload.detail}` : phaseLabel;
+    }
+
+    const count = root.querySelector("[data-progress-count]");
+    if (count) {
+      count.textContent = total > 0 ? `${current}/${total} (${percent}%)` : `${percent}%`;
+    }
+
+    // Only phase transitions reach the live region; announcing every item would
+    // make the tool unusable with a screen reader.
+    if (phase !== this.#progressPhase) {
+      this.#progressPhase = phase;
+      const status = root.querySelector("[data-progress-status]");
+      if (status) {
+        status.textContent = phaseLabel;
+      }
+    }
+  }
+
+  static #phaseLabel(phase) {
+    switch (phase) {
+      case "world-items":
+        return Constants.localize("SCMOREACTIVITIES.Migration.Progress.WorldItems", "Scanning world items");
+      case "actor-items":
+        return Constants.localize("SCMOREACTIVITIES.Migration.Progress.ActorItems", "Scanning actors");
+      case "compendiums":
+        return Constants.localize("SCMOREACTIVITIES.Migration.Progress.Compendiums", "Scanning compendiums");
+      case "apply":
+        return Constants.localize("SCMOREACTIVITIES.Migration.Progress.Apply", "Applying migration");
+      case "restore":
+        return Constants.localize("SCMOREACTIVITIES.Migration.Progress.Restore", "Restoring backup");
+      case "done":
+        return Constants.localize("SCMOREACTIVITIES.Migration.Progress.Done", "Finishing");
+      default:
+        return Constants.localize("SCMOREACTIVITIES.Migration.Progress.Working", "Working");
+    }
+  }
+
+  static #buildScopeChips(preview) {
+    if (!preview) {
+      return [];
+    }
+
+    const chips = [
+      {
+        icon: "fa-solid fa-box-open",
+        label: Constants.localize("SCMOREACTIVITIES.Migration.Scope.WorldItems", "World items"),
+        value: preview.scannedWorldItems ?? 0
+      },
+      {
+        icon: "fa-solid fa-users",
+        label: Constants.localize("SCMOREACTIVITIES.Migration.Scope.ActorItems", "Actor items"),
+        value: preview.scannedActorItems ?? 0
+      },
+      {
+        icon: "fa-solid fa-book-atlas",
+        label: Constants.localize("SCMOREACTIVITIES.Migration.Scope.CompendiumItems", "Compendium items"),
+        value: preview.scannedCompendiumItems ?? 0
+      },
+      {
+        icon: "fa-solid fa-boxes-stacked",
+        label: Constants.localize("SCMOREACTIVITIES.Migration.Scope.Packs", "Packs scanned"),
+        value: preview.scannedPacks ?? 0
+      },
+      {
+        icon: "fa-solid fa-stopwatch",
+        label: Constants.localize("SCMOREACTIVITIES.Migration.Scope.Duration", "Duration"),
+        value: `${preview.durationMs ?? 0}ms`
+      }
+    ];
+
+    if (preview.failedPacks?.length) {
+      chips.push({
+        icon: "fa-solid fa-triangle-exclamation",
+        label: Constants.localize("SCMOREACTIVITIES.Migration.Scope.FailedPacks", "Packs unreadable"),
+        value: preview.failedPacks.length
+      });
+    }
+
+    return chips;
   }
 
   static #flattenPreviewEntries(preview) {
     return (preview?.entries ?? []).flatMap((entry) => {
       return (entry.activities ?? []).map((activity) => ({
         itemName: entry.itemName,
-        sourceLabel: entry.source === "actor"
-          ? `${entry.actorName ?? "-"}`
-          : Constants.localize("SCMOREACTIVITIES.Migration.Fields.WorldItem", "World item"),
+        sourceLabel: MoreActivitiesMigrationApp.#sourceLabel(entry),
+        sourceIcon: MoreActivitiesMigrationApp.#sourceIcon(entry),
+        sourceLocked: entry.packLocked === true,
         activityName: activity.activityName,
         legacyType: activity.legacyType,
         targetType: activity.targetType ?? "-",
@@ -220,6 +453,26 @@ export class MoreActivitiesMigrationApp extends HandlebarsApplicationMixin(Appli
         reason: activity.reason ?? ""
       }));
     });
+  }
+
+  static #sourceLabel(entry) {
+    if (entry?.source === "compendium") {
+      const packLabel = entry.packLabel ?? entry.packId ?? "-";
+      return entry.actorName ? `${packLabel} › ${entry.actorName}` : packLabel;
+    }
+
+    if (entry?.source === "actor") {
+      return entry.actorName ?? "-";
+    }
+
+    return Constants.localize("SCMOREACTIVITIES.Migration.Fields.WorldItem", "World item");
+  }
+
+  static #sourceIcon(entry) {
+    if (entry?.source === "compendium") {
+      return "fa-solid fa-book-atlas";
+    }
+    return entry?.source === "actor" ? "fa-solid fa-user" : "fa-solid fa-box-open";
   }
 
   static #dateTimeLabel(value) {

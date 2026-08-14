@@ -333,6 +333,501 @@ test("marks only blocking in-range walls and never reveals secret doors", async(
   assert.deepEqual(drawnWalls, [["lineTo", 100, 200]]);
 });
 
+test("marks only the wall stretches the origin token can see", async(t) => {
+  class Graphics {
+    constructor() {
+      this.commands = [];
+      this.parent = null;
+    }
+
+    clear() { return this; }
+    lineStyle() { return this; }
+    beginFill() { return this; }
+    drawCircle() { return this; }
+    drawRoundedRect() { return this; }
+    endFill() { return this; }
+    moveTo(x, y) {
+      this.commands.push(["moveTo", x, y]);
+      return this;
+    }
+    lineTo(x, y) {
+      this.commands.push(["lineTo", x, y]);
+      return this;
+    }
+    destroy() {}
+  }
+
+  globalThis.PIXI = { Graphics };
+  globalThis.CONST = {
+    WALL_DOOR_TYPES: { NONE: 0, SECRET: 2 },
+    WALL_DOOR_STATES: { CLOSED: 0, OPEN: 1 },
+    WALL_MOVEMENT_TYPES: { NONE: 0, NORMAL: 20 }
+  };
+
+  // Sight is blocked past x = 150, so the wall at x = 200 is hidden behind it
+  // and the near wall's stretch below y = 100 is out of sight as well.
+  const collisionTests = [];
+  globalThis.CONFIG = {
+    Canvas: {
+      polygonBackends: {
+        sight: {
+          testCollision(origin, target, options) {
+            collisionTests.push({ origin, target, options });
+            return target.x > 150 || target.y > 100;
+          }
+        }
+      }
+    }
+  };
+
+  const calls = [];
+  patchCanvasService(t, calls);
+  const { stageChildren } = makeCanvas();
+  globalThis.canvas.walls = {
+    placeables: [
+      { document: { c: [100, 0, 100, 200], door: 0, ds: 0, move: 20 } },
+      { document: { c: [200, 0, 200, 200], door: 0, ds: 0, move: 20 } }
+    ]
+  };
+
+  t.after(() => {
+    delete globalThis.PIXI;
+    delete globalThis.CONST;
+    delete globalThis.CONFIG;
+  });
+
+  const app = new ScTeleportDestinationApp(
+    { teleport: { teleportDistance: 30, snapToGrid: false } },
+    [{ id: "target-token" }]
+  );
+  await app._onRender({}, {});
+
+  const [graphics] = stageChildren;
+  assert.deepEqual(graphics.commands, [
+    ["moveTo", 100, 0],
+    ["lineTo", 100, 100]
+  ]);
+
+  // The sight ray stops just short of the wall instead of ending on it.
+  assert.ok(collisionTests.length > 0);
+  assert.ok(collisionTests.every((entry) => entry.options.type === "sight" && entry.options.mode === "any"));
+  assert.ok(collisionTests.every((entry) => entry.target.x < 100 || entry.target.y < 200));
+
+  // Hovering redraws from the memoized stretches instead of re-running sight.
+  const tested = collisionTests.length;
+  handler("pointermove")(canvasEvent({ clientX: 10, clientY: 10 }));
+  assert.equal(collisionTests.length, tested);
+});
+
+test("caps the sight tests when a rangeless teleport spans the whole scene", async(t) => {
+  class Graphics {
+    constructor() { this.parent = null; }
+    clear() { return this; }
+    lineStyle() { return this; }
+    beginFill() { return this; }
+    drawCircle() { return this; }
+    drawRoundedRect() { return this; }
+    endFill() { return this; }
+    moveTo() { return this; }
+    lineTo() { return this; }
+    destroy() {}
+  }
+
+  globalThis.PIXI = { Graphics };
+  globalThis.CONST = {
+    WALL_DOOR_TYPES: { NONE: 0, SECRET: 2 },
+    WALL_DOOR_STATES: { CLOSED: 0, OPEN: 1 },
+    WALL_MOVEMENT_TYPES: { NONE: 0, NORMAL: 20 }
+  };
+
+  let collisions = 0;
+  globalThis.CONFIG = {
+    Canvas: {
+      polygonBackends: {
+        sight: {
+          testCollision() {
+            collisions += 1;
+            return false;
+          }
+        }
+      }
+    }
+  };
+
+  const calls = [];
+  patchCanvasService(t, calls);
+  makeCanvas();
+  // 400 walls five squares long: sampling every half square would be 4000
+  // sweeps before the marker ever appears.
+  globalThis.canvas.walls = {
+    placeables: Array.from({ length: 400 }, (_, index) => ({
+      document: { c: [index * 600, 0, index * 600, 500], door: 0, ds: 0, move: 20 }
+    }))
+  };
+
+  t.after(() => {
+    delete globalThis.PIXI;
+    delete globalThis.CONST;
+    delete globalThis.CONFIG;
+  });
+
+  // No range limit, so every wall on the scene is a candidate.
+  const app = new ScTeleportDestinationApp({ teleport: { teleportDistance: 0, snapToGrid: false } }, []);
+  await app._onRender({}, {});
+
+  assert.ok(collisions <= 1500, `expected the budget to hold, got ${collisions} sight tests`);
+  // The budget spreads over the candidates — 3 samples each here instead of the
+  // 10 a half-square resolution would ask for — and no wall goes unchecked.
+  assert.equal(collisions, 1200);
+});
+
+test("sweeps once and answers every sample from the sight polygon", async(t) => {
+  class Graphics {
+    constructor() { this.parent = null; }
+    clear() { return this; }
+    lineStyle() { return this; }
+    beginFill() { return this; }
+    drawCircle() { return this; }
+    drawRoundedRect() { return this; }
+    endFill() { return this; }
+    moveTo() { return this; }
+    lineTo() { return this; }
+    destroy() {}
+  }
+
+  globalThis.PIXI = { Graphics };
+  globalThis.CONST = {
+    WALL_DOOR_TYPES: { NONE: 0, SECRET: 2 },
+    WALL_DOOR_STATES: { CLOSED: 0, OPEN: 1 },
+    WALL_MOVEMENT_TYPES: { NONE: 0, NORMAL: 20 }
+  };
+
+  let sweeps = 0;
+  let containsCalls = 0;
+  let collisionCalls = 0;
+  globalThis.CONFIG = {
+    Canvas: {
+      polygonBackends: {
+        sight: {
+          create() {
+            sweeps += 1;
+            return {
+              points: [0, 0, 100, 0, 100, 100, 0, 100],
+              contains() {
+                containsCalls += 1;
+                return true;
+              }
+            };
+          },
+          testCollision() {
+            collisionCalls += 1;
+            return false;
+          }
+        }
+      }
+    }
+  };
+
+  const calls = [];
+  patchCanvasService(t, calls);
+  makeCanvas();
+  globalThis.canvas.walls = {
+    placeables: Array.from({ length: 20 }, (_, index) => ({
+      document: { c: [index * 10, 0, index * 10, 500], door: 0, ds: 0, move: 20 }
+    }))
+  };
+
+  t.after(() => {
+    delete globalThis.PIXI;
+    delete globalThis.CONST;
+    delete globalThis.CONFIG;
+  });
+
+  const app = new ScTeleportDestinationApp({ teleport: { teleportDistance: 0, snapToGrid: false } }, []);
+  await app._onRender({}, {});
+
+  // The costly part runs once, however many samples the walls need.
+  assert.equal(sweeps, 1);
+  assert.equal(collisionCalls, 0);
+  assert.ok(containsCalls >= 20, `expected a probe per wall at least, got ${containsCalls}`);
+});
+
+test("falls back to per-sample collisions when the sweep is degenerate", async(t) => {
+  class Graphics {
+    constructor() { this.parent = null; }
+    clear() { return this; }
+    lineStyle() { return this; }
+    beginFill() { return this; }
+    drawCircle() { return this; }
+    drawRoundedRect() { return this; }
+    endFill() { return this; }
+    moveTo() { return this; }
+    lineTo() { return this; }
+    destroy() {}
+  }
+
+  globalThis.PIXI = { Graphics };
+  globalThis.CONST = {
+    WALL_DOOR_TYPES: { NONE: 0, SECRET: 2 },
+    WALL_DOOR_STATES: { CLOSED: 0, OPEN: 1 },
+    WALL_MOVEMENT_TYPES: { NONE: 0, NORMAL: 20 }
+  };
+
+  let collisionCalls = 0;
+  globalThis.CONFIG = {
+    Canvas: {
+      polygonBackends: {
+        sight: {
+          // An empty sweep would report every wall as hidden.
+          create: () => ({ points: [], contains: () => false }),
+          testCollision() {
+            collisionCalls += 1;
+            return false;
+          }
+        }
+      }
+    }
+  };
+
+  const calls = [];
+  patchCanvasService(t, calls);
+  makeCanvas();
+  globalThis.canvas.walls = {
+    placeables: [{ document: { c: [100, 0, 100, 200], door: 0, ds: 0, move: 20 } }]
+  };
+
+  t.after(() => {
+    delete globalThis.PIXI;
+    delete globalThis.CONST;
+    delete globalThis.CONFIG;
+  });
+
+  const app = new ScTeleportDestinationApp({ teleport: { teleportDistance: 30, snapToGrid: false } }, []);
+  await app._onRender({}, {});
+
+  assert.ok(collisionCalls > 0, "expected the collision fallback to take over");
+});
+
+test("drops the marks rather than sweeping per wall on a huge scene without a polygon", async(t) => {
+  class Graphics {
+    constructor() {
+      this.commands = [];
+      this.parent = null;
+    }
+
+    clear() { return this; }
+    lineStyle() { return this; }
+    beginFill() { return this; }
+    drawCircle() { return this; }
+    drawRoundedRect() { return this; }
+    endFill() { return this; }
+    moveTo() { return this; }
+    lineTo(x, y) {
+      this.commands.push(["lineTo", x, y]);
+      return this;
+    }
+    destroy() {}
+  }
+
+  globalThis.PIXI = { Graphics };
+  globalThis.CONST = {
+    WALL_DOOR_TYPES: { NONE: 0, SECRET: 2 },
+    WALL_DOOR_STATES: { CLOSED: 0, OPEN: 1 },
+    WALL_MOVEMENT_TYPES: { NONE: 0, NORMAL: 20 }
+  };
+
+  let collisionCalls = 0;
+  globalThis.CONFIG = {
+    Canvas: {
+      polygonBackends: {
+        sight: {
+          testCollision() {
+            collisionCalls += 1;
+            return false;
+          }
+        }
+      }
+    }
+  };
+
+  const calls = [];
+  patchCanvasService(t, calls);
+  const { stageChildren } = makeCanvas();
+  globalThis.canvas.walls = {
+    placeables: Array.from({ length: 1501 }, (_, index) => ({
+      document: { c: [index * 10, 0, index * 10, 200], door: 0, ds: 0, move: 20 }
+    }))
+  };
+
+  t.after(() => {
+    delete globalThis.PIXI;
+    delete globalThis.CONST;
+    delete globalThis.CONFIG;
+  });
+
+  const app = new ScTeleportDestinationApp({ teleport: { teleportDistance: 0, snapToGrid: false } }, []);
+  await app._onRender({}, {});
+
+  // Neither a stall nor a leak: no sweeps attempted and nothing marked.
+  assert.equal(collisionCalls, 0);
+  const [staticLayer] = stageChildren;
+  assert.deepEqual(staticLayer.commands, []);
+});
+
+test("coalesces a burst of wall updates into a single repaint", async(t) => {
+  class Graphics {
+    constructor() {
+      this.clears = 0;
+      this.parent = null;
+    }
+
+    clear() {
+      this.clears += 1;
+      return this;
+    }
+    lineStyle() { return this; }
+    beginFill() { return this; }
+    drawCircle() { return this; }
+    drawRoundedRect() { return this; }
+    endFill() { return this; }
+    moveTo() { return this; }
+    lineTo() { return this; }
+    destroy() {}
+  }
+
+  globalThis.PIXI = { Graphics };
+  globalThis.CONST = {
+    WALL_DOOR_TYPES: { NONE: 0, SECRET: 2 },
+    WALL_DOOR_STATES: { CLOSED: 0, OPEN: 1 },
+    WALL_MOVEMENT_TYPES: { NONE: 0, NORMAL: 20 }
+  };
+
+  let sweeps = 0;
+  globalThis.CONFIG = {
+    Canvas: {
+      polygonBackends: {
+        sight: {
+          create() {
+            sweeps += 1;
+            return { points: [0, 0, 1000, 0, 1000, 1000], contains: () => true };
+          }
+        }
+      }
+    }
+  };
+
+  const frames = [];
+  globalThis.requestAnimationFrame = (fn) => frames.push(fn);
+  globalThis.cancelAnimationFrame = () => {};
+
+  const hooks = new Map();
+  globalThis.Hooks = {
+    on(event, fn) {
+      hooks.set(event, fn);
+      return event;
+    },
+    off(event) {
+      hooks.delete(event);
+    }
+  };
+
+  const calls = [];
+  patchCanvasService(t, calls);
+  const { stageChildren } = makeCanvas();
+  globalThis.canvas.walls = {
+    placeables: [{ document: { c: [100, 0, 100, 200], door: 0, ds: 0, move: 20 } }]
+  };
+
+  t.after(() => {
+    delete globalThis.PIXI;
+    delete globalThis.CONST;
+    delete globalThis.CONFIG;
+    delete globalThis.Hooks;
+    delete globalThis.requestAnimationFrame;
+    delete globalThis.cancelAnimationFrame;
+  });
+
+  const app = new ScTeleportDestinationApp(
+    { teleport: { teleportDistance: 30, snapToGrid: false } },
+    []
+  );
+  await app._onRender({}, {});
+
+  const sweepsAfterOpen = sweeps;
+  const [staticLayer] = stageChildren;
+  const clearsAfterOpen = staticLayer.clears;
+
+  // A map import updating fifty walls fires the hook fifty times.
+  for (let update = 0; update < 50; update += 1) {
+    hooks.get("updateWall")({});
+  }
+
+  // Nothing recomputed yet, and only one frame was booked for all fifty.
+  assert.equal(sweeps, sweepsAfterOpen);
+  assert.equal(frames.length, 1);
+
+  frames.pop()();
+
+  assert.equal(sweeps, sweepsAfterOpen + 1);
+  assert.equal(staticLayer.clears, clearsAfterOpen + 1);
+});
+
+test("hides wall stretches the player cannot see even when they are in line of sight", async(t) => {
+  class Graphics {
+    constructor() {
+      this.commands = [];
+      this.parent = null;
+    }
+
+    clear() { return this; }
+    lineStyle() { return this; }
+    beginFill() { return this; }
+    drawCircle() { return this; }
+    drawRoundedRect() { return this; }
+    endFill() { return this; }
+    moveTo() { return this; }
+    lineTo(x, y) {
+      this.commands.push(["lineTo", x, y]);
+      return this;
+    }
+    destroy() {}
+  }
+
+  globalThis.PIXI = { Graphics };
+  globalThis.CONST = {
+    WALL_DOOR_TYPES: { NONE: 0, SECRET: 2 },
+    WALL_DOOR_STATES: { CLOSED: 0, OPEN: 1 },
+    WALL_MOVEMENT_TYPES: { NONE: 0, NORMAL: 20 }
+  };
+  globalThis.CONFIG = {
+    Canvas: { polygonBackends: { sight: { testCollision: () => false } } }
+  };
+
+  const calls = [];
+  patchCanvasService(t, calls);
+  const { stageChildren } = makeCanvas();
+  globalThis.canvas.walls = {
+    placeables: [{ document: { c: [100, 0, 100, 200], door: 0, ds: 0, move: 20 } }]
+  };
+  // Nothing on the wall has been lit or explored yet.
+  globalThis.canvas.visibility = { testVisibility: () => false };
+
+  t.after(() => {
+    delete globalThis.PIXI;
+    delete globalThis.CONST;
+    delete globalThis.CONFIG;
+  });
+
+  const app = new ScTeleportDestinationApp(
+    { teleport: { teleportDistance: 30, snapToGrid: false } },
+    [{ id: "target-token" }]
+  );
+  await app._onRender({}, {});
+
+  const [graphics] = stageChildren;
+  assert.deepEqual(graphics.commands, []);
+});
+
 test("labels the destination footprint with the travelled distance", async(t) => {
   class Graphics {
     constructor() {
@@ -504,8 +999,9 @@ test("draws a non-interactive teleport range ring and removes it on close", asyn
 
   await app._onRender({}, {});
 
-  assert.equal(stageChildren.length, 1);
-  const [ring] = stageChildren;
+  // The ring lives in the static layer, the destination marker in its own.
+  assert.equal(stageChildren.length, 2);
+  const [ring, marker] = stageChildren;
   assert.equal(ring.eventMode, "none");
   assert.equal(ring.interactive, false);
   assert.deepEqual(ring.commands, [
@@ -520,6 +1016,161 @@ test("draws a non-interactive teleport range ring and removes it on close", asyn
 
   assert.equal(stageChildren.length, 0);
   assert.equal(ring.destroyed, true);
+  assert.equal(marker.destroyed, true);
+});
+
+test("leaves the ring and wall marks alone while the pointer moves", async(t) => {
+  class Graphics {
+    constructor() {
+      this.commands = [];
+      this.parent = null;
+    }
+
+    clear() {
+      this.commands.push(["clear"]);
+      return this;
+    }
+    lineStyle() { return this; }
+    beginFill() { return this; }
+    drawCircle() {
+      this.commands.push(["drawCircle"]);
+      return this;
+    }
+    drawRoundedRect() { return this; }
+    endFill() { return this; }
+    moveTo() { return this; }
+    lineTo(x, y) {
+      this.commands.push(["lineTo", x, y]);
+      return this;
+    }
+    destroy() {}
+  }
+
+  globalThis.PIXI = { Graphics };
+  globalThis.CONST = {
+    WALL_DOOR_TYPES: { NONE: 0, SECRET: 2 },
+    WALL_DOOR_STATES: { CLOSED: 0, OPEN: 1 },
+    WALL_MOVEMENT_TYPES: { NONE: 0, NORMAL: 20 }
+  };
+  globalThis.CONFIG = {
+    Canvas: { polygonBackends: { sight: { testCollision: () => false } } }
+  };
+
+  const calls = [];
+  patchCanvasService(t, calls);
+  const { stageChildren } = makeCanvas();
+  globalThis.canvas.walls = {
+    placeables: [{ document: { c: [100, 0, 100, 200], door: 0, ds: 0, move: 20 } }]
+  };
+  ScCanvasActivityService.getTeleportPlacementPreview = () => ({
+    inRange: true,
+    destination: { x: 50, y: 50 },
+    landings: []
+  });
+
+  t.after(() => {
+    delete globalThis.PIXI;
+    delete globalThis.CONST;
+    delete globalThis.CONFIG;
+  });
+
+  const app = new ScTeleportDestinationApp(
+    { teleport: { teleportDistance: 30, snapToGrid: false } },
+    [{ id: "target-token" }]
+  );
+  await app._onRender({}, {});
+
+  const [staticLayer] = stageChildren;
+  const afterOpen = [...staticLayer.commands];
+  assert.ok(afterOpen.some((command) => command[0] === "lineTo"));
+
+  for (let move = 0; move < 20; move += 1) {
+    handler("pointermove")(canvasEvent({ clientX: move, clientY: move }));
+  }
+
+  // Twenty pointer moves and the wall geometry was never re-emitted.
+  assert.deepEqual(staticLayer.commands, afterOpen);
+});
+
+test("redraws the wall marks when a wall changes mid-selection", async(t) => {
+  class Graphics {
+    constructor() {
+      this.commands = [];
+      this.parent = null;
+    }
+
+    clear() {
+      this.commands.push(["clear"]);
+      return this;
+    }
+    lineStyle() { return this; }
+    beginFill() { return this; }
+    drawCircle() { return this; }
+    drawRoundedRect() { return this; }
+    endFill() { return this; }
+    moveTo() { return this; }
+    lineTo(x, y) {
+      this.commands.push(["lineTo", x, y]);
+      return this;
+    }
+    destroy() {}
+  }
+
+  globalThis.PIXI = { Graphics };
+  globalThis.CONST = {
+    WALL_DOOR_TYPES: { NONE: 0, SECRET: 2 },
+    WALL_DOOR_STATES: { CLOSED: 0, OPEN: 1 },
+    WALL_MOVEMENT_TYPES: { NONE: 0, NORMAL: 20 }
+  };
+  globalThis.CONFIG = {
+    Canvas: { polygonBackends: { sight: { testCollision: () => false } } }
+  };
+
+  const hooks = new Map();
+  globalThis.Hooks = {
+    on(event, fn) {
+      hooks.set(event, fn);
+      return event;
+    },
+    off(event) {
+      hooks.delete(event);
+    }
+  };
+
+  const calls = [];
+  patchCanvasService(t, calls);
+  const { stageChildren } = makeCanvas();
+  const wall = { document: { c: [100, 0, 100, 200], door: 0, ds: 0, move: 20 } };
+  globalThis.canvas.walls = { placeables: [wall] };
+
+  t.after(() => {
+    delete globalThis.PIXI;
+    delete globalThis.CONST;
+    delete globalThis.CONFIG;
+    delete globalThis.Hooks;
+  });
+
+  const app = new ScTeleportDestinationApp(
+    { teleport: { teleportDistance: 30, snapToGrid: false } },
+    [{ id: "target-token" }]
+  );
+  await app._onRender({}, {});
+
+  const [staticLayer] = stageChildren;
+  assert.ok(staticLayer.commands.some((command) => command[0] === "lineTo"));
+
+  // The wall becomes a secret door. The placeable count is unchanged, so only
+  // the hook can tell the cache its answer is stale.
+  wall.document.door = 2;
+  hooks.get("updateWall")(wall.document);
+
+  const lastClear = staticLayer.commands.map((command) => command[0]).lastIndexOf("clear");
+  const afterUpdate = staticLayer.commands.slice(lastClear + 1);
+  assert.ok(lastClear >= 0, "expected the static layer to be redrawn");
+  assert.equal(afterUpdate.filter((command) => command[0] === "lineTo").length, 0);
+
+  await app.close();
+  assert.equal(hooks.size, 0);
 });
 
 test("draws landing footprints from the placement preview on hover", async(t) => {
@@ -560,7 +1211,8 @@ test("draws landing footprints from the placement preview on hover", async(t) =>
 
   handler("pointermove")(canvasEvent({ clientX: 200, clientY: 200 }));
 
-  const [graphics] = stageChildren;
+  // Footprints are hover state, so they belong to the dynamic layer.
+  const [, graphics] = stageChildren;
   assert.deepEqual(app.hoverPoint, { x: 200, y: 200 });
   assert.deepEqual(graphics.commands, [
     ["rect", 150, 150, 100, 100]

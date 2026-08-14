@@ -382,12 +382,190 @@ This module includes explicit migration tools for the legacy `more-activities` m
 - Restore the latest backup if needed
 - Export preview and report data for review
 
+### What Gets Scanned
+
+The preview walks, in this order:
+
+1. world items in the Items sidebar
+2. items owned by world actors
+3. world compendium packs (`Item` and `Actor` packs)
+
+System and module compendiums are **not** scanned by default, because those packs are
+usually overwritten when the system or module updates. The preview reports how many were
+skipped so an empty result is never ambiguous.
+
+Three world settings control the scope:
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| Scan compendiums during migration | on | Include world compendium packs in preview and apply |
+| Include system and module compendiums | off | Also scan packs owned by the system or other modules |
+| Unlock locked compendiums during migration | on | Temporarily unlock locked packs while applying or restoring, then re-lock them |
+
+If automatic unlocking is disabled, entries inside locked packs are reported as
+`pack-locked` failures instead of being written. Only packs that hold at least one
+**convertible** activity are unlocked, so a locked pack whose legacy activities are all
+blocked is left untouched and is not reported as a failure.
+
+### Incomplete Scope And Lock Failures
+
+Two things can leave a run partially done, and both are reported instead of only logged:
+
+- **a pack that cannot be read.** `getDocuments()` failures are collected into
+  `preview.failedPacks` and `preview.completeScope` becomes `false`. The preview adds a
+  visible warning, the tool shows a "Packs unreadable" chip, and **Apply migration** asks
+  for confirmation before migrating a scope that may be missing entries. The API refuses
+  the apply unless `allowIncompleteScope: true` is passed.
+- **a pack that cannot be re-locked.** Packs unlocked for the run are re-locked in a
+  `finally` block; anything that stays editable lands in `report.failedRelocks` and raises
+  a permanent error notification listing the packs that need a manual re-lock.
+
+### How Legacy Chains Are Converted
+
+The legacy `chain` activity is not always linear. Whenever a step carries entries in
+`chainTriggers`, the legacy runtime stops after that step, posts the trigger buttons on the
+chat card, and resumes on the steps whose `chainListeners` match — a branching graph.
+
+The migration picks the target type from the data:
+
+| Legacy chain | Target | Why |
+| --- | --- | --- |
+| no activity ids | blocked (`empty-legacy-chain`) | Nothing to run and nothing to branch on |
+| only blank labels on a trigger that could fire | blocked (`blank-legacy-trigger`) | The chain waited on a button, so `sc-chain` would run the steps behind it on its own, and there is no label to put on a prompt |
+| no triggers that could fire | `sc-chain` | A plain sequence; the simpler activity and sheet fit it |
+| any trigger that could fire | `sc-conditional-chain` | `sc-chain` is strictly linear and cannot represent branches |
+
+"A trigger that could fire" is the legacy runtime's own rule. `executeChainedActivity` looked
+the step's activity up first and returned when it did not resolve, and the trigger buttons
+were guarded on `index < chainedActivityIds.length - 1`. So a trigger only ever appeared when
+its step had an activity id **and** was not the last one. Triggers anywhere else — on a blank
+step, on the last step, or past the end of the chain — never fired, do not make a chain
+branch, and are preserved under migration flags instead of becoming a choice step. This
+matters beyond tidiness: turning a dead trigger into a choice would make the steps behind it
+executable for the first time.
+
+**A chain without triggers gains steps it never ran.** The legacy runtime executed
+`executeChainedActivity(0)` and returned — a chain with no triggers only ever fired its
+**first** step, whatever the sheet listed, and fired nothing at all when that first step had
+no activity id. `sc-chain` runs the whole sequence, which is what the legacy sheet always
+implied but never did. The migration keeps every step (dropping them would look like data
+loss) and reports the change: the conversion is marked lossy, the preview warns that damage,
+consumption, and effects on the later steps will now fire, and the skipped ids are recorded
+under `unexecutedLegacySteps` in the migration flags. Review those steps before applying.
+
+For a branching chain, each legacy step becomes a flow node (`node-0`, `node-1`, …) and a
+step whose triggers could fire becomes a `choice` node whose choices route to the steps that
+listened to that trigger. Only steps the chain actually declares get a node, so a listener
+recorded past the end of the chain is never routed to — a route to a node that does not exist
+would fail `validateFlow` with `unknown-route` and block the whole chain at runtime.
+
+A step **without** triggers ends the flow. The legacy runtime never advanced on its own: it
+ran one step and returned, and only a trigger button resumed the chain. Routing such a step
+to `node-index + 1` would run the opposite branch — picking "Hit" on a `Hit / Miss` chain
+would fire the "On miss" step right after it.
+
+These stay lossy and are reported as preview warnings, with the legacy data kept under
+`flags.sc-more-activities.migration.unmapped`:
+
+| What | Flag key |
+| --- | --- |
+| branch buttons rendered **on the chat card**; `sc-conditional-chain` asks in a **dialog** | — |
+| several steps listened to the same trigger, so the legacy module opened a branch picker; a choice route resolves to exactly one node, so the first wins | `droppedBranches` |
+| steps no branch can reach, kept as flow steps so nothing is lost | `unreachableSteps` |
+| triggers on a step with no activity id, which the runtime never got past | `ignoredEmptyStepTriggers` |
+| triggers on the last step, which the runtime never offered | `ignoredLastStepTriggers` |
+| triggers stored past the end of the chain | `trailingTriggers` |
+| a trigger label repeated on one step: `continueChainFrom` resolved every button with that label to the first occurrence, so the repeats never fired | `duplicateTriggers` |
+| a trigger whose label was cleared, which cannot become a choice the player picks | `blankTriggers` |
+| listeners pointing past the end of the chain | `outOfRangeListeners` |
+| listeners keyed to a trigger no choice offers — an ignored trigger, a repeated label, or a key no trigger ever had | `unconsumedListeners` |
+
+On the `sc-chain` path the equivalents are `unexecutedLegacySteps` plus the raw
+`chainTriggers` and `chainListeners` matrices.
+
+### Migration API
+
+`api.migration` is part of the public v1 API.
+
+```js
+const migration = game.modules.get("sc-more-activities")?.api?.migration;
+```
+
+| Method | Signature | Returns | GM only |
+| --- | --- | --- | --- |
+| `previewMoreActivitiesMigration` | `({ onProgress } = {})` | frozen preview report | yes |
+| `migrateMoreActivities` | `({ preview, onProgress, allowIncompleteScope } = {})` | frozen apply report | yes |
+| `restoreMoreActivitiesMigrationBackup` | `({ backupId, onProgress } = {})` | frozen restore report | yes |
+| `listMoreActivitiesMigrationBackups` | `()` | frozen array of stored backups | yes |
+| `exportMoreActivitiesMigrationReport` | `(report)` | filename it saved or copied | no |
+
+Everything that reads world data or writes to it throws for non-GM users.
+`exportMoreActivitiesMigrationReport` is the exception: it only serializes the object it is
+handed, so it reads nothing and needs no permission check.
+
+`onProgress` is optional on all three long-running calls. It is called synchronously with a
+plain payload and a throwing callback is caught and logged, never propagated:
+
+```js
+const preview = await migration.previewMoreActivitiesMigration({
+  onProgress: ({ phase, current, total, detail }) => {
+    console.log(`${phase}: ${current}/${total} ${detail}`);
+  }
+});
+```
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `phase` | string | `world-items`, `actor-items`, `compendiums`, `done`, `apply`, `restore` |
+| `current` | number | items, actors, or packs finished in this phase |
+| `total` | number | total for this phase; `0` when nothing is in scope |
+| `detail` | string | current item, actor, or pack label; `""` when there is none |
+
+Phases differ in when they emit:
+
+- `world-items` and `actor-items` emit **once per unit, after** it is inspected
+  (`current: index + 1`)
+- `compendiums`, `apply`, and `restore` emit **before** the unit (`current: index`) and again
+  **after** it (`current: index + 1`), so a slow pack or item is visible while it is worked
+  on; `compendiums` also emits progress inside a large pack, with `detail` carrying a
+  `pack (i/N)` item counter while `current` stays on the pack
+- `done` is emitted once as `1/1`, and only by the preview — apply and restore end on their
+  last `apply`/`restore` payload and emit no terminal phase
+
+Preview fields relevant to compendium scope:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `includeCompendiums` / `includeExternalPacks` | boolean | the scope the run actually used |
+| `scannedPacks` | number | packs read successfully |
+| `scannedCompendiumItems` | number | items inspected inside packs |
+| `compendiumItems` | number | pack items that carry legacy activities |
+| `lockedPacks` | array | descriptors of locked packs holding legacy entries |
+| `skippedExternalPacks` | array | system/module packs left out of scope |
+| `failedPacks` | array | `{ id, label, documentName, locked, world, reason }` per unreadable pack |
+| `completeScope` | boolean | `false` when any pack in scope failed to load |
+
+Apply and restore reports add `unlockedPacks`, `failedUnlocks`, and `failedRelocks`; apply
+also carries `incompleteScope` and `failedPacks`, copied from the preview it ran on.
+
+`previewMoreActivitiesMigration` accepts no scope arguments — the compendium settings above
+decide what is scanned. `MoreActivitiesMigrationAnalyzer#analyze` takes explicit
+`includeCompendiums` / `includeExternalPacks` overrides, but that class is internal.
+
+All of this is an additive change to the v1 API: existing calls that pass only `preview`, or
+that ignore the new report fields, keep working.
+
 Important:
 
 - migration is **GM only**
-- migration does **not** auto-run
+- migration does **not** auto-run — nothing is scanned until the GM presses **Run preview**
 - blocked or partially compatible legacy activities may require manual cleanup after conversion
 - if the legacy module is still enabled, keep it active only while reviewing or migrating
+- legacy activities remain readable while the legacy module is disabled: they stop rendering
+  on the sheet because the type is no longer registered, but the stored data is intact and
+  the preview still finds it
+- enable **Debug logging** for a per-item, per-pack breakdown in the console; a one-line
+  summary of every preview, apply, and restore is always logged
 
 ## Building Activities In Other Modules
 
@@ -712,7 +890,7 @@ Current public capabilities:
 - `activityCreation`
 - `activityCatalog`
 - `activityAvailability`
-- `migration`
+- `migration` (see [Migration API](#migration-api))
 
 ### Decorating SC Wall Documents
 

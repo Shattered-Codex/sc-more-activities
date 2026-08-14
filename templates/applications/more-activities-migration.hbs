@@ -4,45 +4,98 @@
   {{else}}
     <header class="sc-ma-migration-toolbar">
       <div class="sc-ma-migration-actions">
-        <button type="button" data-action="run-preview" {{#if busy}}disabled{{/if}}>
+        <button
+          type="button"
+          class="sc-ma-migration-button sc-ma-migration-button--primary"
+          data-action="run-preview"
+          {{#if busy}}disabled{{/if}}
+        >
           <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
           <span>{{ localize "SCMOREACTIVITIES.Migration.Actions.RunPreview" }}</span>
         </button>
-        <button type="button" data-action="apply-migration" {{#unless canApply}}disabled{{/unless}} {{#if busy}}disabled{{/if}}>
+        <button
+          type="button"
+          class="sc-ma-migration-button"
+          data-action="apply-migration"
+          {{#unless canApply}}disabled{{/unless}}
+          {{#if busy}}disabled{{/if}}
+        >
           <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
           <span>{{ localize "SCMOREACTIVITIES.Migration.Actions.Apply" }}</span>
         </button>
-        <button type="button" data-action="restore-latest" {{#unless backupCount}}disabled{{/unless}} {{#if busy}}disabled{{/if}}>
+        <button
+          type="button"
+          class="sc-ma-migration-button"
+          data-action="restore-latest"
+          {{#unless backupCount}}disabled{{/unless}}
+          {{#if busy}}disabled{{/if}}
+        >
           <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
           <span>{{ localize "SCMOREACTIVITIES.Migration.Actions.RestoreLatest" }}</span>
         </button>
       </div>
-      <div class="sc-ma-migration-actions">
-        <button type="button" data-action="export-preview" {{#unless canExportPreview}}disabled{{/unless}}>
+      <div class="sc-ma-migration-actions sc-ma-migration-actions--secondary">
+        <button
+          type="button"
+          class="sc-ma-migration-button sc-ma-migration-button--ghost"
+          data-action="export-preview"
+          {{#unless canExportPreview}}disabled{{/unless}}
+        >
           <i class="fa-solid fa-file-export" aria-hidden="true"></i>
           <span>{{ localize "SCMOREACTIVITIES.Migration.Actions.ExportPreview" }}</span>
         </button>
-        <button type="button" data-action="export-report" {{#unless canExportReport}}disabled{{/unless}}>
+        <button
+          type="button"
+          class="sc-ma-migration-button sc-ma-migration-button--ghost"
+          data-action="export-report"
+          {{#unless canExportReport}}disabled{{/unless}}
+        >
           <i class="fa-solid fa-file-arrow-down" aria-hidden="true"></i>
           <span>{{ localize "SCMOREACTIVITIES.Migration.Actions.ExportReport" }}</span>
         </button>
       </div>
     </header>
 
-    <section class="sc-ma-migration-summary">
-      <div class="sc-ma-migration-card">
-        <span>{{ localize "SCMOREACTIVITIES.Migration.Summary.Backups" }}</span>
-        <strong>{{ backupCount }}</strong>
+    <section class="sc-ma-migration-progress" data-migration-progress {{#unless busy}}hidden{{/unless}}>
+      {{!-- Phase changes are announced here instead of on the visible label,
+            which also carries the per-item detail and would flood a screen
+            reader with one announcement per scanned item. --}}
+      <span
+        class="sc-ma-visually-hidden"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        data-progress-status
+      ></span>
+      <div class="sc-ma-migration-progress-meta">
+        <span class="sc-ma-migration-progress-label" data-progress-label>
+          {{ localize "SCMOREACTIVITIES.Migration.Progress.Starting" }}
+        </span>
+        <span class="sc-ma-migration-progress-count" data-progress-count></span>
       </div>
+      <div
+        class="sc-ma-migration-progress-track"
+        data-progress-track
+        role="progressbar"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        aria-valuenow="0"
+        aria-label="{{ localize "SCMOREACTIVITIES.Migration.Progress.Label" }}"
+      >
+        <div class="sc-ma-migration-progress-bar" data-progress-bar style="width: 0%"></div>
+      </div>
+    </section>
+
+    <section class="sc-ma-migration-summary">
       <div class="sc-ma-migration-card">
         <span>{{ localize "SCMOREACTIVITIES.Migration.Summary.PreviewItems" }}</span>
         <strong>{{ previewItemCount }}</strong>
       </div>
-      <div class="sc-ma-migration-card">
+      <div class="sc-ma-migration-card sc-ma-migration-card--accent">
         <span>{{ localize "SCMOREACTIVITIES.Migration.Summary.Convertible" }}</span>
         <strong>{{ preview.convertible }}</strong>
       </div>
-      <div class="sc-ma-migration-card">
+      <div class="sc-ma-migration-card sc-ma-migration-card--danger">
         <span>{{ localize "SCMOREACTIVITIES.Migration.Summary.Blocked" }}</span>
         <strong>{{ preview.blocked }}</strong>
       </div>
@@ -54,7 +107,23 @@
         <span>{{ localize "SCMOREACTIVITIES.Migration.Summary.RestoredItems" }}</span>
         <strong>{{ restoreReport.restoredItems }}</strong>
       </div>
+      <div class="sc-ma-migration-card">
+        <span>{{ localize "SCMOREACTIVITIES.Migration.Summary.Backups" }}</span>
+        <strong>{{ backupCount }}</strong>
+      </div>
     </section>
+
+    {{#if scopeChips.length}}
+      <section class="sc-ma-migration-scope" aria-label="{{ localize "SCMOREACTIVITIES.Migration.Scope.Label" }}">
+        {{#each scopeChips as |chip|}}
+          <span class="sc-ma-migration-chip">
+            <i class="{{ chip.icon }}" aria-hidden="true"></i>
+            <span class="sc-ma-migration-chip-label">{{ chip.label }}</span>
+            <strong>{{ chip.value }}</strong>
+          </span>
+        {{/each}}
+      </section>
+    {{/if}}
 
     <section class="sc-ma-migration-tabbed">
       <nav class="sc-ma-catalog-tab-list" role="tablist" aria-label="{{ localize "SCMOREACTIVITIES.Migration.Tabs.Label" }}">
@@ -176,7 +245,18 @@
                   {{#each previewEntries as |entry|}}
                     <tr>
                       <td><strong>{{ entry.itemName }}</strong></td>
-                      <td>{{ entry.sourceLabel }}</td>
+                      <td>
+                        <span class="sc-ma-migration-source">
+                          <i class="{{ entry.sourceIcon }}" aria-hidden="true"></i>
+                          <span>{{ entry.sourceLabel }}</span>
+                          {{#if entry.sourceLocked}}
+                            <i
+                              class="fa-solid fa-lock sc-ma-migration-source-lock"
+                              title="{{ localize "SCMOREACTIVITIES.Migration.Fields.LockedPack" }}"
+                            ></i>
+                          {{/if}}
+                        </span>
+                      </td>
                       <td>{{ entry.activityName }}</td>
                       <td><code>{{ entry.legacyType }}</code></td>
                       <td><code>{{ entry.targetType }}</code></td>
@@ -186,7 +266,13 @@
                   {{/each}}
                 {{else}}
                   <tr>
-                    <td colspan="7">{{ localize "SCMOREACTIVITIES.Migration.Empty.Preview" }}</td>
+                    <td colspan="7">
+                      {{#if hasPreview}}
+                        {{ localize "SCMOREACTIVITIES.Migration.Empty.Preview" }}
+                      {{else}}
+                        {{ localize "SCMOREACTIVITIES.Migration.Empty.NoPreviewRun" }}
+                      {{/if}}
+                    </td>
                   </tr>
                 {{/if}}
               </tbody>

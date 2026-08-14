@@ -2,10 +2,23 @@ import { Constants } from "../../constants/Constants.js";
 import { ModuleSettings } from "../../settings/ModuleSettings.js";
 import { ScDocumentWindowMinimizer } from "../../applications/ScDocumentWindowMinimizer.js";
 import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
+import { Logger } from "../../support/Logger.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(ApplicationV2) {
+  /** Pixels to stop short of a wall so the sight ray does not hit it. */
+  static #SIGHT_EPSILON = 2;
+
+  /** Upper bound on sight tests per wall, so a scene-long wall stays cheap. */
+  static #MAX_WALL_SAMPLES = 24;
+
+  /** Sampling budget spread over the candidate walls; every wall keeps at least one test. */
+  static #MAX_TOTAL_SAMPLES = 1500;
+
+  /** Hard ceiling on walls the sweep-per-sample fallback will even attempt. */
+  static #MAX_FALLBACK_SWEEPS = 1500;
+
   static DEFAULT_OPTIONS = {
     classes: ["dnd5e2", "sc-more-activities", "sc-ma-teleport-destination-app"],
     tag: "div",
@@ -31,7 +44,12 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     this.selectedTargets = selectedTargets;
     this.isResolvingDestination = false;
     this.previewGraphics = null;
+    this.staticGraphics = null;
     this.previewLabels = null;
+    this.wallSegmentsCache = null;
+    this.staticSignature = null;
+    this.wallChangeHooks = null;
+    this.pendingWallRedraw = null;
     this.hoverPoint = null;
     this.canvasPointerDownHandler = null;
     this.canvasPointerUpHandler = null;
@@ -102,10 +120,64 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     target?.addEventListener?.("contextmenu", this.canvasContextMenuHandler, true);
     target?.addEventListener?.("keydown", this.keydownHandler, true);
 
+    this.#watchWallChanges();
     this.#drawPreview();
   }
 
+  /**
+   * A wall edited mid-selection has to invalidate the marks. The cache cannot
+   * notice it on its own — moving a wall, opening a door, or flipping one to
+   * secret leaves the placeable count untouched — and a stale mark would keep
+   * drawing a wall that just became secret.
+   */
+  #watchWallChanges() {
+    const hooks = globalThis.Hooks;
+    if (typeof hooks?.on !== "function" || this.wallChangeHooks) {
+      return;
+    }
+    const invalidate = () => this.#invalidateWallMarks();
+    this.wallChangeHooks = ["createWall", "updateWall", "deleteWall"]
+      .map((event) => ({ event, id: hooks.on(event, invalidate) }));
+  }
+
+  /**
+   * Drops the cached marks and repaints on the next frame. The hooks fire once
+   * per document, so importing a map or dragging a selection of walls would
+   * otherwise drive a full recompute per wall; coalescing collapses the burst
+   * into a single pass.
+   */
+  #invalidateWallMarks() {
+    this.wallSegmentsCache = null;
+    this.staticSignature = null;
+    if (this.pendingWallRedraw !== null) {
+      return;
+    }
+
+    const schedule = globalThis.requestAnimationFrame;
+    if (typeof schedule !== "function") {
+      this.#drawPreview();
+      return;
+    }
+    this.pendingWallRedraw = schedule(() => {
+      this.pendingWallRedraw = null;
+      this.#drawPreview();
+    });
+  }
+
+  #unwatchWallChanges() {
+    const hooks = globalThis.Hooks;
+    for (const { event, id } of this.wallChangeHooks ?? []) {
+      hooks?.off?.(event, id);
+    }
+    this.wallChangeHooks = null;
+    if (this.pendingWallRedraw !== null) {
+      globalThis.cancelAnimationFrame?.(this.pendingWallRedraw);
+      this.pendingWallRedraw = null;
+    }
+  }
+
   #stopDestinationSelection() {
+    this.#unwatchWallChanges();
     const target = globalThis.window;
     if (this.canvasPointerDownHandler) {
       target?.removeEventListener?.("pointerdown", this.canvasPointerDownHandler, true);
@@ -186,6 +258,17 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     if (!globalThis.PIXI?.Graphics) {
       return;
     }
+    // The range ring and the wall marks only change when the origin token or
+    // the walls do, so they live in their own Graphics and survive a redraw.
+    // Rebuilding that geometry on every pointer move would re-emit a line per
+    // wall — thousands of them on a large scene — for a marker that did not
+    // move a pixel. Added first so the destination marker draws on top.
+    if (!this.staticGraphics) {
+      this.staticGraphics = new PIXI.Graphics();
+      this.staticGraphics.eventMode = "none";
+      this.staticGraphics.interactive = false;
+      canvas?.stage?.addChild?.(this.staticGraphics);
+    }
     if (!this.previewGraphics) {
       this.previewGraphics = new PIXI.Graphics();
       this.previewGraphics.eventMode = "none";
@@ -203,10 +286,17 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
   }
 
   #destroyPreviewGraphics() {
+    this.wallSegmentsCache = null;
+    this.staticSignature = null;
     if (this.previewLabels) {
       this.previewLabels.parent?.removeChild?.(this.previewLabels);
       this.previewLabels.destroy({ children: true });
       this.previewLabels = null;
+    }
+    if (this.staticGraphics) {
+      this.staticGraphics.parent?.removeChild?.(this.staticGraphics);
+      this.staticGraphics.destroy();
+      this.staticGraphics = null;
     }
     if (!this.previewGraphics) {
       return;
@@ -216,9 +306,30 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     this.previewGraphics = null;
   }
 
+  /**
+   * Redraws the range ring and the wall marks, but only when something they
+   * depend on actually changed. A pointer move does not.
+   */
+  #drawStatic(originCenter, rangePixels, borderColor, fillColor) {
+    const signature = `${originCenter?.x}:${originCenter?.y}:${rangePixels}:${borderColor}:${fillColor}`;
+    if (this.staticSignature === signature) {
+      return;
+    }
+    this.staticSignature = signature;
+
+    this.staticGraphics.clear();
+    if (Number.isFinite(rangePixels) && rangePixels > 0 && originCenter) {
+      this.staticGraphics.lineStyle(2, borderColor, 0.9);
+      this.staticGraphics.beginFill(fillColor, 0.12);
+      this.staticGraphics.drawCircle(originCenter.x, originCenter.y, rangePixels);
+      this.staticGraphics.endFill();
+    }
+    this.#drawWalls(originCenter, rangePixels);
+  }
+
   #drawPreview() {
     this.#ensurePreviewGraphics();
-    if (!this.previewGraphics) {
+    if (!this.previewGraphics || !this.staticGraphics) {
       return;
     }
 
@@ -240,16 +351,8 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     const originCenter = ScCanvasActivityService.getTokenCenter(origin);
     const distancePixels = Number(canvas?.dimensions?.distancePixels ?? 0);
     const rangePixels = config.teleportDistance > 0 ? config.teleportDistance * distancePixels : Infinity;
-    if (config.teleportDistance > 0 && originCenter) {
-      if (Number.isFinite(rangePixels) && rangePixels > 0) {
-        this.previewGraphics.lineStyle(2, borderColor, 0.9);
-        this.previewGraphics.beginFill(fillColor, 0.12);
-        this.previewGraphics.drawCircle(originCenter.x, originCenter.y, rangePixels);
-        this.previewGraphics.endFill();
-      }
-    }
 
-    this.#drawWalls(originCenter, rangePixels);
+    this.#drawStatic(originCenter, rangePixels, borderColor, fillColor);
 
     if (!this.hoverPoint) {
       return;
@@ -400,11 +503,116 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
   }
 
   #drawWalls(originCenter, rangePixels) {
-    const walls = canvas?.walls?.placeables ?? [];
-    if (!walls.length || !originCenter) {
+    const segments = this.#visibleWallSegments(originCenter, rangePixels);
+    if (!segments.length) {
       return;
     }
 
+    this.staticGraphics.lineStyle(4, 0xff7a45, 0.85);
+    for (const [a, b] of segments) {
+      this.staticGraphics.moveTo(a.x, a.y);
+      this.staticGraphics.lineTo(b.x, b.y);
+    }
+  }
+
+  /**
+   * The wall stretches the marker may show, memoized for the whole selection:
+   * the sight tests below are far too costly to redo on every pointer move, and
+   * nothing they depend on changes while the origin token stands still.
+   */
+  #visibleWallSegments(originCenter, rangePixels) {
+    const walls = canvas?.walls?.placeables ?? [];
+    if (!walls.length || !originCenter) {
+      return [];
+    }
+
+    const signature = `${originCenter.x}:${originCenter.y}:${rangePixels}:${walls.length}`;
+    if (this.wallSegmentsCache?.signature === signature) {
+      return this.wallSegmentsCache.segments;
+    }
+
+    const candidates = ScTeleportDestinationApp.#collectWallSegments(walls, originCenter, rangePixels);
+    const probe = ScTeleportDestinationApp.#sightProbe(originCenter);
+    const segments = ScTeleportDestinationApp.#filterToVisible(candidates, originCenter, probe);
+    this.wallSegmentsCache = { signature, segments };
+    return segments;
+  }
+
+  static #filterToVisible(candidates, originCenter, probe) {
+    if (!probe) {
+      // Core exposes no sight backend at all (headless run, or a core old
+      // enough to have no vision to respect): mark the obstacles rather than
+      // dropping the guidance entirely.
+      return candidates;
+    }
+
+    // Without the sight polygon each sample costs a full sweep, and the budget
+    // below still keeps one per wall. Past this many walls that is seconds of a
+    // frozen canvas, and marking them all instead would reveal exactly what the
+    // marks exist to hide — so the marks are dropped and the picker stays usable.
+    if (probe.kind === "collision" && candidates.length > ScTeleportDestinationApp.#MAX_FALLBACK_SWEEPS) {
+      Logger.warn(
+        `Skipped the teleport wall marks: ${candidates.length} walls are in range and this core build offers `
+        + "no sight polygon to test them against."
+      );
+      return [];
+    }
+
+    const maxSamples = ScTeleportDestinationApp.#sampleBudget(candidates.length);
+    return candidates
+      .flatMap(([a, b]) => ScTeleportDestinationApp.#visibleParts(a, b, originCenter, maxSamples, probe.test));
+  }
+
+  /**
+   * Answers "can the origin token see this point?" as cheaply as core allows.
+   *
+   * The sight polygon already is the region the token can see, so one sweep up
+   * front turns every later sample into a containment test. Asking
+   * testCollision per sample instead means a sweep per sample, which a teleport
+   * with no range limit multiplies by every wall on the scene.
+   */
+  static #sightProbe(originCenter) {
+    const backend = globalThis.CONFIG?.Canvas?.polygonBackends?.sight;
+    if (!backend || !originCenter) {
+      return null;
+    }
+
+    if (typeof backend.create === "function") {
+      try {
+        const polygon = backend.create(originCenter, { type: "sight" });
+        // A degenerate sweep would report everything as hidden and silently
+        // drop the marks, so it has to be a real polygon before we trust it.
+        if (typeof polygon?.contains === "function" && Number(polygon.points?.length) >= 6) {
+          return { kind: "polygon", test: (point) => polygon.contains(point.x, point.y) };
+        }
+      } catch {
+        // Fall through to the per-sample form.
+      }
+    }
+    if (typeof backend.testCollision === "function") {
+      return {
+        kind: "collision",
+        test: (point) => !backend.testCollision(originCenter, point, { type: "sight", mode: "any" })
+      };
+    }
+    return null;
+  }
+
+  /**
+   * How finely a single wall may be sampled, spread over the candidate walls so
+   * a crowded scene degrades to whole-wall visibility instead of per-stretch.
+   * Not a ceiling on the total: every candidate keeps at least one test, so no
+   * obstacle goes unchecked. Normal ranged teleports never reach the budget.
+   */
+  static #sampleBudget(candidateCount) {
+    if (candidateCount <= 0) {
+      return ScTeleportDestinationApp.#MAX_WALL_SAMPLES;
+    }
+    const budget = Math.floor(ScTeleportDestinationApp.#MAX_TOTAL_SAMPLES / candidateCount);
+    return Math.min(Math.max(budget, 1), ScTeleportDestinationApp.#MAX_WALL_SAMPLES);
+  }
+
+  static #collectWallSegments(walls, originCenter, rangePixels) {
     const CONST = globalThis.CONST;
     const secretDoor = CONST?.WALL_DOOR_TYPES?.SECRET;
     const openState = CONST?.WALL_DOOR_STATES?.OPEN;
@@ -441,15 +649,81 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
       segments.push([a, b]);
     }
 
-    if (!segments.length) {
-      return;
+    return segments;
+  }
+
+  /**
+   * Splits a wall into the stretches the origin token can actually see. Marking
+   * the whole wall would trace the outline of rooms and corridors the token has
+   * never looked into, so a wall the sweep cannot reach is left unmarked and a
+   * partly hidden one is drawn only up to where sight stops.
+   */
+  static #visibleParts(a, b, originCenter, maxSamples, probe) {
+    const steps = ScTeleportDestinationApp.#wallSampleCount(a, b, maxSamples);
+    const parts = [];
+    let runStart = null;
+    for (let step = 0; step < steps; step += 1) {
+      const from = ScTeleportDestinationApp.#lerp(a, b, step / steps);
+      const to = ScTeleportDestinationApp.#lerp(a, b, (step + 1) / steps);
+      if (ScTeleportDestinationApp.#canSee(originCenter, ScTeleportDestinationApp.#lerp(from, to, 0.5), probe)) {
+        runStart ??= from;
+        continue;
+      }
+      if (runStart) {
+        parts.push([runStart, from]);
+        runStart = null;
+      }
+    }
+    if (runStart) {
+      parts.push([runStart, b]);
     }
 
-    this.previewGraphics.lineStyle(4, 0xff7a45, 0.85);
-    for (const [a, b] of segments) {
-      this.previewGraphics.moveTo(a.x, a.y);
-      this.previewGraphics.lineTo(b.x, b.y);
+    return parts;
+  }
+
+  static #canSee(originCenter, point, probe) {
+    // The sample sits on the wall itself, which is the boundary of what can be
+    // seen, so step just short of it before asking.
+    const distance = Math.hypot(point.x - originCenter.x, point.y - originCenter.y);
+    if (distance <= ScTeleportDestinationApp.#SIGHT_EPSILON) {
+      return true;
     }
+    const ratio = (distance - ScTeleportDestinationApp.#SIGHT_EPSILON) / distance;
+    const target = ScTeleportDestinationApp.#lerp(originCenter, point, ratio);
+
+    try {
+      if (!probe(target)) {
+        return false;
+      }
+    } catch {
+      return true;
+    }
+
+    // In sight of the token is not the same as on screen: a stretch sitting in
+    // the dark or in unexplored fog is still something the player cannot see.
+    const visibility = canvas?.visibility;
+    if (typeof visibility?.testVisibility !== "function") {
+      return true;
+    }
+    try {
+      return visibility.testVisibility(target) !== false;
+    } catch {
+      return true;
+    }
+  }
+
+  static #wallSampleCount(a, b, maxSamples) {
+    const gridSize = Number(canvas?.scene?.grid?.size ?? canvas?.grid?.size ?? 100) || 100;
+    const length = Math.hypot(b.x - a.x, b.y - a.y);
+    const steps = Math.ceil(length / Math.max(gridSize / 2, 1));
+    return Math.min(Math.max(steps, 1), maxSamples);
+  }
+
+  static #lerp(a, b, ratio) {
+    return {
+      x: a.x + ((b.x - a.x) * ratio),
+      y: a.y + ((b.y - a.y) * ratio)
+    };
   }
 
   static #segmentDistanceToPoint(a, b, point) {

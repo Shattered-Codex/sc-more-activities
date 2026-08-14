@@ -7,6 +7,9 @@ export class ModuleSettings {
   static PREVIEW_COLORS_MENU = SETTINGS_KEYS.PREVIEW_COLORS_MENU;
   static MIGRATION_BACKUPS = SETTINGS_KEYS.MIGRATION_BACKUPS;
   static MIGRATION_BACKUP_RETENTION = SETTINGS_KEYS.MIGRATION_BACKUP_RETENTION;
+  static MIGRATION_INCLUDE_COMPENDIUMS = SETTINGS_KEYS.MIGRATION_INCLUDE_COMPENDIUMS;
+  static MIGRATION_INCLUDE_EXTERNAL_PACKS = SETTINGS_KEYS.MIGRATION_INCLUDE_EXTERNAL_PACKS;
+  static MIGRATION_UNLOCK_PACKS = SETTINGS_KEYS.MIGRATION_UNLOCK_PACKS;
   static MIGRATION_MENU = SETTINGS_KEYS.MIGRATION_MENU;
   static SUPPORT_MENU = SETTINGS_KEYS.SUPPORT_MENU;
   static DOCUMENTATION_MENU = SETTINGS_KEYS.DOCUMENTATION_MENU;
@@ -32,6 +35,30 @@ export class ModuleSettings {
       return Boolean(game.settings.get(Constants.MODULE_ID, SETTINGS_KEYS.DEBUG_LOGGING));
     } catch {
       return false;
+    }
+  }
+
+  static isMigrationCompendiumScanEnabled() {
+    return ModuleSettings.#getBoolean(SETTINGS_KEYS.MIGRATION_INCLUDE_COMPENDIUMS, true);
+  }
+
+  static isMigrationExternalPackScanEnabled() {
+    return ModuleSettings.#getBoolean(SETTINGS_KEYS.MIGRATION_INCLUDE_EXTERNAL_PACKS, false);
+  }
+
+  static isMigrationPackUnlockEnabled() {
+    return ModuleSettings.#getBoolean(SETTINGS_KEYS.MIGRATION_UNLOCK_PACKS, true);
+  }
+
+  static #getBoolean(settingKey, fallback) {
+    try {
+      const key = `${Constants.MODULE_ID}.${settingKey}`;
+      if (!game?.settings?.settings?.has?.(key)) {
+        return fallback;
+      }
+      return Boolean(game.settings.get(Constants.MODULE_ID, settingKey));
+    } catch {
+      return fallback;
     }
   }
 

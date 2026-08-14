@@ -152,15 +152,126 @@
 }
 
 .sc-ma-migration-toolbar,
-.sc-ma-migration-actions,
-.sc-ma-migration-summary {
+.sc-ma-migration-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--sc-ma-space-2);
   flex-wrap: wrap;
 }
 
 .sc-ma-migration-toolbar {
+  align-items: center;
+  border-bottom: 1px solid var(--sc-ma-border-soft);
   justify-content: space-between;
+  padding-bottom: var(--sc-ma-space-3);
+}
+
+.sc-ma-migration-actions--secondary {
+  margin-inline-start: auto;
+}
+
+.sc-ma-migration-button {
+  align-items: center;
+  border-radius: 6px;
+  display: inline-flex;
+  gap: 0.4rem;
+  min-height: 1.9rem;
+  white-space: nowrap;
+}
+
+.sc-ma-migration-button i {
+  color: var(--sc-ma-text-dim);
+}
+
+.sc-ma-migration-button--primary {
+  --button-hover-border-color: var(--sc-ma-accent);
+  border-color: color-mix(in srgb, var(--sc-ma-accent) 46%, var(--sc-ma-border) 54%);
+}
+
+.sc-ma-migration-button--primary i {
+  color: var(--sc-ma-accent);
+}
+
+.sc-ma-migration-button--ghost {
+  background: transparent;
+}
+
+.sc-ma-migration-button:disabled {
+  opacity: 0.45;
+}
+
+.sc-more-activities .sc-ma-visually-hidden {
+  block-size: 1px;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  inline-size: 1px;
+  margin: -1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+}
+
+.sc-ma-migration-progress {
+  background: var(--sc-ma-bg-panel);
+  border: 1px solid color-mix(in srgb, var(--sc-ma-accent) 26%, var(--sc-ma-border) 74%);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sc-ma-space-2);
+  padding: var(--sc-ma-space-3);
+}
+
+.sc-ma-migration-progress[hidden] {
+  display: none;
+}
+
+.sc-ma-migration-progress-meta {
+  align-items: baseline;
+  display: flex;
+  gap: var(--sc-ma-space-2);
+  justify-content: space-between;
+}
+
+.sc-ma-migration-progress-label {
+  color: var(--sc-ma-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-ma-migration-progress-count {
+  color: var(--sc-ma-text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sc-ma-migration-progress-track {
+  background: var(--sc-ma-bg-card-soft);
+  border: 1px solid var(--sc-ma-border-soft);
+  border-radius: 999px;
+  height: 0.65rem;
+  overflow: hidden;
+  width: 100%;
+}
+
+.sc-ma-migration-progress-bar {
+  background: linear-gradient(90deg, var(--sc-ma-accent-soft), var(--sc-ma-accent));
+  border-radius: inherit;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--sc-ma-accent) 35%, transparent 65%);
+  height: 100%;
+  min-width: 0;
+  transition: width 180ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sc-ma-migration-progress-bar {
+    transition: none;
+  }
+}
+
+.sc-ma-migration-summary {
+  display: grid;
+  gap: var(--sc-ma-space-2);
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
 }
 
 .sc-ma-migration-card,
@@ -172,21 +283,75 @@
 }
 
 .sc-ma-migration-card {
+  border-inline-start: 3px solid var(--sc-ma-border);
   display: flex;
-  flex: 1 1 140px;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: var(--sc-ma-space-1);
   min-width: 0;
-  padding: 0.75rem;
+  padding: var(--sc-ma-space-3);
+}
+
+.sc-ma-migration-card--accent {
+  border-inline-start-color: var(--sc-ma-accent-soft);
+}
+
+.sc-ma-migration-card--danger {
+  border-inline-start-color: var(--sc-ma-danger-soft);
 }
 
 .sc-ma-migration-card span {
   color: var(--sc-ma-text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sc-ma-migration-card strong {
   color: var(--sc-ma-text-strong);
   font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.sc-ma-migration-scope {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-ma-space-2);
+}
+
+.sc-ma-migration-chip {
+  align-items: center;
+  background: var(--sc-ma-bg-card-soft);
+  border: 1px solid var(--sc-ma-border-soft);
+  border-radius: 999px;
+  color: var(--sc-ma-text-dim);
+  display: inline-flex;
+  gap: 0.35rem;
+  padding: 0.15rem 0.6rem;
+}
+
+.sc-ma-migration-chip i {
+  color: color-mix(in srgb, var(--sc-ma-accent) 60%, var(--sc-ma-text-dim) 40%);
+}
+
+.sc-ma-migration-chip strong {
+  color: var(--sc-ma-text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.sc-ma-migration-source {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.sc-ma-migration-source > i {
+  color: var(--sc-ma-text-dim);
+  flex: 0 0 auto;
+}
+
+.sc-ma-migration-source-lock {
+  color: var(--sc-ma-accent-warm);
 }
 
 .sc-ma-migration-panel {
