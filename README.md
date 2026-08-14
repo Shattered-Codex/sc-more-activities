@@ -405,6 +405,31 @@ Three world settings control the scope:
 If automatic unlocking is disabled, entries inside locked packs are reported as
 `pack-locked` failures instead of being written.
 
+### How Legacy Chains Are Converted
+
+The legacy `chain` activity is not always linear. Whenever a step carries entries in
+`chainTriggers`, the legacy runtime stops after that step, posts the trigger buttons on the
+chat card, and resumes on the steps whose `chainListeners` match — a branching graph.
+
+The migration picks the target type from the data:
+
+| Legacy chain | Target | Why |
+| --- | --- | --- |
+| no triggers | `sc-chain` | A plain sequence; the simpler activity and sheet fit it |
+| any triggers | `sc-conditional-chain` | `sc-chain` is strictly linear and cannot represent branches |
+
+For a branching chain, each legacy step becomes a flow node (`node-0`, `node-1`, …), a step
+without triggers routes straight to the next one, and a step with triggers becomes a
+`choice` node whose choices route to the steps that listened to that trigger.
+
+Two things stay lossy and are reported as preview warnings:
+
+- the legacy module rendered the branch buttons **on the chat card**, while
+  `sc-conditional-chain` asks for the choice in a **dialog**
+- when several legacy steps listened to the same trigger, the legacy module opened a branch
+  picker; a choice route resolves to exactly one node, so the migration keeps the first and
+  records the rest under the activity's migration flags
+
 Important:
 
 - migration is **GM only**

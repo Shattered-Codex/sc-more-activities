@@ -1,4 +1,6 @@
 import { Constants } from "../constants/Constants.js";
+import { ACTIVITY_TYPES } from "../activities/ActivityTypes.js";
+import { FLOW_CONDITION_TYPES, FLOW_END } from "../activities/conditional-chain/ScConditionalChainFlow.js";
 import { LEGACY_MORE_ACTIVITIES_TARGET_TYPES } from "./LegacyMoreActivities.js";
 
 const COMMON_ACTIVITY_KEYS = Object.freeze([
@@ -40,7 +42,7 @@ export class MoreActivitiesMigrationConverter {
     return Object.freeze({
       ok: result.ok,
       legacyType,
-      targetType,
+      targetType: result.targetType ?? targetType,
       convertible: result.ok,
       lossy: result.lossy === true,
       reason: result.reason ?? null,
@@ -189,13 +191,23 @@ export class MoreActivitiesMigrationConverter {
   }
 
   static #convertChain(activitySource, context, includeSource) {
+    // Legacy chains branch whenever a step carries triggers: the runtime stops
+    // after that step, posts the trigger buttons, and resumes on the steps whose
+    // listeners match. sc-chain is strictly linear and cannot express that, so
+    // branching chains go to sc-conditional-chain instead.
+    const triggers = MoreActivitiesMigrationConverter.#chainMatrix(activitySource?.chainTriggers);
+    const branching = triggers.some((entry) => entry.length > 0);
+    return branching
+      ? MoreActivitiesMigrationConverter.#convertBranchingChain(activitySource, context, includeSource, triggers)
+      : MoreActivitiesMigrationConverter.#convertLinearChain(activitySource, context, includeSource);
+  }
+
+  static #convertLinearChain(activitySource, context, includeSource) {
     const targetType = LEGACY_MORE_ACTIVITIES_TARGET_TYPES.chain;
     const warnings = [];
     const unmapped = {};
     const convertedSource = MoreActivitiesMigrationConverter.#baseSource(activitySource, targetType);
-    const activityIds = Array.isArray(activitySource?.chainedActivityIds)
-      ? activitySource.chainedActivityIds.map((entry) => String(entry ?? "").trim()).filter(Boolean)
-      : [];
+    const activityIds = MoreActivitiesMigrationConverter.#chainActivityIds(activitySource);
     convertedSource.chain = {
       activityIds: activityIds.join("\n"),
       maxDepth: 5,
@@ -203,12 +215,8 @@ export class MoreActivitiesMigrationConverter {
       stopOnCancel: true
     };
 
-    if (Array.isArray(activitySource?.chainTriggers) && activitySource.chainTriggers.length) {
-      warnings.push("Legacy chain triggers were not migrated to sc-chain and were preserved under migration flags.");
-      unmapped.chainTriggers = MoreActivitiesMigrationConverter.#clone(activitySource.chainTriggers);
-    }
-    if (Array.isArray(activitySource?.chainListeners) && activitySource.chainListeners.length) {
-      warnings.push("Legacy chain listeners were not migrated to sc-chain and were preserved under migration flags.");
+    if (MoreActivitiesMigrationConverter.#chainMatrix(activitySource?.chainListeners).some((entry) => entry.length)) {
+      warnings.push("Legacy chain listeners without matching triggers can never fire and were preserved under migration flags.");
       unmapped.chainListeners = MoreActivitiesMigrationConverter.#clone(activitySource.chainListeners);
     }
     if (Array.isArray(activitySource?.chainedActivityNames) && activitySource.chainedActivityNames.length) {
@@ -225,6 +233,146 @@ export class MoreActivitiesMigrationConverter {
       lossy: Object.keys(unmapped).length > 0 || warnings.length > 0,
       context
     });
+  }
+
+  static #convertBranchingChain(activitySource, context, includeSource, triggers) {
+    const targetType = ACTIVITY_TYPES.CONDITIONAL_CHAIN;
+    const warnings = [];
+    const unmapped = {};
+    // Triggers and listeners are indexed against the raw legacy array, so this
+    // path must not compact it: dropping a blank id would shift every branch.
+    const activityIds = MoreActivitiesMigrationConverter.#chainActivityIdsRaw(activitySource);
+    if (!activityIds.some(Boolean)) {
+      return MoreActivitiesMigrationConverter.#blocked(
+        "chain",
+        targetType,
+        "empty-legacy-chain",
+        "This legacy chain declares branch triggers but no chained activities."
+      );
+    }
+
+    const listeners = MoreActivitiesMigrationConverter.#chainMatrix(activitySource?.chainListeners);
+    const names = Array.isArray(activitySource?.chainedActivityNames) ? activitySource.chainedActivityNames : [];
+    const nodes = activityIds.map((activityId, index) => MoreActivitiesMigrationConverter.#chainNode({
+      index,
+      activityId,
+      label: String(names[index] ?? "").trim(),
+      stepTriggers: triggers[index] ?? [],
+      listeners,
+      total: activityIds.length,
+      warnings,
+      unmapped
+    }));
+
+    const convertedSource = MoreActivitiesMigrationConverter.#baseSource(activitySource, targetType);
+    convertedSource.flow = {
+      startNode: MoreActivitiesMigrationConverter.#chainNodeId(0),
+      maxDepth: 5,
+      stopOnCancel: true,
+      continueOnChildError: false,
+      suppressChildMessages: false,
+      compactChildCards: false,
+      nodes
+    };
+
+    warnings.push(
+      "Legacy branch triggers were converted into conditional chain choice steps. "
+      + "The legacy module posted those buttons on the chat card; sc-conditional-chain asks for the choice in a dialog instead."
+    );
+
+    return MoreActivitiesMigrationConverter.#success({
+      legacyType: "chain",
+      targetType,
+      convertedSource,
+      warnings,
+      unmapped,
+      includeSource,
+      lossy: true,
+      context
+    });
+  }
+
+  static #chainNode({ index, activityId, label, stepTriggers, listeners, total, warnings, unmapped }) {
+    const node = {
+      nodeId: MoreActivitiesMigrationConverter.#chainNodeId(index),
+      label,
+      activityId,
+      conditionType: FLOW_CONDITION_TYPES.ALWAYS,
+      routes: {
+        next: FLOW_END,
+        onTrue: FLOW_END,
+        onFalse: FLOW_END,
+        fallback: FLOW_END
+      },
+      choices: [],
+      valueBranches: []
+    };
+
+    if (!stepTriggers.length) {
+      node.routes.next = index + 1 < total ? MoreActivitiesMigrationConverter.#chainNodeId(index + 1) : FLOW_END;
+      return node;
+    }
+
+    node.conditionType = FLOW_CONDITION_TYPES.CHOICE;
+    node.choices = stepTriggers.map((triggerLabel, triggerIndex) => {
+      const key = `${index}:${triggerIndex}`;
+      const targets = MoreActivitiesMigrationConverter.#chainListenerTargets(listeners, key, index);
+      if (targets.length > 1) {
+        // The legacy runtime opened a branch picker when several steps listened
+        // to the same trigger. A choice route resolves to exactly one node.
+        warnings.push(
+          `Legacy trigger "${triggerLabel}" resumed ${targets.length} steps and opened a branch picker. `
+          + "The migration routes it to the first step; rebuild the remaining branches manually."
+        );
+        unmapped.droppedBranches ??= {};
+        unmapped.droppedBranches[key] = targets.slice(1)
+          .map((target) => MoreActivitiesMigrationConverter.#chainNodeId(target));
+      }
+      if (!targets.length) {
+        warnings.push(`Legacy trigger "${triggerLabel}" had no listening step and now ends the flow.`);
+      }
+
+      return {
+        key,
+        label: triggerLabel,
+        next: targets.length ? MoreActivitiesMigrationConverter.#chainNodeId(targets[0]) : FLOW_END
+      };
+    });
+
+    return node;
+  }
+
+  static #chainListenerTargets(listeners, key, fromIndex) {
+    const targets = [];
+    for (let index = fromIndex + 1; index < listeners.length; index += 1) {
+      if (listeners[index].includes(key)) {
+        targets.push(index);
+      }
+    }
+    return targets;
+  }
+
+  static #chainActivityIds(activitySource) {
+    return MoreActivitiesMigrationConverter.#chainActivityIdsRaw(activitySource).filter(Boolean);
+  }
+
+  static #chainActivityIdsRaw(activitySource) {
+    return Array.isArray(activitySource?.chainedActivityIds)
+      ? activitySource.chainedActivityIds.map((entry) => String(entry ?? "").trim())
+      : [];
+  }
+
+  static #chainMatrix(value) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value.map((entry) => (Array.isArray(entry)
+      ? entry.map((item) => String(item ?? "").trim()).filter(Boolean)
+      : []));
+  }
+
+  static #chainNodeId(index) {
+    return `node-${index}`;
   }
 
   static #convertTeleport(activitySource, context, includeSource) {
