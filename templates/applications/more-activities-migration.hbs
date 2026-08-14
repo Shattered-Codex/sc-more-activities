@@ -256,7 +256,13 @@
                   {{/each}}
                 {{else}}
                   <tr>
-                    <td colspan="7">{{ localize "SCMOREACTIVITIES.Migration.Empty.Preview" }}</td>
+                    <td colspan="7">
+                      {{#if hasPreview}}
+                        {{ localize "SCMOREACTIVITIES.Migration.Empty.Preview" }}
+                      {{else}}
+                        {{ localize "SCMOREACTIVITIES.Migration.Empty.NoPreviewRun" }}
+                      {{/if}}
+                    </td>
                   </tr>
                 {{/if}}
               </tbody>
