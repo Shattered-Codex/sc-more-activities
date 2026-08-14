@@ -196,6 +196,11 @@ export class MoreActivitiesMigrationAnalyzer {
         + `(${descriptor.documentName}${descriptor.locked ? ", locked" : ""})…`
       );
 
+      // getDocuments() builds every document in the pack in one burst that no
+      // interval yield can break up. Hand the browser a paint first so the
+      // progress bar shows which pack is loading before that burst starts.
+      await MoreActivitiesMigrationAnalyzer.#yieldToUi(0, 1);
+
       const packStartedAt = MoreActivitiesMigrationAnalyzer.#now();
       let packEntries = 0;
 
