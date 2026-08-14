@@ -382,12 +382,40 @@ This module includes explicit migration tools for the legacy `more-activities` m
 - Restore the latest backup if needed
 - Export preview and report data for review
 
+### What Gets Scanned
+
+The preview walks, in this order:
+
+1. world items in the Items sidebar
+2. items owned by world actors
+3. world compendium packs (`Item` and `Actor` packs)
+
+System and module compendiums are **not** scanned by default, because those packs are
+usually overwritten when the system or module updates. The preview reports how many were
+skipped so an empty result is never ambiguous.
+
+Three world settings control the scope:
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| Scan compendiums during migration | on | Include world compendium packs in preview and apply |
+| Include system and module compendiums | off | Also scan packs owned by the system or other modules |
+| Unlock locked compendiums during migration | on | Temporarily unlock locked packs while applying or restoring, then re-lock them |
+
+If automatic unlocking is disabled, entries inside locked packs are reported as
+`pack-locked` failures instead of being written.
+
 Important:
 
 - migration is **GM only**
-- migration does **not** auto-run
+- migration does **not** auto-run — nothing is scanned until the GM presses **Run preview**
 - blocked or partially compatible legacy activities may require manual cleanup after conversion
 - if the legacy module is still enabled, keep it active only while reviewing or migrating
+- legacy activities remain readable while the legacy module is disabled: they stop rendering
+  on the sheet because the type is no longer registered, but the stored data is intact and
+  the preview still finds it
+- enable **Debug logging** for a per-item, per-pack breakdown in the console; a one-line
+  summary of every preview, apply, and restore is always logged
 
 ## Building Activities In Other Modules
 

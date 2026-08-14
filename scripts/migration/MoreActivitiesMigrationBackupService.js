@@ -1,5 +1,6 @@
 import { Constants } from "../constants/Constants.js";
 import { SETTINGS_KEYS } from "../constants/SettingsKeys.js";
+import { Logger } from "../support/Logger.js";
 
 export class MoreActivitiesMigrationBackupService {
   static async createBackup(preview = {}) {
@@ -24,9 +25,13 @@ export class MoreActivitiesMigrationBackupService {
         actorUuid: entry.actorUuid ?? item.actor?.uuid ?? null,
         actorName: entry.actorName ?? item.actor?.name ?? null,
         source: entry.source ?? (item.actor ? "actor" : "world"),
+        packId: entry.packId ?? item.pack ?? null,
+        packLabel: entry.packLabel ?? null,
         activities: MoreActivitiesMigrationBackupService.#clone(item.toObject()?.system?.activities ?? {})
       });
     }
+
+    Logger.debug(`Created migration backup ${backup.id} with ${backup.items.length} item snapshot(s).`);
 
     const allBackups = MoreActivitiesMigrationBackupService.listBackups();
     const retention = MoreActivitiesMigrationBackupService.getRetention();

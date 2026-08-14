@@ -22,6 +22,7 @@ export class ModuleSettingsRegistrar {
     this.#registerPreviewColorsSetting();
     this.#registerMigrationBackupsSetting();
     this.#registerMigrationBackupRetentionSetting();
+    this.#registerMigrationScopeSettings();
     this.#registerSupportMenu();
     this.#registerDocumentationMenu();
     this.#registerActivityCatalogMenu();
@@ -116,6 +117,56 @@ export class ModuleSettingsRegistrar {
         max: 10,
         step: 1
       }
+    });
+  }
+
+  #registerMigrationScopeSettings() {
+    game.settings.register(Constants.MODULE_ID, SETTINGS_KEYS.MIGRATION_INCLUDE_COMPENDIUMS, {
+      name: Constants.localize(
+        "SCMOREACTIVITIES.Settings.MigrationIncludeCompendiums.Name",
+        "Scan compendiums during migration"
+      ),
+      hint: Constants.localize(
+        "SCMOREACTIVITIES.Settings.MigrationIncludeCompendiums.Hint",
+        "Include world compendium packs when previewing and applying the legacy more-activities migration."
+      ),
+      scope: "world",
+      config: true,
+      restricted: true,
+      type: Boolean,
+      default: true
+    });
+
+    game.settings.register(Constants.MODULE_ID, SETTINGS_KEYS.MIGRATION_INCLUDE_EXTERNAL_PACKS, {
+      name: Constants.localize(
+        "SCMOREACTIVITIES.Settings.MigrationIncludeExternalPacks.Name",
+        "Include system and module compendiums"
+      ),
+      hint: Constants.localize(
+        "SCMOREACTIVITIES.Settings.MigrationIncludeExternalPacks.Hint",
+        "Also scan compendiums owned by the system or by other modules. Those packs are usually overwritten on update, so keep this off unless you know you need it."
+      ),
+      scope: "world",
+      config: true,
+      restricted: true,
+      type: Boolean,
+      default: false
+    });
+
+    game.settings.register(Constants.MODULE_ID, SETTINGS_KEYS.MIGRATION_UNLOCK_PACKS, {
+      name: Constants.localize(
+        "SCMOREACTIVITIES.Settings.MigrationUnlockPacks.Name",
+        "Unlock locked compendiums during migration"
+      ),
+      hint: Constants.localize(
+        "SCMOREACTIVITIES.Settings.MigrationUnlockPacks.Hint",
+        "Temporarily unlock locked compendiums while applying or restoring a migration, then re-lock them afterwards."
+      ),
+      scope: "world",
+      config: true,
+      restricted: true,
+      type: Boolean,
+      default: true
     });
   }
 
