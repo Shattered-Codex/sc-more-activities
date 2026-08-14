@@ -34,7 +34,13 @@ export class MoreActivitiesMigrationAnalyzer {
       skippedExternalPacks: []
     };
 
-    Logger.debug("Migration preview starting.", {
+    const worldItemCount = game?.items?.contents?.length ?? 0;
+    const actorCount = game?.actors?.contents?.length ?? 0;
+    Logger.info(
+      `Migration preview ${previewId ?? "-"} started: ${worldItemCount} world item(s), ${actorCount} actor(s), `
+      + `compendium scan ${scanCompendiums ? "on" : "off"}.`
+    );
+    Logger.debug("Migration preview options.", {
       previewId,
       scanCompendiums,
       scanExternalPacks,
@@ -135,6 +141,7 @@ export class MoreActivitiesMigrationAnalyzer {
         total: items.length,
         detail: item?.name ?? ""
       });
+      MoreActivitiesMigrationAnalyzer.#heartbeat("World items", index + 1, items.length, 500);
       await MoreActivitiesMigrationAnalyzer.#yieldToUi(index);
     }
   }
@@ -159,6 +166,7 @@ export class MoreActivitiesMigrationAnalyzer {
         total: actors.length,
         detail: actor?.name ?? ""
       });
+      MoreActivitiesMigrationAnalyzer.#heartbeat("Actors", index + 1, actors.length, 100);
       await MoreActivitiesMigrationAnalyzer.#yieldToUi(index, 25);
     }
   }
@@ -167,10 +175,10 @@ export class MoreActivitiesMigrationAnalyzer {
     const { packs, skippedExternalPacks } = MoreActivitiesMigrationPackScanner.collectPacks({ includeExternalPacks });
     state.skippedExternalPacks = skippedExternalPacks;
 
-    Logger.debug(
-      `Scanning ${packs.length} compendium pack(s); skipped ${skippedExternalPacks.length} external pack(s).`,
-      { packs: packs.map((pack) => pack?.collection) }
+    Logger.info(
+      `Scanning ${packs.length} compendium pack(s); ${skippedExternalPacks.length} system/module pack(s) skipped.`
     );
+    Logger.debug("Compendium packs in scope.", { packs: packs.map((pack) => pack?.collection) });
 
     for (const [index, pack] of packs.entries()) {
       const descriptor = MoreActivitiesMigrationPackScanner.describe(pack);
@@ -181,15 +189,29 @@ export class MoreActivitiesMigrationAnalyzer {
         detail: descriptor.label
       });
 
+      // Logged before getDocuments() so a slow pack is visible while it loads,
+      // not only once it finishes.
+      Logger.info(
+        `Scanning compendium ${index + 1}/${packs.length} "${descriptor.label}" `
+        + `(${descriptor.documentName}${descriptor.locked ? ", locked" : ""})…`
+      );
+
       const packStartedAt = MoreActivitiesMigrationAnalyzer.#now();
       let packEntries = 0;
 
       try {
         const loaded = await MoreActivitiesMigrationPackScanner.loadPackItems(pack);
         state.scannedPacks += 1;
+        Logger.debug(`Compendium "${descriptor.id}" loaded ${loaded.length} item(s); inspecting…`);
 
-        for (const { item, actor } of loaded) {
+        for (const [itemIndex, { item, actor }] of loaded.entries()) {
           state.scannedCompendiumItems += 1;
+          MoreActivitiesMigrationAnalyzer.#heartbeat(
+            `Compendium "${descriptor.id}"`,
+            itemIndex + 1,
+            loaded.length,
+            250
+          );
           const entry = await this.#analyzeItem(item, {
             source: "compendium",
             actor,
@@ -351,6 +373,13 @@ export class MoreActivitiesMigrationAnalyzer {
     } catch (error) {
       Logger.error("Migration progress callback failed.", error);
     }
+  }
+
+  static #heartbeat(label, current, total, interval) {
+    if (current % interval !== 0 || current === total) {
+      return;
+    }
+    Logger.debug(`${label}: ${current}/${total} scanned…`);
   }
 
   static async #yieldToUi(index, interval = UI_YIELD_INTERVAL) {

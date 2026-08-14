@@ -78,6 +78,7 @@ export class MoreActivitiesMigrationService {
         detail: entry?.itemName ?? ""
       });
 
+      Logger.debug(`Applying ${index + 1}/${entries.length}: "${entry?.itemName ?? entry?.itemUuid}".`);
       await this.#applyEntry(entry, report);
 
       MoreActivitiesMigrationService.#emitProgress(onProgress, {
@@ -244,6 +245,7 @@ export class MoreActivitiesMigrationService {
           detail: entry?.itemName ?? ""
         });
 
+        Logger.debug(`Restoring ${index + 1}/${entries.length}: "${entry?.itemName ?? entry?.itemUuid}".`);
         await MoreActivitiesMigrationService.#restoreEntry(entry, report);
 
         MoreActivitiesMigrationService.#emitProgress(onProgress, {
