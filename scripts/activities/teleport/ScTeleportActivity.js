@@ -1,5 +1,6 @@
 import { ActivityAvailability } from "../../availability/ActivityAvailability.js";
 import { ACTIVITY_TYPES } from "../ActivityTypes.js";
+import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
 import { ScTeleportActivityData } from "./ScTeleportActivityData.js";
 import { ScTeleportActivitySheet } from "./ScTeleportActivitySheet.js";
 import { ScTeleportTargetApp } from "./ScTeleportTargetApp.js";
@@ -34,6 +35,13 @@ export class ScTeleportActivity extends dnd5e.documents.activity.ActivityMixin(S
       }
     }, dialog, message);
     if (results === undefined) {
+      return results;
+    }
+
+    if (!ScCanvasActivityService.getOriginTokenObject(this)) {
+      ui.notifications?.warn?.(game.i18n.localize(
+        "SCMOREACTIVITIES.Activities.Canvas.Warning.MissingOrigin"
+      ));
       return results;
     }
 

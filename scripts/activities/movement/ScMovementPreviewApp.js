@@ -1,7 +1,13 @@
 import { Constants } from "../../constants/Constants.js";
 import { ModuleSettings } from "../../settings/ModuleSettings.js";
 import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
-import { MOVEMENT_TYPES } from "../canvas/ScCanvasActivityConstants.js";
+import { ScCanvasResultCard } from "../canvas/ScCanvasResultCard.js";
+import { ScSaveRequestCard } from "../canvas/ScSaveRequestCard.js";
+import { ScTargetSaveService } from "../canvas/ScTargetSaveService.js";
+import {
+  CANVAS_TARGET_SOURCES,
+  MOVEMENT_TYPES
+} from "../canvas/ScCanvasActivityConstants.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -121,7 +127,9 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
 
     if (this.previewError) {
       ui.notifications?.warn?.(this.previewError?.message ?? String(this.previewError));
-      await this.close();
+      // Not awaited: render holds the ApplicationV2 semaphore and close() waits
+      // for it, so awaiting here deadlocks and leaves the window stuck open.
+      this.close();
       return;
     }
 
@@ -209,9 +217,20 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
     const selfTokens = [];
     const otherTokens = [];
 
+    const allowUnowned = this.#saveGateConfigured();
     for (const token of ScCanvasActivityService.getSceneTokens(preview?.scene)) {
       const tokenId = token?.document?.id ?? token?.id ?? "";
-      if (!tokenId || selected.has(tokenId) || !ScCanvasActivityService.canMoveToken(token)) {
+      if (!tokenId || selected.has(tokenId)) {
+        continue;
+      }
+      // Never list tokens the player cannot perceive: a hidden NPC's name,
+      // image, and distance must not leak through the selector.
+      if (!ScCanvasActivityService.canPerceiveToken(token)) {
+        continue;
+      }
+      // With a save gate the request card handles unowned targets (the GM
+      // executes them), so ownership only filters the immediate flow.
+      if (!allowUnowned && !ScCanvasActivityService.canMoveToken(token)) {
         continue;
       }
 
@@ -268,10 +287,17 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
     }
 
     const selected = [];
+    const allowUnowned = this.#saveGateConfigured();
     for (const target of Array.from(game?.user?.targets ?? [])) {
       const token = target?.document?.object ?? target;
       const tokenId = token?.document?.id ?? token?.id ?? "";
-      if (!tokenId || selected.includes(tokenId) || !ScCanvasActivityService.canMoveToken(token)) {
+      if (!tokenId || selected.includes(tokenId)) {
+        continue;
+      }
+      if (!ScCanvasActivityService.canPerceiveToken(token)) {
+        continue;
+      }
+      if (!allowUnowned && !ScCanvasActivityService.canMoveToken(token)) {
         continue;
       }
       selected.push(tokenId);
@@ -544,6 +570,30 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
     this.isSubmitting = true;
     this.render();
 
+    // With a save gate configured, nothing executes now: the request card in
+    // chat collects the native saving throws and its button moves whoever
+    // failed. Without one, the movement runs immediately as always.
+    if (this.#requiresSaveGate()) {
+      const request = await ScSaveRequestCard.postMovementRequest(this.activity, {
+        originTokenId: this.originTokenId,
+        selfDirectionPoint: this.selfDirectionPoint,
+        movementType: this.movementType,
+        tokenIds: this.selectedTargetIds
+      });
+      if (request.posted) {
+        await this.close();
+        return;
+      }
+      if (request.reason !== "no-targets") {
+        // An invalid DC or a posting failure never falls back to moving the
+        // targets without the configured saving throw.
+        this.isSubmitting = false;
+        this.render();
+        return;
+      }
+    }
+
+    const sentEntries = this.#tokenEntries(this.selectedTargetIds);
     const result = await ScCanvasActivityService.executeMovement(this.activity, {
       originTokenId: this.originTokenId,
       selfDirectionPoint: this.selfDirectionPoint,
@@ -551,11 +601,33 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
       tokenIds: this.selectedTargetIds
     });
     if (result?.ok) {
+      await ScCanvasResultCard.createMovementCard(this.activity, {
+        affected: ScCanvasResultCard.affectedEntries(sentEntries, result.skipped),
+        skipped: result.skipped ?? []
+      });
       await this.close();
       return;
     }
 
     this.isSubmitting = false;
     this.render();
+  }
+
+  #saveGateConfigured() {
+    const targetSource = this.activity?.movement?.targetSource ?? CANVAS_TARGET_SOURCES.TARGETS;
+    return targetSource === CANVAS_TARGET_SOURCES.TARGETS
+      && ScTargetSaveService.isEnabled(this.activity?.movement?.save);
+  }
+
+  #requiresSaveGate() {
+    return this.#saveGateConfigured()
+      && this.selectedTargetIds.some((id) => id !== this.originTokenId);
+  }
+
+  #tokenEntries(tokenIds) {
+    return (tokenIds ?? [])
+      .map((id) => canvas?.scene?.tokens?.get?.(id))
+      .filter(Boolean)
+      .map((token) => ScCanvasResultCard.tokenEntry(token));
   }
 }

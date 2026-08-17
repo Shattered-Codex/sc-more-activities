@@ -106,7 +106,9 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
     await super._onRender(context, options);
 
     if (!this.#placementSceneIsActive()) {
-      await this.close();
+      // Not awaited: render holds the ApplicationV2 semaphore and close() waits
+      // for it, so awaiting here deadlocks and leaves the window stuck open.
+      this.close();
       return;
     }
 
@@ -115,7 +117,7 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
         "SCMOREACTIVITIES.Activities.Canvas.Warning.MissingOrigin",
         "Select or place the activity actor token on the scene first."
       ));
-      await this.close();
+      this.close();
       return;
     }
 

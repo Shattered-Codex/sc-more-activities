@@ -45,6 +45,20 @@ export class ScTeleportActivityData extends dnd5e.dataModels.activity.BaseActivi
         snapToGrid: new fields.BooleanField({
           required: false,
           initial: true
+        }),
+        save: new fields.SchemaField({
+          enabled: new fields.BooleanField({
+            required: false,
+            initial: false
+          }),
+          ability: new fields.StringField({
+            required: false,
+            initial: "str"
+          }),
+          dc: new fields.StringField({
+            required: false,
+            initial: ""
+          })
         })
       })
     };
