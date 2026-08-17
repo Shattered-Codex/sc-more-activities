@@ -2840,3 +2840,8 @@
   padding: 0.4rem 0;
   text-align: center;
 }
+
+.chat-card.sc-ma-canvas-card .targets .action-list .name-stacked {
+  align-self: center;
+  min-width: 0;
+}

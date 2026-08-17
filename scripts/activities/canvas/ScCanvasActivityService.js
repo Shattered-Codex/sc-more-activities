@@ -14,6 +14,14 @@ const QUERY_ID = "sc-more-activities.canvasOperation";
 const QUERY_TIMEOUT = 30000;
 
 export class ScCanvasActivityService {
+  /**
+   * Idempotency keys of token operations already executed by this client.
+   * Every canvas operation funnels through the active GM's client (local for
+   * the GM, via query for players), and the synchronous check-and-add below
+   * makes a duplicate request with the same key impossible to run twice there.
+   */
+  static #executedKeys = new Set();
+
   static registerQueries() {
     if (!globalThis.CONFIG?.queries) {
       return false;
@@ -49,7 +57,7 @@ export class ScCanvasActivityService {
 
   static async executeMovement(
     activity,
-    { tokenIds = null, originTokenId = null, selfDirectionPoint = null, movementType = null } = {}
+    { tokenIds = null, originTokenId = null, selfDirectionPoint = null, movementType = null, executionKey = null } = {}
   ) {
     try {
       const request = ScCanvasActivityService.#buildMovementRequest(activity, {
@@ -59,6 +67,9 @@ export class ScCanvasActivityService {
         tokenIds,
         useExplicitTokenIds: Array.isArray(tokenIds)
       });
+      if (executionKey) {
+        request.executionKey = String(executionKey);
+      }
       const result = await ScCanvasActivityService.#dispatchRequest(request);
       ScCanvasActivityService.#notifyResult(
         result,
@@ -106,7 +117,7 @@ export class ScCanvasActivityService {
     }
   }
 
-  static async executeTeleportPlacement(activity, { tokenIds = [], destination = null } = {}) {
+  static async executeTeleportPlacement(activity, { tokenIds = [], destination = null, executionKey = null } = {}) {
     try {
       const scene = ScCanvasActivityService.#activeScene();
       const origin = ScCanvasActivityService.#originTokenDocument(activity);
@@ -138,6 +149,9 @@ export class ScCanvasActivityService {
         originTokenId: origin.id,
         tokenIds: targetIds
       });
+      if (executionKey) {
+        request.executionKey = String(executionKey);
+      }
       const result = await ScCanvasActivityService.#dispatchRequest(request);
       ScCanvasActivityService.#notifyResult(
         result,
@@ -253,6 +267,28 @@ export class ScCanvasActivityService {
   static canMoveToken(token, user = game?.user) {
     const document = token?.document ?? token;
     return ScCanvasActivityService.#canMoveToken(document, user);
+  }
+
+  /**
+   * Whether the user is allowed to even know about this token in a selector:
+   * GMs see everything, players never see hidden tokens and only see tokens
+   * their vision currently reveals.
+   */
+  static canPerceiveToken(token, user = game?.user) {
+    if (user?.isGM) {
+      return true;
+    }
+
+    const document = token?.document ?? token;
+    if (document?.hidden === true) {
+      return false;
+    }
+
+    const object = document?.object ?? (token?.document ? token : null);
+    if (object && typeof object.visible === "boolean") {
+      return object.visible;
+    }
+    return true;
   }
 
   static getTokenCenter(token, scene = canvas?.scene) {
@@ -777,9 +813,29 @@ export class ScCanvasActivityService {
       );
     }
 
-    await scene.updateEmbeddedDocuments("Token", updates, {
-      animate: payload.operation === "movement"
-    });
+    // Claim the idempotency key only after every validation passed, so a
+    // failed attempt stays retryable while a duplicate can never run twice.
+    const executionKey = String(payload.executionKey ?? "");
+    if (executionKey) {
+      if (ScCanvasActivityService.#executedKeys.has(executionKey)) {
+        return ScCanvasActivityService.#failure(
+          "SCMOREACTIVITIES.Activities.Canvas.Warning.InvalidRequest",
+          "The canvas operation request is no longer valid."
+        );
+      }
+      ScCanvasActivityService.#executedKeys.add(executionKey);
+    }
+
+    try {
+      await scene.updateEmbeddedDocuments("Token", updates, {
+        animate: payload.operation === "movement"
+      });
+    } catch (error) {
+      if (executionKey) {
+        ScCanvasActivityService.#executedKeys.delete(executionKey);
+      }
+      throw error;
+    }
     return {
       ok: true,
       count: updates.length,
@@ -866,12 +922,36 @@ export class ScCanvasActivityService {
       }
     }
 
+    // Re-validate the target eligibility radius at execution time: targets may
+    // have moved (or been requested) outside it since they were selected —
+    // especially while waiting on saving throws.
+    const targetRadius = Math.max(0, Number(config.targetRadius ?? 0) || 0);
+    const skipped = [];
+    let eligibleTargets = limitedTargets;
+    if (targetRadius > 0 && origin) {
+      eligibleTargets = [];
+      for (const token of limitedTargets) {
+        if (ScCanvasActivityService.#sceneDistanceBetween(origin, token, scene) > targetRadius) {
+          skipped.push(token.name);
+        } else {
+          eligibleTargets.push(token);
+        }
+      }
+      if (!eligibleTargets.length) {
+        return ScCanvasActivityService.#failure(
+          "SCMOREACTIVITIES.Activities.ScTeleport.Warning.TargetOutOfRange",
+          "Target must be within {range}.",
+          { range: targetRadius }
+        );
+      }
+    }
+
     return {
       ok: true,
-      skipped: [],
+      skipped,
       updates: explicitDestination
-        ? ScCanvasActivityService.#placementTeleportUpdates(limitedTargets, destination, config, scene)
-        : limitedTargets.map((token) => {
+        ? ScCanvasActivityService.#placementTeleportUpdates(eligibleTargets, destination, config, scene)
+        : eligibleTargets.map((token) => {
           const point = ScCanvasActivityService.#topLeftForCenter(destination, token, config.snapToGrid !== false, scene);
           return {
             id: token.id,

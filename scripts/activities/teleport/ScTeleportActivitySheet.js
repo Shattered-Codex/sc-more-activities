@@ -1,3 +1,5 @@
+import { ScTargetSaveService } from "../canvas/ScTargetSaveService.js";
+
 export class ScTeleportActivitySheet extends dnd5e.applications.activity.ActivitySheet {
   static DEFAULT_OPTIONS = {
     classes: ["dnd5e2", "sheet", "activity-sheet", "sc-more-activities", "sc-ma-activity", "sc-ma-activity--teleport"]
@@ -23,12 +25,18 @@ export class ScTeleportActivitySheet extends dnd5e.applications.activity.Activit
       teleportDistance: this.activity?.teleport?.teleportDistance ?? 30,
       keepArrangement: this.activity?.teleport?.keepArrangement !== false,
       clusterRadius: this.activity?.teleport?.clusterRadius ?? 5,
-      snapToGrid: this.activity?.teleport?.snapToGrid !== false
+      snapToGrid: this.activity?.teleport?.snapToGrid !== false,
+      save: {
+        enabled: this.activity?.teleport?.save?.enabled === true,
+        ability: this.activity?.teleport?.save?.ability ?? "str",
+        dc: this.activity?.teleport?.save?.dc ?? ""
+      }
     };
     // Multi-token placement options only matter when more than one token can be
     // teleported and the actor is not locked to teleporting only itself.
     context.teleportShowsArrangement = maxTargets > 1 && !onlyTargetSelf;
     context.teleportShowsTargeting = !onlyTargetSelf;
+    context.saveAbilityOptions = ScTargetSaveService.abilityOptions();
     return context;
   }
 

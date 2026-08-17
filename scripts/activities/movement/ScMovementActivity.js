@@ -1,5 +1,6 @@
 import { ActivityAvailability } from "../../availability/ActivityAvailability.js";
 import { ACTIVITY_TYPES } from "../ActivityTypes.js";
+import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
 import { ScMovementActivityData } from "./ScMovementActivityData.js";
 import { ScMovementPreviewApp } from "./ScMovementPreviewApp.js";
 import { ScMovementActivitySheet } from "./ScMovementActivitySheet.js";
@@ -28,6 +29,13 @@ export class ScMovementActivity extends dnd5e.documents.activity.ActivityMixin(S
 
     const results = await super.use(usage, dialog, message);
     if (results === undefined) {
+      return results;
+    }
+
+    if (!ScCanvasActivityService.getOriginTokenObject(this)) {
+      ui.notifications?.warn?.(game.i18n.localize(
+        "SCMOREACTIVITIES.Activities.Canvas.Warning.MissingOrigin"
+      ));
       return results;
     }
 

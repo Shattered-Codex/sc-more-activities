@@ -1,6 +1,7 @@
 export const SETTINGS_KEYS = Object.freeze({
   DEBUG_LOGGING: "debugLogsEnabled",
   DISABLED_ACTIVITY_TYPES: "disabledActivityTypes",
+  CANVAS_RESULT_CARDS: "canvasResultCards",
   PREVIEW_COLORS: "previewColors",
   PREVIEW_COLORS_MENU: "previewColorsMenu",
   MIGRATION_BACKUPS: "moreActivitiesMigrationBackups",

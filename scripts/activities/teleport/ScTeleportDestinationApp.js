@@ -2,6 +2,9 @@ import { Constants } from "../../constants/Constants.js";
 import { ModuleSettings } from "../../settings/ModuleSettings.js";
 import { ScDocumentWindowMinimizer } from "../../applications/ScDocumentWindowMinimizer.js";
 import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
+import { ScCanvasResultCard } from "../canvas/ScCanvasResultCard.js";
+import { ScSaveRequestCard } from "../canvas/ScSaveRequestCard.js";
+import { ScTargetSaveService } from "../canvas/ScTargetSaveService.js";
 import { Logger } from "../../support/Logger.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -469,11 +472,37 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     this.isResolvingDestination = true;
     this.#stopDestinationSelection();
     try {
+      // With a save gate configured, nothing teleports now: the request card
+      // in chat collects the native saving throws and its button teleports
+      // whoever failed. Without one, the teleport runs immediately as always.
+      if (this.#requiresSaveGate()) {
+        const request = await ScSaveRequestCard.postTeleportRequest(this.activity, {
+          originTokenId: ScCanvasActivityService.getOriginTokenDocument(this.activity)?.id ?? null,
+          tokenIds: this.selectedTargets.map((target) => target.id),
+          destination
+        });
+        if (request.posted) {
+          await this.close();
+          return;
+        }
+        if (request.reason !== "no-targets") {
+          // An invalid DC or a posting failure never falls back to teleporting
+          // the targets without the configured saving throw.
+          return;
+        }
+      }
+
+      const tokenIds = this.selectedTargets.map((target) => target.id);
+      const sentEntries = this.#tokenEntries(tokenIds);
       const result = await ScCanvasActivityService.executeTeleportPlacement(this.activity, {
-        tokenIds: this.selectedTargets.map((target) => target.id),
+        tokenIds,
         destination
       });
       if (result?.ok) {
+        await ScCanvasResultCard.createTeleportCard(this.activity, {
+          affected: ScCanvasResultCard.affectedEntries(sentEntries, result.skipped),
+          skipped: result.skipped ?? []
+        });
         await this.close();
         return;
       }
@@ -482,6 +511,22 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     }
 
     this.#startDestinationSelection();
+  }
+
+  #requiresSaveGate() {
+    const config = this.activity?.teleport ?? {};
+    if (config.onlyTargetSelf || !ScTargetSaveService.isEnabled(config.save)) {
+      return false;
+    }
+    const originId = ScCanvasActivityService.getOriginTokenDocument(this.activity)?.id ?? null;
+    return this.selectedTargets.some((target) => target.id !== originId);
+  }
+
+  #tokenEntries(tokenIds) {
+    return (tokenIds ?? [])
+      .map((id) => canvas?.scene?.tokens?.get?.(id))
+      .filter(Boolean)
+      .map((token) => ScCanvasResultCard.tokenEntry(token));
   }
 
   #destinationFromEvent(event) {

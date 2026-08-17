@@ -1,5 +1,6 @@
 import { Constants } from "../../constants/Constants.js";
 import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
+import { ScTargetSaveService } from "../canvas/ScTargetSaveService.js";
 import { ScTeleportDestinationApp } from "./ScTeleportDestinationApp.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -55,7 +56,9 @@ export class ScTeleportTargetApp extends HandlebarsApplicationMixin(ApplicationV
         "SCMOREACTIVITIES.Activities.Canvas.Warning.MissingOrigin",
         "Select or place the activity actor token on the scene first."
       ));
-      await this.close();
+      // Not awaited: render holds the ApplicationV2 semaphore and close() waits
+      // for it, so awaiting here deadlocks and leaves the window stuck open.
+      this.close();
       return;
     }
 
@@ -142,12 +145,20 @@ export class ScTeleportTargetApp extends HandlebarsApplicationMixin(ApplicationV
     const selfTokens = [];
     const otherTokens = [];
 
+    const allowUnowned = this.#saveGateConfigured();
     for (const token of ScCanvasActivityService.getSceneTokens()) {
       const tokenId = this.#tokenId(token);
       if (!tokenId || selected.has(tokenId)) {
         continue;
       }
-      if (!ScCanvasActivityService.canMoveToken(token)) {
+      // Never list tokens the player cannot perceive: a hidden NPC's name,
+      // image, and distance must not leak through the selector.
+      if (!ScCanvasActivityService.canPerceiveToken(token)) {
+        continue;
+      }
+      // With a save gate the request card handles unowned targets (the GM
+      // executes them), so ownership only filters the immediate flow.
+      if (!allowUnowned && !ScCanvasActivityService.canMoveToken(token)) {
         continue;
       }
 
@@ -175,12 +186,16 @@ export class ScTeleportTargetApp extends HandlebarsApplicationMixin(ApplicationV
   #prepopulateTargets() {
     const config = this.#config();
     const origin = ScCanvasActivityService.getOriginTokenObject(this.activity);
+    const allowUnowned = this.#saveGateConfigured();
     for (const target of Array.from(game?.user?.targets ?? [])) {
       const token = target?.document?.object ?? target;
       if (!token) {
         continue;
       }
-      if (!ScCanvasActivityService.canMoveToken(token)) {
+      if (!ScCanvasActivityService.canPerceiveToken(token)) {
+        continue;
+      }
+      if (!allowUnowned && !ScCanvasActivityService.canMoveToken(token)) {
         continue;
       }
 
@@ -213,6 +228,11 @@ export class ScTeleportTargetApp extends HandlebarsApplicationMixin(ApplicationV
 
   #tokenId(token) {
     return token?.document?.id ?? token?.id ?? "";
+  }
+
+  #saveGateConfigured() {
+    const config = this.activity?.teleport ?? {};
+    return !config.onlyTargetSelf && ScTargetSaveService.isEnabled(config.save);
   }
 
   #config() {

@@ -18,6 +18,7 @@ export class ModuleSettingsRegistrar {
     this.#registered = true;
 
     this.#registerDebugLoggingSetting();
+    this.#registerCanvasResultCardsSetting();
     this.#registerDisabledActivityTypesSetting();
     this.#registerPreviewColorsSetting();
     this.#registerMigrationBackupsSetting();
@@ -48,6 +49,21 @@ export class ModuleSettingsRegistrar {
       config: true,
       type: Boolean,
       default: false
+    });
+  }
+
+  #registerCanvasResultCardsSetting() {
+    game.settings.register(Constants.MODULE_ID, SETTINGS_KEYS.CANVAS_RESULT_CARDS, {
+      name: Constants.localize("SCMOREACTIVITIES.Settings.CanvasResultCards.Name", "Result chat cards"),
+      hint: Constants.localize(
+        "SCMOREACTIVITIES.Settings.CanvasResultCards.Hint",
+        "Post a chat card summarizing who was moved or teleported, who resisted, and who was out of range."
+      ),
+      scope: "world",
+      config: true,
+      restricted: true,
+      type: Boolean,
+      default: true
     });
   }
 

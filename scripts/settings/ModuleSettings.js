@@ -38,6 +38,10 @@ export class ModuleSettings {
     }
   }
 
+  static isCanvasResultCardsEnabled() {
+    return ModuleSettings.#getBoolean(SETTINGS_KEYS.CANVAS_RESULT_CARDS, true);
+  }
+
   static isMigrationCompendiumScanEnabled() {
     return ModuleSettings.#getBoolean(SETTINGS_KEYS.MIGRATION_INCLUDE_COMPENDIUMS, true);
   }
