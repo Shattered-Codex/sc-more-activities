@@ -46,6 +46,8 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     this.activity = activity;
     this.selectedTargets = selectedTargets;
     this.isResolvingDestination = false;
+    this.isClosing = false;
+    this.isCompleted = false;
     this.previewGraphics = null;
     this.staticGraphics = null;
     this.previewLabels = null;
@@ -84,6 +86,9 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
   }
 
   async close(options = {}) {
+    // Flagged before the first await so a resolution still in flight knows not
+    // to re-arm the canvas listeners behind a window that is already going away.
+    this.isClosing = true;
     this.#stopDestinationSelection();
     this.#destroyPreviewGraphics();
     ScDocumentWindowMinimizer.restoreWindows(this.minimizedWindows ?? []);
@@ -448,13 +453,26 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
       return;
     }
 
+    // Every branch below runs with the window level capture listeners still
+    // installed, so a silent return here leaves the canvas swallowing clicks
+    // with no way out but a page reload. Each one either reports what happened
+    // and keeps the picker usable, or closes it.
     const origin = ScCanvasActivityService.getOriginTokenObject(this.activity);
     if (!origin) {
+      ui.notifications?.warn?.(Constants.localize(
+        "SCMOREACTIVITIES.Activities.Canvas.Warning.MissingOrigin",
+        "Select or place the activity actor token on the scene first."
+      ));
+      await this.close();
       return;
     }
 
     const destination = this.#destinationFromEvent(event);
     if (!destination) {
+      ui.notifications?.warn?.(Constants.localize(
+        "SCMOREACTIVITIES.Activities.Canvas.Warning.InvalidPosition",
+        "The requested canvas position is invalid."
+      ));
       return;
     }
 
@@ -499,18 +517,31 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
         destination
       });
       if (result?.ok) {
-        await ScCanvasResultCard.createTeleportCard(this.activity, {
-          affected: ScCanvasResultCard.affectedEntries(sentEntries, result.skipped),
-          skipped: result.skipped ?? []
-        });
+        // The tokens have already teleported: from here on the operation is
+        // done, and re-arming the picker would let the same jump run twice.
+        // The summary card is reporting, so its failure is logged and
+        // swallowed rather than undoing that.
+        this.isCompleted = true;
+        try {
+          await ScCanvasResultCard.createTeleportCard(this.activity, {
+            affected: ScCanvasResultCard.affectedEntries(sentEntries, result.skipped),
+            skipped: result.skipped ?? []
+          });
+        } catch (error) {
+          Logger.error("Failed to post the teleport result card.", error);
+        }
         await this.close();
-        return;
       }
     } finally {
       this.isResolvingDestination = false;
+      // A rejected save gate or a failed placement lands here with the
+      // listeners already torn down. The picker has to come back, or the banner
+      // stays on screen over a canvas it no longer reacts to; only a completed
+      // teleport or an actual close leaves it off.
+      if (!this.isClosing && !this.isCompleted) {
+        this.#startDestinationSelection();
+      }
     }
-
-    this.#startDestinationSelection();
   }
 
   #requiresSaveGate() {

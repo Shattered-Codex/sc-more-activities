@@ -1,4 +1,5 @@
 import { Constants } from "../../constants/Constants.js";
+import { Logger } from "../../support/Logger.js";
 import { ModuleSettings } from "../../settings/ModuleSettings.js";
 import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
 import { ScCanvasResultCard } from "../canvas/ScCanvasResultCard.js";
@@ -42,6 +43,8 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
     this.previewTemplate = null;
     this.previewGraphics = null;
     this.isSubmitting = false;
+    this.isClosing = false;
+    this.isCompleted = false;
     this.previewError = null;
     this.selfDirectionPoint = null;
     this.isChoosingSelfDirection = false;
@@ -174,6 +177,9 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
   }
 
   async close(options = {}) {
+    // Flagged before the first await so a submission still in flight knows not
+    // to re-render a window that is already going away.
+    this.isClosing = true;
     this.#stopSelfDirectionSelection();
     this.#destroyPreviewGraphics();
     await super.close(options);
@@ -517,10 +523,37 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
     event?.preventDefault?.();
     event?.stopPropagation?.();
 
+    // The press is already consumed, so every branch below has to say what
+    // happened: a silent return leaves the canvas eating clicks with the
+    // direction picker still armed and nothing on screen explaining why.
     const point = this.#eventCanvasPosition(event);
+    if (!point) {
+      ui.notifications?.warn?.(Constants.localize(
+        "SCMOREACTIVITIES.Activities.Canvas.Warning.InvalidPosition",
+        "The requested canvas position is invalid."
+      ));
+      return;
+    }
+
     const origin = this.#originTokenObject();
     const originCenter = origin ? ScCanvasActivityService.getTokenCenter(origin) : null;
-    if (!point || !originCenter || Math.hypot(point.x - originCenter.x, point.y - originCenter.y) <= 0) {
+    if (!originCenter) {
+      ui.notifications?.warn?.(Constants.localize(
+        "SCMOREACTIVITIES.Activities.Canvas.Warning.MissingOrigin",
+        "Select or place the activity actor token on the scene first."
+      ));
+      // Nothing can be aimed without the origin, so hand the canvas back
+      // instead of keeping a picker that can never resolve.
+      this.#stopSelfDirectionSelection();
+      this.render();
+      return;
+    }
+
+    if (Math.hypot(point.x - originCenter.x, point.y - originCenter.y) <= 0) {
+      ui.notifications?.warn?.(Constants.localize(
+        "SCMOREACTIVITIES.Activities.ScMovement.Warning.MissingSelfDirection",
+        "Choose a movement direction for the self target."
+      ));
       return;
     }
 
@@ -570,47 +603,60 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
     this.isSubmitting = true;
     this.render();
 
-    // With a save gate configured, nothing executes now: the request card in
-    // chat collects the native saving throws and its button moves whoever
-    // failed. Without one, the movement runs immediately as always.
-    if (this.#requiresSaveGate()) {
-      const request = await ScSaveRequestCard.postMovementRequest(this.activity, {
+    try {
+      // With a save gate configured, nothing executes now: the request card in
+      // chat collects the native saving throws and its button moves whoever
+      // failed. Without one, the movement runs immediately as always.
+      if (this.#requiresSaveGate()) {
+        const request = await ScSaveRequestCard.postMovementRequest(this.activity, {
+          originTokenId: this.originTokenId,
+          selfDirectionPoint: this.selfDirectionPoint,
+          movementType: this.movementType,
+          tokenIds: this.selectedTargetIds
+        });
+        if (request.posted) {
+          await this.close();
+          return;
+        }
+        if (request.reason !== "no-targets") {
+          // An invalid DC or a posting failure never falls back to moving the
+          // targets without the configured saving throw.
+          return;
+        }
+      }
+
+      const sentEntries = this.#tokenEntries(this.selectedTargetIds);
+      const result = await ScCanvasActivityService.executeMovement(this.activity, {
         originTokenId: this.originTokenId,
         selfDirectionPoint: this.selfDirectionPoint,
         movementType: this.movementType,
         tokenIds: this.selectedTargetIds
       });
-      if (request.posted) {
+      if (result?.ok) {
+        // The tokens have already moved: from here on the operation is done,
+        // and nothing may hand the confirm button back and let it run a second
+        // time. The summary card is reporting, so its failure is logged and
+        // swallowed rather than undoing that.
+        this.isCompleted = true;
+        try {
+          await ScCanvasResultCard.createMovementCard(this.activity, {
+            affected: ScCanvasResultCard.affectedEntries(sentEntries, result.skipped),
+            skipped: result.skipped ?? []
+          });
+        } catch (error) {
+          Logger.error("Failed to post the movement result card.", error);
+        }
         await this.close();
-        return;
       }
-      if (request.reason !== "no-targets") {
-        // An invalid DC or a posting failure never falls back to moving the
-        // targets without the configured saving throw.
+    } finally {
+      // A rejected save gate or a failed movement leaves the window open, so it
+      // has to become usable again instead of staying locked behind the
+      // submitting flag for good.
+      if (!this.isClosing && !this.isCompleted) {
         this.isSubmitting = false;
         this.render();
-        return;
       }
     }
-
-    const sentEntries = this.#tokenEntries(this.selectedTargetIds);
-    const result = await ScCanvasActivityService.executeMovement(this.activity, {
-      originTokenId: this.originTokenId,
-      selfDirectionPoint: this.selfDirectionPoint,
-      movementType: this.movementType,
-      tokenIds: this.selectedTargetIds
-    });
-    if (result?.ok) {
-      await ScCanvasResultCard.createMovementCard(this.activity, {
-        affected: ScCanvasResultCard.affectedEntries(sentEntries, result.skipped),
-        skipped: result.skipped ?? []
-      });
-      await this.close();
-      return;
-    }
-
-    this.isSubmitting = false;
-    this.render();
   }
 
   #saveGateConfigured() {

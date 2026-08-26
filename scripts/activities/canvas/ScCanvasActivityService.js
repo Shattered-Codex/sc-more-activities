@@ -1307,8 +1307,18 @@ export class ScCanvasActivityService {
 
     const controlled = Array.from(canvas?.tokens?.controlled ?? [])
       .find((token) => token?.actor === actor || token?.actor?.uuid === actor?.uuid);
+    // getActiveTokens(_, true) already yields TokenDocuments, so reading a
+    // `.document` off the result dropped the fallback and left the origin
+    // resolvable only while a token was selected. Switching canvas layers
+    // releases that selection, and placing a measured template does exactly
+    // that, so every activity used from a template spell lost its origin.
     const active = actor.getActiveTokens?.(false, true)?.[0] ?? null;
-    return (controlled ?? active)?.document ?? null;
+    return ScCanvasActivityService.#tokenDocument(controlled ?? active);
+  }
+
+  /** Normalizes either a Token placeable or a TokenDocument to a TokenDocument. */
+  static #tokenDocument(token) {
+    return token?.document ?? token ?? null;
   }
 
   static #activityActor(activity) {

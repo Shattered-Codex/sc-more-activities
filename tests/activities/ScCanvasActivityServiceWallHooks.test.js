@@ -21,7 +21,9 @@ function installWallGlobals(t) {
   const actor = { id: "actor-1", uuid: "Actor.actor-1" };
   const origin = makeToken({ id: "origin-token", x: 100, y: 100, actor });
   const target = makeToken({ id: "target-token", x: 300, y: 100 });
-  actor.getActiveTokens = () => [{ document: origin }];
+  // Core hands TokenDocuments back from getActiveTokens(_, true), not the
+  // placeable wrappers: mocking the placeable shape hid a broken fallback.
+  actor.getActiveTokens = () => [origin];
   const tokens = new Map([[origin.id, origin], [target.id, target]]);
   tokens.contents = [origin, target];
 
