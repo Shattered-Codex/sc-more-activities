@@ -41,6 +41,7 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
     this.canvasContextMenuHandler = null;
     this.isPlacing = false;
     this.isSubmitting = false;
+    this.isClosing = false;
     this.hoverPoint = null;
     this.previewGraphics = null;
     this.previewText = null;
@@ -145,6 +146,9 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
   }
 
   async close(options = {}) {
+    // Flagged before the first await so a submission still in flight knows not
+    // to re-render a window that is already going away.
+    this.isClosing = true;
     this.#stopCanvasListener();
     this.#destroyPreviewGraphics();
     await this.#clearPlacementRangeMarker();
@@ -231,6 +235,12 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
 
     const point = this.#eventPoint(event);
     if (!point) {
+      // The press above is already consumed, so a silent return drops the click
+      // without a word while placement stays armed.
+      ui.notifications?.warn?.(Constants.localize(
+        "SCMOREACTIVITIES.Activities.Canvas.Warning.InvalidPosition",
+        "The requested canvas position is invalid."
+      ));
       return;
     }
 
@@ -279,6 +289,12 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
 
     const point = this.#eventPoint(event);
     if (!point) {
+      // The press above is already consumed, so a silent return drops the click
+      // without a word while placement stays armed.
+      ui.notifications?.warn?.(Constants.localize(
+        "SCMOREACTIVITIES.Activities.Canvas.Warning.InvalidPosition",
+        "The requested canvas position is invalid."
+      ));
       return;
     }
 
@@ -341,37 +357,39 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
     this.#stopCanvasListener();
     this.render();
 
-    if (this.placementPoints.length >= 2) {
-      const finished = await this.#finishCurrentWall();
-      if (!finished) {
-        this.isSubmitting = false;
-        this.render();
+    try {
+      if (this.placementPoints.length >= 2) {
+        const finished = await this.#finishCurrentWall();
+        if (!finished) {
+          return;
+        }
+      }
+
+      if (!this.allWalls.length) {
+        ui.notifications?.warn?.(Constants.localize(
+          "SCMOREACTIVITIES.Activities.ScWall.Warning.NoWalls",
+          "No walls to create."
+        ));
         return;
       }
-    }
 
-    if (!this.allWalls.length) {
-      ui.notifications?.warn?.(Constants.localize(
-        "SCMOREACTIVITIES.Activities.ScWall.Warning.NoWalls",
-        "No walls to create."
-      ));
-      this.isSubmitting = false;
-      this.render();
-      return;
+      const result = await ScCanvasActivityService.executeWallPlacement(this.activity, {
+        facing: this.selectedFacing,
+        originTokenId: this.originTokenId,
+        walls: this.#wallsForRequest()
+      });
+      if (result?.ok) {
+        await this.close();
+      }
+    } finally {
+      // A refused placement or a throw from the service both leave the window
+      // open, so it has to become usable again instead of staying locked
+      // behind the submitting flag with every button disabled.
+      if (!this.isClosing) {
+        this.isSubmitting = false;
+        this.render();
+      }
     }
-
-    const result = await ScCanvasActivityService.executeWallPlacement(this.activity, {
-      facing: this.selectedFacing,
-      originTokenId: this.originTokenId,
-      walls: this.#wallsForRequest()
-    });
-    if (result?.ok) {
-      await this.close();
-      return;
-    }
-
-    this.isSubmitting = false;
-    this.render();
   }
 
   async #finishCurrentWall() {

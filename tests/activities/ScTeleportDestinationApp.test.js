@@ -53,6 +53,7 @@ globalThis.window = {
 
 const { ScCanvasActivityService } = await import("../../scripts/activities/canvas/ScCanvasActivityService.js");
 const { ScTeleportDestinationApp } = await import("../../scripts/activities/teleport/ScTeleportDestinationApp.js");
+const { ScCanvasResultCard } = await import("../../scripts/activities/canvas/ScCanvasResultCard.js");
 
 // The canvas element used as the pointer-event target for the app's guard.
 const CANVAS_VIEW = { id: "canvas-view" };
@@ -1217,4 +1218,140 @@ test("draws landing footprints from the placement preview on hover", async(t) =>
   assert.deepEqual(graphics.commands, [
     ["rect", 150, 150, 100, 100]
   ]);
+});
+
+test("closes the picker when the origin is gone instead of eating canvas clicks", async(t) => {
+  const calls = [];
+  patchCanvasService(t, calls);
+  makeCanvas();
+
+  const warnings = [];
+  const previousWarn = globalThis.ui.notifications.warn;
+  globalThis.ui.notifications.warn = (message) => warnings.push(message);
+  t.after(() => {
+    globalThis.ui.notifications.warn = previousWarn;
+  });
+
+  const app = new ScTeleportDestinationApp(
+    { teleport: { snapToGrid: false, teleportDistance: 0 } },
+    [{ id: "target-token" }]
+  );
+  await app._onRender({}, {});
+
+  // The token is released after the picker opened — switching canvas layers
+  // does exactly that — so the destination can no longer be resolved.
+  ScCanvasActivityService.getOriginTokenObject = () => null;
+
+  await handler("pointerup")(canvasEvent({ button: 0, clientX: 10, clientY: 10 }));
+
+  assert.equal(calls.length, 0);
+  assert.equal(app.closed, true);
+  assert.deepEqual(warnings, ["Select or place the activity actor token on the scene first."]);
+  // The capture listeners have to go with it, or every later click is swallowed
+  // and the canvas stays dead until the page is reloaded.
+  assert.equal(globalThis.window.handlers.has("pointerup"), false);
+  assert.equal(globalThis.window.handlers.has("pointerdown"), false);
+});
+
+test("warns and stays usable when the click maps to no canvas position", async(t) => {
+  const calls = [];
+  patchCanvasService(t, calls);
+  makeCanvas();
+  globalThis.canvas.canvasCoordinatesFromClient = () => ({ x: NaN, y: NaN });
+
+  const warnings = [];
+  const previousWarn = globalThis.ui.notifications.warn;
+  globalThis.ui.notifications.warn = (message) => warnings.push(message);
+  t.after(() => {
+    globalThis.ui.notifications.warn = previousWarn;
+  });
+
+  const app = new ScTeleportDestinationApp(
+    { teleport: { snapToGrid: false, teleportDistance: 0 } },
+    [{ id: "target-token" }]
+  );
+  await app._onRender({}, {});
+
+  await handler("pointerup")(canvasEvent({ button: 0, clientX: 10, clientY: 10 }));
+
+  assert.equal(calls.length, 0);
+  assert.deepEqual(warnings, ["The requested canvas position is invalid."]);
+  assert.equal(typeof handler("pointerup"), "function");
+});
+
+test("re-arms the picker when the placement throws", async(t) => {
+  const calls = [];
+  patchCanvasService(t, calls);
+  makeCanvas();
+  ScCanvasActivityService.executeTeleportPlacement = async() => {
+    throw new Error("placement failed");
+  };
+
+  const app = new ScTeleportDestinationApp(
+    { teleport: { snapToGrid: false, teleportDistance: 0 } },
+    [{ id: "target-token" }]
+  );
+  await app._onRender({}, {});
+
+  await assert.rejects(() => handler("pointerup")(canvasEvent({ button: 0, clientX: 10, clientY: 10 })));
+
+  // The banner is still on screen, so the listeners it depends on must come
+  // back rather than leaving it hovering over an unresponsive canvas.
+  assert.equal(app.closed, false);
+  assert.equal(typeof handler("pointerup"), "function");
+  assert.equal(app.isResolvingDestination, false);
+});
+
+test("re-arms the picker when the placement is rejected", async(t) => {
+  const calls = [];
+  patchCanvasService(t, calls);
+  makeCanvas();
+  ScCanvasActivityService.executeTeleportPlacement = async(activity, placement) => {
+    calls.push({ activity, placement });
+    return { ok: false };
+  };
+
+  const app = new ScTeleportDestinationApp(
+    { teleport: { snapToGrid: false, teleportDistance: 0 } },
+    [{ id: "target-token" }]
+  );
+  await app._onRender({}, {});
+
+  await handler("pointerup")(canvasEvent({ button: 0, clientX: 10, clientY: 10 }));
+  assert.equal(app.closed, false);
+
+  // A second attempt still reaches the service.
+  await handler("pointerup")(canvasEvent({ button: 0, clientX: 20, clientY: 20 }));
+  assert.equal(calls.length, 2);
+});
+
+test("keeps a finished teleport finished when the result card fails", async(t) => {
+  const calls = [];
+  patchCanvasService(t, calls);
+  makeCanvas();
+
+  const previousCard = ScCanvasResultCard.createTeleportCard;
+  const previousError = console.error;
+  ScCanvasResultCard.createTeleportCard = async() => {
+    throw new Error("chat message rejected");
+  };
+  console.error = () => {};
+  t.after(() => {
+    ScCanvasResultCard.createTeleportCard = previousCard;
+    console.error = previousError;
+  });
+
+  const app = new ScTeleportDestinationApp(
+    { teleport: { snapToGrid: false, teleportDistance: 0 } },
+    [{ id: "target-token" }]
+  );
+  await app._onRender({}, {});
+
+  await handler("pointerup")(canvasEvent({ button: 0, clientX: 10, clientY: 10 }));
+
+  // The card is reporting: losing it must not lose the window close, and it
+  // must not re-arm a picker that would teleport the same tokens again.
+  assert.equal(calls.length, 1);
+  assert.equal(app.closed, true);
+  assert.equal(globalThis.window.handlers.has("pointerup"), false);
 });
