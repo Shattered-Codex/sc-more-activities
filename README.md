@@ -42,7 +42,7 @@ The goal is to preserve the value of richer activity workflows while shaping the
 - A public registration hook and API for SC modules and third-party modules
 - A grouped activity creation dialog that separates native D&D 5e activities from Shattered Codex activities
 - A GM activity catalog with diagnostics, filters, and enable/disable controls
-- Preview color settings for teleport, movement, and wall overlays
+- Preview color settings for teleport, movement, wall, and portal overlays
 - Explicit preview/apply/restore migration tools for legacy `more-activities` data
 
 ## Included Activity Types
@@ -58,11 +58,14 @@ The goal is to preserve the value of richer activity workflows while shaping the
 - `sc-teleport`: move tokens through a guided teleport workflow
 - `sc-movement`: push or pull tokens, with an optional direction choice at use time and preview support
 - `sc-wall`: create wall previews and GM-mediated wall placement
+- `sc-portal`: open a linked pair of portals and ask tokens whether they want to cross
 
 ## Asset Credits
 
 Some bundled activity icons are sourced from [game-icons.net](https://game-icons.net/),
 currently using artwork by Delapouite and Lorc.
+The portal activity uses [Magic Portal by Lorc](https://game-icons.net/1x1/lorc/magic-portal.html),
+recolored to match the module palette.
 Game-icons.net states that its icons are provided under the
 [Creative Commons Attribution 3.0 license](https://creativecommons.org/licenses/by/3.0/),
 which requires attribution to the original authors. See the
@@ -372,6 +375,70 @@ Limitations:
   `damage` activity step and read `roll.sum` there.
 - Results only flow between steps of the same execution. Once the flow ends, the result is gone — a later
   use starts fresh.
+
+## SC Portal Guide
+
+`sc-portal` opens a linked pair of portals on the scene. Clicking a side with a controlled token standing
+on it, or next to it, asks whether that token wants to cross to the other side.
+
+### Placing A Portal
+
+Using the activity opens the placement application. The first click places the entry side, the second
+places the exit side, and right click stops placing. Both sides are validated against **Placement
+range** measured from the acting token, and optionally against **Maximum distance between sides**.
+Both fields accept roll formulas.
+
+While you place, the window minimizes out of the way and comes back once both sides are down or you stop
+placing. The canvas preview names each side *Entry* or *Exit*, colors the side under the cursor the way
+the next click will place it, and draws an arrow from the entry to the exit.
+
+**Area** sets each side's footprint in grid squares, from 1×1 to 4×4. An even footprint snaps to a grid
+corner rather than a cell center, so a 2×2 portal covers four whole cells instead of straddling eight.
+
+Each side becomes a scene `Region`, so the portal is visible on the canvas, respects the **Visible to**
+setting, and can be deleted by the GM from the Regions layer at any time. Setting **Visible to** to
+*Hidden (art only)* draws nothing during play, which is what you want once the portal has its own art;
+clicks still find the portal, and the GM can still see and delete it on the Regions layer. Deleting one
+side closes the other. When entry or exit art is configured, a matching `Tile` is placed over the side
+and removed with it. The art can be an image or a video (`webm`, `mp4`, `ogv`); video plays looped and
+muted, which is what an animated portal usually wants.
+
+### Crossing
+
+A token travels by clicking: click a portal while controlling a token standing on it, or next to
+it, and a dialog asks whether the token steps through. With nothing selected, the character you
+play is used, and failing that the single token you own that is standing in the portal.
+
+The token itself is always moved by the GM client, like every other canvas activity in this module; a
+player's click sends the request to the active GM. A question still open when the same token is asked
+again is closed and asked afresh, so a stale answer can never send a token through a portal it has since
+walked away from.
+
+Walking across a portal asks nothing and never interrupts the movement: the portal is a place to click,
+not a trap.
+
+### Grid, Snapping, And Occupied Spaces
+
+**Snap to grid** aligns both sides and the arriving token to the grid. On a scene without a grid there
+is nothing to snap to, so the setting is ignored and the portal is placed exactly where you click; the
+placement application says so when that happens.
+
+**Avoid occupied spaces** looks for a free space near the destination instead of dropping the token on
+top of another one, searching outwards a few cells at a time. When everything nearby is taken the
+crossing is refused rather than stacking tokens.
+
+### Closing A Portal
+
+A portal closes when any of these happens:
+
+- the configured number of crossings is spent;
+- the duration runs out;
+- the GM presses **Close portal** on the whispered chat card;
+- the GM deletes either side from the Regions layer.
+
+**Duration in rounds** is counted in combat rounds while the combat that opened the portal is running,
+and as the same amount of world time outside combat, so a portal opened out of initiative still
+expires. A duration of `0` keeps the portal open until it is closed.
 
 ## Migration From `more-activities`
 

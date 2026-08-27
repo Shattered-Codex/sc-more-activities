@@ -1,6 +1,10 @@
 import { Constants } from "../constants/Constants.js";
 import { ModuleSettings } from "./ModuleSettings.js";
 
+/** Preview scopes, in the order they appear in the picker. */
+const SCOPES = ["teleport", "movement", "wall", "portal"];
+const DEFAULT_SCOPE = "teleport";
+
 const api = foundry?.applications?.api ?? {};
 const { ApplicationV2, HandlebarsApplicationMixin } = api;
 if (!ApplicationV2 || !HandlebarsApplicationMixin) {
@@ -31,35 +35,49 @@ export class PreviewColorMenu extends HandlebarsApplicationMixin(ApplicationV2) 
   constructor(options = {}) {
     super(options);
     this.draftColors = foundry.utils.deepClone(ModuleSettings.getPreviewColors());
-    this.selectedScope = "teleport";
+    this.selectedScope = DEFAULT_SCOPE;
   }
 
   async _prepareContext() {
     const scope = this.selectedScope;
     return {
-      colors: this.draftColors,
       selectedScope: scope,
+      scopeLabel: PreviewColorMenu.#scopeLabel(scope),
       isTeleportScope: scope === "teleport",
       isMovementScope: scope === "movement",
       isWallScope: scope === "wall",
-      scopeOptions: [
-        {
-          value: "teleport",
-          label: Constants.localize("SCMOREACTIVITIES.Settings.PreviewColorsMenu.Sections.Teleport", "Teleport"),
-          selected: scope === "teleport"
-        },
-        {
-          value: "movement",
-          label: Constants.localize("SCMOREACTIVITIES.Settings.PreviewColorsMenu.Sections.Movement", "Movement"),
-          selected: scope === "movement"
-        },
-        {
-          value: "wall",
-          label: Constants.localize("SCMOREACTIVITIES.Settings.PreviewColorsMenu.Sections.Wall", "Wall"),
-          selected: scope === "wall"
-        }
-      ]
+      isPortalScope: scope === "portal",
+      colorFields: this.#colorFields(scope),
+      scopeOptions: SCOPES.map((value) => ({
+        value,
+        label: PreviewColorMenu.#scopeLabel(value),
+        selected: scope === value
+      }))
     };
+  }
+
+  /**
+   * The two colour inputs of the active scope. Every scope has the same pair,
+   * so the template renders this list instead of repeating the markup per scope.
+   */
+  #colorFields(scope) {
+    return [
+      { key: `${scope}RangeFill`, suffix: "fill", labelKey: "Fill" },
+      { key: `${scope}RangeBorder`, suffix: "border", labelKey: "Border" }
+    ].map(({ key, suffix, labelKey }) => ({
+      key,
+      id: `sc-ma-${scope}-range-${suffix}`,
+      label: Constants.localize(
+        `SCMOREACTIVITIES.Settings.PreviewColorsMenu.Fields.${labelKey}.Label`,
+        labelKey
+      ),
+      value: this.draftColors[key]
+    }));
+  }
+
+  static #scopeLabel(scope) {
+    const name = scope.charAt(0).toUpperCase() + scope.slice(1);
+    return Constants.localize(`SCMOREACTIVITIES.Settings.PreviewColorsMenu.Sections.${name}`, name);
   }
 
   async _onRender(context, options) {
@@ -68,9 +86,9 @@ export class PreviewColorMenu extends HandlebarsApplicationMixin(ApplicationV2) 
     this.#bindColorControls();
     this.#applyPreviewStyles();
     this.element.querySelector("[name='selectedScope']")?.addEventListener("change", (event) => {
-      this.selectedScope = ["teleport", "movement", "wall"].includes(event.currentTarget.value)
+      this.selectedScope = SCOPES.includes(event.currentTarget.value)
         ? event.currentTarget.value
-        : "teleport";
+        : DEFAULT_SCOPE;
       this.render();
     });
 
@@ -163,14 +181,11 @@ export class PreviewColorMenu extends HandlebarsApplicationMixin(ApplicationV2) 
       return;
     }
 
-    const styles = {
-      "--sc-ma-preview-teleport-border": this.draftColors.teleportRangeBorder,
-      "--sc-ma-preview-teleport-fill": this.draftColors.teleportRangeFill,
-      "--sc-ma-preview-movement-border": this.draftColors.movementRangeBorder,
-      "--sc-ma-preview-movement-fill": this.draftColors.movementRangeFill,
-      "--sc-ma-preview-wall-border": this.draftColors.wallRangeBorder,
-      "--sc-ma-preview-wall-fill": this.draftColors.wallRangeFill
-    };
+    const styles = {};
+    for (const scope of SCOPES) {
+      styles[`--sc-ma-preview-${scope}-border`] = this.draftColors[`${scope}RangeBorder`];
+      styles[`--sc-ma-preview-${scope}-fill`] = this.draftColors[`${scope}RangeFill`];
+    }
 
     for (const [name, value] of Object.entries(styles)) {
       root.style.setProperty(name, value);

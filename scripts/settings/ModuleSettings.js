@@ -19,7 +19,9 @@ export class ModuleSettings {
     movementRangeBorder: "#4da3ff",
     movementRangeFill: "#8fd3ff",
     wallRangeBorder: "#d32f2f",
-    wallRangeFill: "#fff4a8"
+    wallRangeFill: "#fff4a8",
+    portalRangeBorder: "#8a63d2",
+    portalRangeFill: "#c9b3f0"
   });
 
   static isDebugLoggingEnabled() {
@@ -107,6 +109,14 @@ export class ModuleSettings {
     };
   }
 
+  static getPortalRangeColors() {
+    const colors = ModuleSettings.getPreviewColors();
+    return {
+      borderColor: colors.portalRangeBorder,
+      fillColor: colors.portalRangeFill
+    };
+  }
+
   static getMovementRangeColors() {
     const colors = ModuleSettings.getPreviewColors();
     return {
@@ -123,7 +133,9 @@ export class ModuleSettings {
       movementRangeBorder: ModuleSettings.#sanitizeHexColor(value?.movementRangeBorder, defaults.movementRangeBorder),
       movementRangeFill: ModuleSettings.#sanitizeHexColor(value?.movementRangeFill, defaults.movementRangeFill),
       wallRangeBorder: ModuleSettings.#sanitizeHexColor(value?.wallRangeBorder, defaults.wallRangeBorder),
-      wallRangeFill: ModuleSettings.#sanitizeHexColor(value?.wallRangeFill, defaults.wallRangeFill)
+      wallRangeFill: ModuleSettings.#sanitizeHexColor(value?.wallRangeFill, defaults.wallRangeFill),
+      portalRangeBorder: ModuleSettings.#sanitizeHexColor(value?.portalRangeBorder, defaults.portalRangeBorder),
+      portalRangeFill: ModuleSettings.#sanitizeHexColor(value?.portalRangeFill, defaults.portalRangeFill)
     };
   }
 
