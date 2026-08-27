@@ -21,8 +21,6 @@ export class ScPortalActivitySheet extends dnd5e.applications.activity.ActivityS
       snapToGrid: this.activity?.portal?.snapToGrid !== false,
       avoidOccupied: this.activity?.portal?.avoidOccupied !== false,
       oneWay: Boolean(this.activity?.portal?.oneWay),
-      triggerOnEnter: this.activity?.portal?.triggerOnEnter !== false,
-      triggerOnClick: this.activity?.portal?.triggerOnClick !== false,
       maxUses: this.activity?.portal?.maxUses ?? "",
       durationRounds: this.activity?.portal?.durationRounds ?? "10",
       visibility: this.activity?.portal?.visibility ?? "all",

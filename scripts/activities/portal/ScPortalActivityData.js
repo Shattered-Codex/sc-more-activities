@@ -71,14 +71,6 @@ export class ScPortalActivityData extends dnd5e.dataModels.activity.BaseActivity
           required: false,
           initial: false
         }),
-        triggerOnEnter: new fields.BooleanField({
-          required: false,
-          initial: true
-        }),
-        triggerOnClick: new fields.BooleanField({
-          required: false,
-          initial: true
-        }),
         maxUses: new fields.StringField({
           required: false,
           initial: ""

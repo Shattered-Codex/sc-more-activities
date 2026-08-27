@@ -378,8 +378,8 @@ Limitations:
 
 ## SC Portal Guide
 
-`sc-portal` opens a linked pair of portals on the scene. A token that finishes its movement inside one
-side, or clicks it, is asked whether it wants to cross to the other side.
+`sc-portal` opens a linked pair of portals on the scene. Clicking a side with a controlled token standing
+on it, or next to it, asks whether that token wants to cross to the other side.
 
 ### Placing A Portal
 
@@ -388,36 +388,34 @@ places the exit side, and right click stops placing. Both sides are validated ag
 range** measured from the acting token, and optionally against **Maximum distance between sides**.
 Both fields accept roll formulas.
 
+While you place, the window minimizes out of the way and comes back once both sides are down or you stop
+placing. The canvas preview names each side *Entry* or *Exit*, colors the side under the cursor the way
+the next click will place it, and draws an arrow from the entry to the exit.
+
 **Area** sets each side's footprint in grid squares, from 1×1 to 4×4. An even footprint snaps to a grid
 corner rather than a cell center, so a 2×2 portal covers four whole cells instead of straddling eight.
 
-Each side becomes a scene `Region` carrying an `SC Portal` region behavior, so the portal is visible on
-the canvas, respects the **Visible to** setting, and can be deleted by the GM from the Regions layer at
-any time. Setting **Visible to** to *Hidden (art only)* draws nothing during play, which is what you
-want once the portal has its own art; the region still fires its behavior, and the GM can still see and
-delete it on the Regions layer. Deleting one side closes the other. When entry or exit art is configured, a matching `Tile` is
-placed over the side and removed with it. The art can be an image or a video (`webm`, `mp4`, `ogv`);
-video plays looped and muted, which is what an animated portal usually wants.
+Each side becomes a scene `Region`, so the portal is visible on the canvas, respects the **Visible to**
+setting, and can be deleted by the GM from the Regions layer at any time. Setting **Visible to** to
+*Hidden (art only)* draws nothing during play, which is what you want once the portal has its own art;
+clicks still find the portal, and the GM can still see and delete it on the Regions layer. Deleting one
+side closes the other. When entry or exit art is configured, a matching `Tile` is placed over the side
+and removed with it. The art can be an image or a video (`webm`, `mp4`, `ogv`); video plays looped and
+muted, which is what an animated portal usually wants.
 
 ### Crossing
 
-- **Ask on entry**: a token that stops inside a portal is asked whether it wants to cross.
-- **Ask on click**: clicking a portal while controlling a token inside it, or next to it, asks the same
-  question.
+A token travels by clicking: click a portal while controlling a token standing on it, or next to
+it, and a dialog asks whether the token steps through. With nothing selected, the character you
+play is used, and failing that the single token you own that is standing in the portal.
 
-The question is shown to the first active player who owns the token, and to the GM when nobody else can
-answer. The token itself is always moved by the GM client, like every other canvas activity in this
-module.
+The token itself is always moved by the GM client, like every other canvas activity in this module; a
+player's click sends the request to the active GM. A question still open when the same token is asked
+again is closed and asked afresh, so a stale answer can never send a token through a portal it has since
+walked away from.
 
-Entry rides on Foundry's own `tokenMoveIn` region event, so a token that walks *across* a portal stops
-on it and is asked, not just one that ends its movement there. Declining leaves the token standing on
-the portal where its movement stopped.
-
-> **Restart Foundry after installing or updating the module.** Entry detection needs the `SC Portal`
-> region behavior, declared through the `documentTypes` manifest field, and Foundry only reads package
-> manifests when the server starts. Until then, opening a portal warns you and the portal is created
-> without the behavior: clicking it still works, walking into it does nothing. Portals created in that
-> state repair themselves the next time you load the scene after the restart.
+Walking across a portal asks nothing and never interrupts the movement: the portal is a place to click,
+not a trap.
 
 ### Grid, Snapping, And Occupied Spaces
 

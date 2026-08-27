@@ -12,8 +12,6 @@ export class ScPortalConfig {
       snapToGrid: config.snapToGrid !== false,
       avoidOccupied: config.avoidOccupied !== false,
       oneWay: Boolean(config.oneWay),
-      triggerOnEnter: config.triggerOnEnter !== false,
-      triggerOnClick: config.triggerOnClick !== false,
       maxUses: ScPortalConfig.#positiveLimit(config.maxUses, item),
       durationRounds: ScCanvasFormula.resolveNumber(config.durationRounds, item, 0, { min: 0 }),
       visibility: ["gm", "hidden"].includes(config.visibility) ? config.visibility : "all",

@@ -1,22 +1,28 @@
 import { Constants } from "../../constants/Constants.js";
 import { Logger } from "../../support/Logger.js";
 import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
-import { PORTAL_BEHAVIOR_TYPE, PORTAL_FLAG_KEY } from "./ScPortalConstants.js";
+import { PORTAL_FLAG_KEY } from "./ScPortalConstants.js";
 import { ScPortalConfig } from "./ScPortalConfig.js";
 import { ScPortalGeometry } from "./ScPortalGeometry.js";
 import { ScPortalPrompt } from "./ScPortalPrompt.js";
 
 const QUERY_ID = "sc-more-activities.portalOperation";
-const PROMPT_QUERY_ID = "sc-more-activities.portalPrompt";
 const QUERY_TIMEOUT = 30000;
-const PROMPT_TIMEOUT = 120000;
 const FLAG_KEY = PORTAL_FLAG_KEY;
 const CLOSE_ACTION = "sc-ma-close-portal";
 const DEFAULT_ROUND_SECONDS = 6;
 
 /**
- * Owns the lifetime of a portal pair: creation, the prompt shown when a token
- * lands on one side or clicks it, the travel itself, expiry, and closing.
+ * Region behaviour subtype that pre-release builds attached to portal sides.
+ * It is no longer declared, and Foundry keeps an undeclared behaviour as raw
+ * data without the terrain hooks core calls on every enabled behaviour while
+ * planning a move, so a scene still holding one cannot move any token at all.
+ */
+const LEGACY_BEHAVIOR_TYPE = `${Constants.MODULE_ID}.scPortal`;
+
+/**
+ * Owns the lifetime of a portal pair: creation, the prompt shown when a portal
+ * is clicked, the travel itself, expiry, and closing.
  *
  * Every write to the scene runs on the active GM's client, either directly or
  * through the module query, the same way the other canvas activities work. A
@@ -24,11 +30,8 @@ const DEFAULT_ROUND_SECONDS = 6;
  * region flags, so it keeps working after the item or activity is gone.
  */
 export class ScPortalService {
-  /** Tokens that just travelled, so the destination side does not ask again. */
-  static #suppressedTokens = new Map();
-
-  /** Prompts already on screen, keyed by scene and token. */
-  static #pendingPrompts = new Set();
+  /** Prompts on screen, keyed by scene and token. */
+  static #pendingPrompts = new Map();
 
   /** Portals being torn down, so the paired delete does not recurse. */
   static #closingPortals = new Set();
@@ -40,18 +43,11 @@ export class ScPortalService {
 
   static #clickHandler = null;
 
-  /** How long a travelled token is ignored by the entry detection. */
-  static REENTRY_SUPPRESSION_MS = 2000;
-
-  /** Cap on waiting for a movement animation that may never settle. */
-  static MOVEMENT_ANIMATION_TIMEOUT_MS = 5000;
-
   static registerQueries() {
     if (!globalThis.CONFIG?.queries) {
       return false;
     }
     CONFIG.queries[QUERY_ID] = ScPortalService.handlePortalQuery;
-    CONFIG.queries[PROMPT_QUERY_ID] = ScPortalService.handlePromptQuery;
     return true;
   }
 
@@ -70,8 +66,8 @@ export class ScPortalService {
     Hooks.on("canvasReady", () => {
       ScPortalService.#armClickListener();
       ScPortalService.sweepExpiredPortals();
-      ScPortalService.repairMissingBehaviors(canvas?.scene).catch((error) => {
-        Logger.warn("Could not check the portal region behaviours.", error);
+      ScPortalService.removeLegacyBehaviors(canvas?.scene).catch((error) => {
+        Logger.warn("Could not remove the legacy portal region behaviours.", error);
       });
     });
     Hooks.on("renderChatMessageHTML", (message, html) => {
@@ -100,11 +96,6 @@ export class ScPortalService {
       );
     }
     return ScPortalService.executeOperation(payload, { trusted: false });
-  }
-
-  static async handlePromptQuery(payload = {}) {
-    const confirmed = await ScPortalPrompt.confirm(payload);
-    return { confirmed };
   }
 
   // ---------------------------------------------------------------------------
@@ -240,51 +231,32 @@ export class ScPortalService {
     return false;
   }
 
-  /**
-   * Re-attaches the behaviour to portal sides that were created while the
-   * subtype was still unknown to this world, which is what happens between
-   * installing the module and restarting Foundry.
-   */
-  static async repairMissingBehaviors(scene) {
-    if (!scene || !ScPortalService.#isResponsibleGm() || !ScPortalService.isBehaviorTypeAvailable()) {
+  /** Strips the undeclared behaviour subtype from every region on the scene. */
+  static async removeLegacyBehaviors(scene) {
+    if (!scene || !ScPortalService.#isResponsibleGm()) {
       return 0;
     }
 
-    let repaired = 0;
-    for (const portal of ScPortalService.getScenePortals(scene)) {
-      const region = scene.regions?.get?.(portal.regionId);
+    let removed = 0;
+    const regions = scene.regions?.contents ?? Array.from(scene.regions ?? []);
+    for (const entry of regions) {
+      const region = Array.isArray(entry) ? entry[1] : entry;
       const behaviors = region?.behaviors?.contents ?? Array.from(region?.behaviors ?? []);
-      const existing = behaviors.find((behavior) => behavior?.type === PORTAL_BEHAVIOR_TYPE);
-      const disabled = ScPortalService.behaviorDisabled(portal);
-
-      // Portals opened before the exit of a one way pair learned to stay out of
-      // the way are still on the scene, so the flag is corrected in place here
-      // rather than left for a migration.
-      if (existing) {
-        if (existing.disabled !== disabled) {
-          try {
-            await region.updateEmbeddedDocuments("RegionBehavior", [{ _id: existing.id, disabled }]);
-            repaired += 1;
-          } catch (error) {
-            Logger.warn("Could not correct the portal region behaviour.", error);
-          }
-        }
+      const ids = behaviors
+        .filter((behavior) => behavior?.type === LEGACY_BEHAVIOR_TYPE && behavior.id)
+        .map((behavior) => behavior.id);
+      if (!ids.length) {
         continue;
       }
 
       try {
-        await region.createEmbeddedDocuments("RegionBehavior", [{
-          name: region.name,
-          type: PORTAL_BEHAVIOR_TYPE,
-          disabled,
-          system: { portalId: portal.portalId, side: portal.side }
-        }]);
-        repaired += 1;
+        await region.deleteEmbeddedDocuments("RegionBehavior", ids);
+        removed += ids.length;
       } catch (error) {
-        Logger.warn("Could not restore the portal region behaviour.", error);
+        Logger.warn("Could not remove a legacy portal region behaviour.", error);
       }
     }
-    return repaired;
+    return removed;
   }
 
   static async sweepExpiredPortals() {
@@ -359,10 +331,6 @@ export class ScPortalService {
     const expiry = ScPortalService.#expiryFor(config.durationRounds);
     const label = ScPortalService.#portalLabel(activity);
 
-    // A region carrying an unregistered behaviour subtype fails validation and
-    // is rejected outright, so the behaviour is left off rather than losing the
-    // whole portal. Click travel keeps working either way.
-    const withBehavior = ScPortalService.isBehaviorTypeAvailable();
     const regionData = ["entry", "exit"].map((side) => ScPortalService.#regionData({
       activity,
       config,
@@ -373,22 +341,14 @@ export class ScPortalService {
       expiry,
       label,
       user,
-      scene,
-      withBehavior
+      scene
     }));
 
     await scene.createEmbeddedDocuments("Region", regionData);
     await ScPortalService.#createTiles(scene, config, portalId, radiusPixels, { entry, exit });
     await ScPortalService.#postPortalCard(scene, activity, config, portalId, label, expiry);
 
-    const warning = !withBehavior && config.triggerOnEnter
-      ? Constants.localize(
-        "SCMOREACTIVITIES.Activities.ScPortal.Warning.BehaviorUnavailable",
-        "Foundry has not registered the portal region behaviour yet, so tokens walking into this portal will not be asked. Restart Foundry to enable it; clicking the portal still works."
-      )
-      : null;
-
-    return { ok: true, count: 2, portalId, warning };
+    return { ok: true, count: 2, portalId };
   }
 
   /**
@@ -508,7 +468,6 @@ export class ScPortalService {
       );
     }
 
-    ScPortalService.suppressToken(scene.id, token.id);
     await ScPortalService.#placeToken(scene, token, bounded);
 
     const usesLeft = await ScPortalService.#consumeUse(scene, portal);
@@ -522,9 +481,8 @@ export class ScPortalService {
   }
 
   /**
-   * Moves the token with a `displace` waypoint, which is what core uses for its
-   * own region teleport. The portal behaviour ignores displacements, so the
-   * arriving token does not immediately trip the far side and bounce back.
+   * Moves the token with a `displace` waypoint, the action core uses for its
+   * own region teleport: the hop is neither wall-checked nor measured as a walk.
    */
   static async #placeToken(scene, token, position) {
     const waypoint = {
@@ -533,12 +491,13 @@ export class ScPortalService {
       elevation: token.elevation,
       action: "displace"
     };
+    const options = {
+      animate: false,
+      [Constants.MODULE_ID]: { portalTravel: true }
+    };
 
     if (typeof token.move === "function") {
-      await token.move(waypoint, {
-        animate: false,
-        [Constants.MODULE_ID]: { portalTravel: true }
-      });
+      await token.move(waypoint, options);
       return;
     }
 
@@ -546,10 +505,7 @@ export class ScPortalService {
       _id: token.id,
       x: position.x,
       y: position.y
-    }], {
-      animate: false,
-      [Constants.MODULE_ID]: { portalTravel: true }
-    });
+    }], options);
   }
 
   static async #executeClose(scene, user, payload) {
@@ -625,7 +581,7 @@ export class ScPortalService {
   // Document construction
   // ---------------------------------------------------------------------------
 
-  static #regionData({ activity, config, portalId, side, center, radiusPixels, expiry, label, user, scene, withBehavior = true }) {
+  static #regionData({ activity, config, portalId, side, center, radiusPixels, expiry, label, user, scene }) {
     const shape = ScPortalGeometry.regionShape(center, { shape: config.shape, radiusPixels });
     const sideLabel = Constants.localize(
       side === "entry"
@@ -639,16 +595,6 @@ export class ScPortalService {
       color: config.color,
       shapes: shape ? [shape] : [],
       visibility: ScPortalService.#regionVisibility(config.visibility),
-      behaviors: withBehavior
-        ? [{
-          name: `${label} (${sideLabel})`,
-          type: PORTAL_BEHAVIOR_TYPE,
-          // A disabled behaviour is skipped when Foundry decides where to split
-          // a movement path, so turning entry detection off costs nothing.
-          disabled: ScPortalService.behaviorDisabled({ ...config, side }),
-          system: { portalId, side }
-        }]
-        : [],
       flags: {
         [Constants.MODULE_ID]: {
           [FLAG_KEY]: {
@@ -661,8 +607,6 @@ export class ScPortalService {
             oneWay: config.oneWay,
             snapToGrid: config.snapToGrid && !ScPortalGeometry.isGridless(scene),
             avoidOccupied: config.avoidOccupied,
-            triggerOnEnter: config.triggerOnEnter,
-            triggerOnClick: config.triggerOnClick,
             usesLeft: config.maxUses === "" ? null : Number(config.maxUses),
             expiresAtRound: expiry.expiresAtRound,
             expiresAtWorldTime: expiry.expiresAtWorldTime,
@@ -734,7 +678,7 @@ export class ScPortalService {
   /**
    * LAYER means the region only draws while the Regions layer is open, which is
    * how a portal shows nothing but its art and still stays reachable by the GM.
-   * Visibility is render-only, so a hidden region keeps firing its behaviour.
+   * Visibility is render-only, so a hidden portal is still found under a click.
    */
   static #regionVisibility(visibility) {
     const values = globalThis.CONST?.REGION_VISIBILITY ?? { LAYER: 0, GAMEMASTER: 1, ALWAYS: 2 };
@@ -784,139 +728,25 @@ export class ScPortalService {
   }
 
   // ---------------------------------------------------------------------------
-  // Detection
+  // Prompting
   // ---------------------------------------------------------------------------
 
   /**
-   * The exit of a one way portal sends nobody anywhere, so its behaviour is
-   * disabled rather than left to refuse the travel later. An enabled one still
-   * makes Foundry split the movement path at the boundary, so the token is
-   * stopped there waiting for a prompt that is never going to come.
+   * Registers a prompt for a token, taking over from one that is still open.
+   * A stale dialog answered later would send the token through a portal it has
+   * since walked away from, so it is closed and the question asked afresh.
    */
-  static behaviorDisabled({ triggerOnEnter, oneWay, side } = {}) {
-    return triggerOnEnter === false || Boolean(oneWay && side !== "entry");
+  static #claimPrompt(key) {
+    ScPortalService.#pendingPrompts.get(key)?.close?.();
+    const prompt = { close: null };
+    ScPortalService.#pendingPrompts.set(key, prompt);
+    return prompt;
   }
 
-  /** True when walking into this side would actually start the travel. */
-  static acceptsEntry(scene, portalId, side) {
-    const portal = ScPortalService.findPortalSide(scene, portalId, side);
-    return Boolean(portal) && !ScPortalService.behaviorDisabled(portal);
-  }
-
-  static suppressToken(sceneId, tokenId) {
-    ScPortalService.#suppressedTokens.set(`${sceneId}:${tokenId}`, Date.now());
-  }
-
-  static isSuppressed(sceneId, tokenId) {
-    const stamp = ScPortalService.#suppressedTokens.get(`${sceneId}:${tokenId}`);
-    if (!Number.isFinite(stamp)) {
-      return false;
-    }
-    if (Date.now() - stamp > ScPortalService.REENTRY_SUPPRESSION_MS) {
-      ScPortalService.#suppressedTokens.delete(`${sceneId}:${tokenId}`);
-      return false;
-    }
-    return true;
-  }
-
-  /**
-   * Entry point for the region behaviour. Runs on every client, so it hands the
-   * workflow to the active GM alone and waits for the movement animation before
-   * asking, the way the core teleport behaviour does.
-   */
-  static async handleRegionEntry({ token = null, portalId = null, side = null } = {}) {
-    if (!ScPortalService.#isResponsibleGm()) {
-      return;
-    }
-
-    const scene = token?.parent ?? null;
-    if (!scene) {
-      return;
-    }
-
-    const portal = ScPortalService.findPortalSide(scene, portalId, side);
-    if (!portal || ScPortalService.behaviorDisabled(portal)) {
-      return;
-    }
-    if (ScPortalService.isSuppressed(scene.id, token.id)) {
-      return;
-    }
-
-    await ScPortalService.#waitForMovementAnimation(token);
-    await ScPortalService.#promptAndTravel(scene, portal, token);
-  }
-
-  /**
-   * A token teleported mid-animation snaps away from under its own moving
-   * sprite. The race keeps a hidden tab, where the animation never settles,
-   * from stalling the prompt forever.
-   */
-  static async #waitForMovementAnimation(token) {
-    try {
-      const animation = token?.rendered ? token.object?.movementAnimationPromise : null;
-      if (!animation) {
-        return;
-      }
-      await Promise.race([
-        animation,
-        new Promise((resolve) => {
-          setTimeout(resolve, ScPortalService.MOVEMENT_ANIMATION_TIMEOUT_MS);
-        })
-      ]);
-    } catch (error) {
-      Logger.debug("Could not wait for the token movement animation.", error);
-    }
-  }
-
-  static async #promptAndTravel(scene, portal, tokenDocument) {
-    const key = `${scene.id}:${tokenDocument.id}`;
-    if (ScPortalService.#pendingPrompts.has(key)) {
-      return;
-    }
-    ScPortalService.#pendingPrompts.add(key);
-
-    try {
-      if (ScPortalService.isExpired(portal)) {
-        await ScPortalService.#closePortalDocuments(scene, portal.portalId);
-        return;
-      }
-
-      const confirmed = await ScPortalService.#askResponsibleUser(tokenDocument, portal);
-      if (!confirmed) {
-        return;
-      }
-
-      const result = await ScPortalService.executeOperation({
-        operation: "travel",
-        sceneId: scene.id,
-        requestUserId: game?.user?.id ?? null,
-        portalId: portal.portalId,
-        side: portal.side,
-        tokenId: tokenDocument.id
-      });
-      ScPortalService.#notifyResult(result);
-    } finally {
+  /** Only the prompt that holds the key may release it; a replaced one must not. */
+  static #releasePrompt(key, prompt) {
+    if (ScPortalService.#pendingPrompts.get(key) === prompt) {
       ScPortalService.#pendingPrompts.delete(key);
-    }
-  }
-
-  /**
-   * Asks whoever is responsible for the token: the first active player who
-   * owns it, and the GM when nobody else can answer.
-   */
-  static async #askResponsibleUser(tokenDocument, portal) {
-    const payload = ScPortalService.#promptPayload(tokenDocument, portal);
-    const user = ScPortalService.#responsibleUser(tokenDocument);
-    if (!user || user.id === game?.user?.id) {
-      return ScPortalPrompt.confirm(payload);
-    }
-
-    try {
-      const answer = await user.query(PROMPT_QUERY_ID, payload, { timeout: PROMPT_TIMEOUT });
-      return answer?.confirmed === true;
-    } catch (error) {
-      Logger.debug("The portal prompt was not answered.", error);
-      return false;
     }
   }
 
@@ -932,12 +762,6 @@ export class ScPortalService {
       actor?.testUserPermission?.(user, "OWNER")
       || item?.testUserPermission?.(user, "OWNER")
     );
-  }
-
-  static #responsibleUser(tokenDocument) {
-    const players = (game?.users?.players ?? []).filter((user) => user.active
-      && tokenDocument?.testUserPermission?.(user, "OWNER"));
-    return players[0] ?? game?.users?.activeGM ?? game?.user ?? null;
   }
 
   static #promptPayload(tokenDocument, portal) {
@@ -974,10 +798,15 @@ export class ScPortalService {
         return;
       }
 
+      // Every click on the canvas lands here; a scene without regions cannot
+      // hold a portal, so it is dismissed before any geometry is touched.
       const scene = canvas?.scene;
+      if (!scene?.regions?.size) {
+        return;
+      }
       const point = ScPortalService.#eventPoint(event, originalEvent);
       const portal = point ? ScPortalService.findPortalAtPoint(scene, point) : null;
-      if (!portal || !portal.triggerOnClick) {
+      if (!portal) {
         return;
       }
       if (portal.oneWay && portal.side !== "entry") {
@@ -997,7 +826,7 @@ export class ScPortalService {
         ));
         return;
       }
-      ScPortalService.#promptAndRequestTravel(scene, portal, token).catch((error) => {
+      ScPortalService.askToTravel(scene, portal, token).catch((error) => {
         Logger.warn("Could not resolve the portal click prompt.", error);
       });
     } catch (error) {
@@ -1055,15 +884,15 @@ export class ScPortalService {
       ));
   }
 
-  static async #promptAndRequestTravel(scene, portal, tokenDocument) {
+  /** Asks whether the token steps through, then has the GM client move it. */
+  static async askToTravel(scene, portal, tokenDocument) {
     const key = `${scene.id}:${tokenDocument.id}`;
-    if (ScPortalService.#pendingPrompts.has(key)) {
-      return;
-    }
-    ScPortalService.#pendingPrompts.add(key);
+    const prompt = ScPortalService.#claimPrompt(key);
 
     try {
-      const confirmed = await ScPortalPrompt.confirm(ScPortalService.#promptPayload(tokenDocument, portal));
+      const dialog = ScPortalPrompt.open(ScPortalService.#promptPayload(tokenDocument, portal));
+      prompt.close = dialog.close;
+      const confirmed = await dialog.promise;
       if (!confirmed) {
         return;
       }
@@ -1076,7 +905,7 @@ export class ScPortalService {
       });
       ScPortalService.#notifyResult(result);
     } finally {
-      ScPortalService.#pendingPrompts.delete(key);
+      ScPortalService.#releasePrompt(key, prompt);
     }
   }
 
@@ -1261,17 +1090,6 @@ export class ScPortalService {
     }
     const number = Number(value);
     return Number.isFinite(number) ? number : null;
-  }
-
-  /**
-   * Whether this world knows the portal region behaviour subtype.
-   *
-   * `documentTypes` is a manifest field: the server parses it at boot, so a
-   * freshly updated module reports false until Foundry restarts. Portals stay
-   * usable without it, they just cannot notice a token walking in.
-   */
-  static isBehaviorTypeAvailable() {
-    return game?.documentTypes?.RegionBehavior?.includes?.(PORTAL_BEHAVIOR_TYPE) === true;
   }
 
   static #isResponsibleGm() {

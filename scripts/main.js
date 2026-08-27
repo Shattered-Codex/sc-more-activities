@@ -10,7 +10,6 @@ import { ActivityCreateDialogTabs } from "./integrations/dnd5e/ActivityCreateDia
 import { ScCanvasActivityService } from "./activities/canvas/ScCanvasActivityService.js";
 import { ScSaveRequestCard } from "./activities/canvas/ScSaveRequestCard.js";
 import { ScContestActivityService } from "./activities/contest/ScContestActivityService.js";
-import { ScPortalRegionBehavior } from "./activities/portal/ScPortalRegionBehavior.js";
 import { ScPortalService } from "./activities/portal/ScPortalService.js";
 import { ModuleSettingsRegistrar } from "./settings/ModuleSettingsRegistrar.js";
 import { MoreActivitiesMigrationService } from "./migration/MoreActivitiesMigrationService.js";
@@ -37,7 +36,6 @@ Hooks.once("init", () => {
   ScConditionalChainCardCustomizer.registerHook();
   ScContestActivityService.registerQueries();
   ScCanvasActivityService.registerQueries();
-  ScPortalRegionBehavior.register();
   ScPortalService.registerQueries();
   ScPortalService.registerHooks();
   ScSaveRequestCard.registerHooks();

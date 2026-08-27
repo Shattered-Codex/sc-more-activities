@@ -9,6 +9,13 @@ import { Logger } from "../../support/Logger.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
+const SIDE_COLORS = {
+  entry: { border: 0x24b86a, fill: 0x39f08c },
+  exit: { border: 0x3d7bd6, fill: 0x8fd3ff }
+};
+const INVALID_COLORS = { border: 0xd32f2f, fill: 0xffb3b3 };
+const LINK_COLOR = 0x8a63d2;
+
 export class ScPortalPlacementApp extends HandlebarsApplicationMixin(ApplicationV2) {
   static DEFAULT_OPTIONS = {
     classes: ["dnd5e2", "sc-more-activities", "sc-ma-portal-placement-app"],
@@ -44,6 +51,7 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
     this.canvasMoveHandler = null;
     this.canvasContextMenuHandler = null;
     this.previewGraphics = null;
+    this.previewLabels = null;
     this.placementRangeTemplate = null;
     this.minimizedWindows = null;
     this.hasPannedToOrigin = false;
@@ -178,7 +186,7 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
     await super.close(options);
   }
 
-  #togglePlacement() {
+  async #togglePlacement() {
     if (!this.#placementSceneIsActive() || this.isSubmitting) {
       return;
     }
@@ -187,6 +195,7 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
       this.#stopCanvasListener();
       this.#drawPreviewState();
       this.render();
+      this.#expandWindow();
       return;
     }
 
@@ -204,7 +213,31 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
     canvas?.app?.view?.addEventListener?.("contextmenu", this.canvasContextMenuHandler);
     this.isPlacing = true;
     this.#ensurePreviewGraphics();
-    this.render();
+    await this.render();
+    this.#collapseWindow();
+  }
+
+  /**
+   * The window sits over the very canvas the user is about to click, so it
+   * gets out of the way while placing and comes back once both sides are down
+   * or placing stops, which is when the Open portal button matters again.
+   */
+  #collapseWindow() {
+    if (!this.isPlacing || this.isClosing || this.minimized) {
+      return;
+    }
+    Promise.resolve(this.minimize?.()).catch((error) => {
+      Logger.debug("Could not minimize the portal placement window.", error);
+    });
+  }
+
+  #expandWindow() {
+    if (this.isClosing || !this.minimized) {
+      return;
+    }
+    Promise.resolve(this.maximize?.()).catch((error) => {
+      Logger.debug("Could not restore the portal placement window.", error);
+    });
   }
 
   #stopCanvasListener() {
@@ -279,6 +312,7 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
     this.#stopCanvasListener();
     this.#drawPreviewState();
     this.render();
+    this.#expandWindow();
   }
 
   #onCanvasMove(event) {
@@ -306,6 +340,7 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
     this.hoverPoint = point;
     if (this.points.length >= 2) {
       this.#stopCanvasListener();
+      this.#expandWindow();
     }
     this.#drawPreviewState();
     this.render();
@@ -343,9 +378,6 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
           "SCMOREACTIVITIES.Activities.ScPortal.Info.Created",
           "The portal is open."
         ));
-        if (result.warning) {
-          ui.notifications?.warn?.(result.warning);
-        }
         await this.close();
         return;
       }
@@ -475,17 +507,34 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
   }
 
   #ensurePreviewGraphics() {
-    if (!globalThis.PIXI?.Graphics || this.previewGraphics) {
+    if (!globalThis.PIXI?.Graphics) {
       return;
     }
 
-    this.previewGraphics = new PIXI.Graphics();
-    this.previewGraphics.eventMode = "none";
-    this.previewGraphics.interactive = false;
-    canvas?.stage?.addChild?.(this.previewGraphics);
+    if (!this.previewGraphics) {
+      this.previewGraphics = new PIXI.Graphics();
+      this.previewGraphics.eventMode = "none";
+      this.previewGraphics.interactive = false;
+      canvas?.stage?.addChild?.(this.previewGraphics);
+    }
+
+    // Labels live in their own container so a Graphics#clear does not drop
+    // them; they are rebuilt on every redraw.
+    if (!this.previewLabels && PIXI.Container && PIXI.Text && PIXI.TextStyle) {
+      this.previewLabels = new PIXI.Container();
+      this.previewLabels.eventMode = "none";
+      this.previewLabels.interactive = false;
+      canvas?.stage?.addChild?.(this.previewLabels);
+    }
   }
 
   #destroyPreviewGraphics() {
+    if (this.previewLabels) {
+      this.#clearLabels();
+      this.previewLabels.parent?.removeChild?.(this.previewLabels);
+      this.previewLabels.destroy();
+      this.previewLabels = null;
+    }
     if (!this.previewGraphics) {
       return;
     }
@@ -503,41 +552,90 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
     }
 
     graphics.clear();
+    this.#clearLabels();
     const radius = ScPortalGeometry.radiusPixels(this.config.squares, canvas?.scene);
     const [entry, exit] = this.points;
+    const entryLabel = Constants.localize("SCMOREACTIVITIES.Activities.ScPortal.Side.Entry", "Entry");
+    const exitLabel = Constants.localize("SCMOREACTIVITIES.Activities.ScPortal.Side.Exit", "Exit");
 
     if (entry) {
-      this.#drawSide(graphics, entry, radius, 0x24b86a, 0x39f08c);
+      this.#drawSide(graphics, entry, radius, SIDE_COLORS.entry);
+      this.#drawLabel(entry, radius, entryLabel, SIDE_COLORS.entry.fill);
     }
     if (exit) {
-      this.#drawSide(graphics, exit, radius, 0x3d7bd6, 0x8fd3ff);
+      this.#drawSide(graphics, exit, radius, SIDE_COLORS.exit);
+      this.#drawLabel(exit, radius, exitLabel, SIDE_COLORS.exit.fill);
     }
     if (entry && exit) {
-      graphics.lineStyle(2, 0x8a63d2, 0.8);
-      graphics.moveTo(entry.x, entry.y);
-      graphics.lineTo(exit.x, exit.y);
+      this.#drawLink(graphics, entry, exit, radius, LINK_COLOR, 0.8);
     }
 
     if (!this.isPlacing || !this.hoverPoint || this.points.length >= 2) {
       return;
     }
 
+    // The hover preview wears the colours and name of the side it will become,
+    // so the user always knows which one the next click places.
     const valid = !this.#placementIssue(this.hoverPoint);
-    this.#drawSide(
-      graphics,
-      this.hoverPoint,
-      radius,
-      valid ? 0x1f9d55 : 0xd32f2f,
-      valid ? 0x7ed6a7 : 0xffb3b3
-    );
+    const colors = valid ? (entry ? SIDE_COLORS.exit : SIDE_COLORS.entry) : INVALID_COLORS;
+    this.#drawSide(graphics, this.hoverPoint, radius, colors);
+    this.#drawLabel(this.hoverPoint, radius, entry ? exitLabel : entryLabel, colors.fill);
     if (entry) {
-      graphics.lineStyle(2, valid ? 0x8a63d2 : 0xd32f2f, 0.6);
-      graphics.moveTo(entry.x, entry.y);
-      graphics.lineTo(this.hoverPoint.x, this.hoverPoint.y);
+      this.#drawLink(graphics, entry, this.hoverPoint, radius, valid ? LINK_COLOR : INVALID_COLORS.border, 0.6);
     }
   }
 
-  #drawSide(graphics, center, radius, borderColor, fillColor) {
+  /** A line from the edge of one side to the edge of the other, with an arrowhead pointing at the exit. */
+  #drawLink(graphics, from, to, radius, color, alpha) {
+    const angle = Math.atan2(to.y - from.y, to.x - from.x);
+    if (Math.hypot(to.x - from.x, to.y - from.y) <= radius * 2) {
+      return;
+    }
+
+    const start = { x: from.x + (Math.cos(angle) * radius), y: from.y + (Math.sin(angle) * radius) };
+    const tip = { x: to.x - (Math.cos(angle) * radius), y: to.y - (Math.sin(angle) * radius) };
+    graphics.lineStyle(2, color, alpha);
+    graphics.moveTo(start.x, start.y);
+    graphics.lineTo(tip.x, tip.y);
+
+    const size = Math.max(10, radius * 0.3);
+    const spread = 0.45;
+    graphics.lineStyle(0);
+    graphics.beginFill(color, alpha);
+    graphics.moveTo(tip.x, tip.y);
+    graphics.lineTo(tip.x - (Math.cos(angle - spread) * size), tip.y - (Math.sin(angle - spread) * size));
+    graphics.lineTo(tip.x - (Math.cos(angle + spread) * size), tip.y - (Math.sin(angle + spread) * size));
+    graphics.closePath();
+    graphics.endFill();
+  }
+
+  #drawLabel(center, radius, text, color) {
+    if (!this.previewLabels) {
+      return;
+    }
+
+    const gridSize = ScPortalGeometry.gridSize(canvas?.scene);
+    const label = new PIXI.Text(text, new PIXI.TextStyle({
+      fontFamily: "Signika, sans-serif",
+      fontSize: Math.max(Math.round(gridSize * 0.22), 14),
+      fill: color,
+      stroke: 0x000000,
+      strokeThickness: 4,
+      align: "center"
+    }));
+    label.eventMode = "none";
+    label.interactive = false;
+    label.anchor?.set?.(0.5, 1);
+    label.x = center.x;
+    label.y = center.y - radius - Math.round(gridSize * 0.08);
+    this.previewLabels.addChild(label);
+  }
+
+  #clearLabels() {
+    this.previewLabels?.removeChildren?.().forEach((child) => child.destroy?.());
+  }
+
+  #drawSide(graphics, center, radius, { border: borderColor, fill: fillColor }) {
     graphics.lineStyle(3, borderColor, 0.95);
     graphics.beginFill(fillColor, 0.3);
     if (this.config.shape === "circle") {

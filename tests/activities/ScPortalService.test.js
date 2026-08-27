@@ -17,6 +17,7 @@ function makeToken({ id, x, y, width = 1, height = 1, owner = true }) {
     height,
     elevation: 0,
     moves: [],
+    moveOptions: [],
     rendered: false,
     testUserPermission: () => owner
   };
@@ -24,16 +25,44 @@ function makeToken({ id, x, y, width = 1, height = 1, owner = true }) {
   // The real one only settles after a server round trip, so this one yields
   // too: without it nothing else can run while a token is being moved, and a
   // race between two travellers could never show up here.
-  token.move = async(waypoint) => {
+  token.move = async(waypoint, options = {}) => {
     await new Promise((resolve) => {
       setTimeout(resolve, 0);
     });
     token.moves.push(waypoint);
+    token.moveOptions.push(options);
     token.x = waypoint.x;
     token.y = waypoint.y;
     return token;
   };
   return token;
+}
+
+/** Lets the pending microtasks and timers of a prompt that was not awaited run. */
+function settle() {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 5);
+  });
+}
+
+/**
+ * A DialogV2 stand-in that keeps every dialog it opened, so a test can answer
+ * or close them in whichever order it needs.
+ */
+function installDialogs() {
+  const dialogs = [];
+  globalThis.foundry.applications = {
+    api: {
+      DialogV2: {
+        confirm: (config) => new Promise((resolve) => {
+          const dialog = { answer: resolve, close: async() => resolve(null) };
+          dialogs.push(dialog);
+          config.render?.(null, dialog);
+        })
+      }
+    }
+  };
+  return dialogs;
 }
 
 /** The waypoints a token was moved through, in the shape the service sends. */
@@ -57,9 +86,7 @@ function makeRegion(scene, { id, portalId, side, center, overrides = {} }) {
           oneWay: false,
           snapToGrid: true,
           avoidOccupied: true,
-          triggerOnEnter: true,
-          triggerOnClick: true,
-          usesLeft: null,
+              usesLeft: null,
           expiresAtRound: null,
           expiresAtWorldTime: null,
           combatId: null,
@@ -141,8 +168,7 @@ function installGlobals(t, scene, { worldTime = 0, combat = null } = {}) {
     scenes: new Map([[scene.id, scene]]),
     combats: new Map(combat ? [[combat.id, combat]] : []),
     combat,
-    time: { worldTime },
-    documentTypes: { RegionBehavior: ["sc-more-activities.scPortal"] }
+    time: { worldTime }
   };
   globalThis.game.users.players = [];
   globalThis.game.users.activeGM = { id: "gm", isGM: true, active: true };
@@ -432,8 +458,6 @@ function makeActivity({ owner = true, ...overrides } = {}) {
       snapToGrid: true,
       avoidOccupied: true,
       oneWay: false,
-      triggerOnEnter: true,
-      triggerOnClick: true,
       maxUses: "2",
       durationRounds: "10",
       visibility: "all",
@@ -647,251 +671,6 @@ test("a portal opened during combat carries the round deadline of that combat", 
   assert.equal(portal.expiresAtRound, 12);
 });
 
-test("each portal side carries the behaviour Foundry needs to detect entry", async(t) => {
-  const caster = makeToken({ id: "caster", x: 100, y: 100 });
-  const scene = makeScene({ tokens: [caster] });
-  installGlobals(t, scene);
-  globalThis.fromUuid = async() => makeActivity();
-
-  await ScPortalService.executeOperation(createRequest(scene));
-
-  // Without an enabled behaviour subscribing to a TOKEN_MOVE_* event, Foundry
-  // does not split the movement path at the region boundary, so a token never
-  // produces an update while it stands on the portal.
-  for (const document of scene.created[0][1]) {
-    const [behavior] = document.behaviors;
-    assert.equal(behavior.type, "sc-more-activities.scPortal");
-    assert.equal(behavior.disabled, false);
-    assert.equal(behavior.system.portalId, document.flags[MODULE_ID].portal.portalId);
-    assert.equal(behavior.system.side, document.flags[MODULE_ID].portal.side);
-  }
-});
-
-test("turning entry detection off disables the behaviour instead of dropping it", async(t) => {
-  const caster = makeToken({ id: "caster", x: 100, y: 100 });
-  const scene = makeScene({ tokens: [caster] });
-  installGlobals(t, scene);
-  globalThis.fromUuid = async() => makeActivity({ triggerOnEnter: false });
-
-  await ScPortalService.executeOperation(createRequest(scene));
-
-  const [behavior] = scene.created[0][1][0].behaviors;
-  assert.equal(behavior.type, "sc-more-activities.scPortal");
-  assert.equal(behavior.disabled, true);
-});
-
-test("a confirmed region entry sends the token to the other side", async(t) => {
-  const walker = makeToken({ id: "walker", x: 100, y: 100 });
-  const scene = makeScene({ tokens: [walker] });
-  installGlobals(t, scene);
-  globalThis.foundry.applications = { api: { DialogV2: { confirm: async() => true } } };
-
-  await ScPortalService.handleRegionEntry({ token: walker, portalId: "p1", side: "entry" });
-
-  assert.deepEqual(movesOf(scene, "walker"), [{ x: 900, y: 900, elevation: 0, action: "displace" }]);
-});
-
-test("a declined region entry leaves the token where it is", async(t) => {
-  const stayer = makeToken({ id: "stayer", x: 100, y: 100 });
-  const scene = makeScene({ tokens: [stayer] });
-  installGlobals(t, scene);
-  globalThis.foundry.applications = { api: { DialogV2: { confirm: async() => false } } };
-
-  await ScPortalService.handleRegionEntry({ token: stayer, portalId: "p1", side: "entry" });
-
-  assert.deepEqual(movesOf(scene, "stayer"), []);
-});
-
-test("a region entry is ignored while the token is suppressed after travelling", async(t) => {
-  const returner = makeToken({ id: "returner", x: 900, y: 900 });
-  const scene = makeScene({ tokens: [returner] });
-  installGlobals(t, scene);
-  globalThis.foundry.applications = { api: { DialogV2: { confirm: async() => true } } };
-
-  ScPortalService.suppressToken(scene.id, returner.id);
-  await ScPortalService.handleRegionEntry({ token: returner, portalId: "p1", side: "exit" });
-
-  assert.deepEqual(movesOf(scene, "returner"), []);
-});
-
-test("a region entry on the exit of a one way portal is ignored", async(t) => {
-  const backtracker = makeToken({ id: "backtracker", x: 900, y: 900 });
-  const scene = makeScene({ tokens: [backtracker], portalOverrides: { oneWay: true } });
-  installGlobals(t, scene);
-  globalThis.foundry.applications = { api: { DialogV2: { confirm: async() => true } } };
-
-  await ScPortalService.handleRegionEntry({ token: backtracker, portalId: "p1", side: "exit" });
-
-  assert.deepEqual(movesOf(scene, "backtracker"), []);
-});
-
-test("an unregistered behaviour subtype still opens the portal, with a warning", async(t) => {
-  const caster = makeToken({ id: "caster", x: 100, y: 100 });
-  const scene = makeScene({ tokens: [caster] });
-  installGlobals(t, scene);
-  // What a world looks like between installing the module and restarting
-  // Foundry: the manifest subtype has not reached game.documentTypes yet.
-  globalThis.game.documentTypes = { RegionBehavior: [] };
-  globalThis.fromUuid = async() => makeActivity();
-
-  const result = await ScPortalService.executeOperation(createRequest(scene));
-
-  // A region carrying an unknown behaviour type fails validation outright, so
-  // the portal has to be created without it rather than not at all.
-  assert.equal(result.ok, true);
-  assert.deepEqual(scene.created[0][1][0].behaviors, []);
-  assert.match(result.warning ?? "", /Restart Foundry/);
-});
-
-test("the warning is skipped when entry detection was turned off anyway", async(t) => {
-  const caster = makeToken({ id: "caster", x: 100, y: 100 });
-  const scene = makeScene({ tokens: [caster] });
-  installGlobals(t, scene);
-  globalThis.game.documentTypes = { RegionBehavior: [] };
-  globalThis.fromUuid = async() => makeActivity({ triggerOnEnter: false });
-
-  const result = await ScPortalService.executeOperation(createRequest(scene));
-
-  assert.equal(result.ok, true);
-  assert.equal(result.warning, null);
-});
-
-test("the exit of a one way portal is created with its behaviour disabled", async(t) => {
-  const caster = makeToken({ id: "caster", x: 100, y: 100 });
-  const scene = makeScene({ tokens: [caster] });
-  installGlobals(t, scene);
-  globalThis.fromUuid = async() => makeActivity({ oneWay: true });
-
-  await ScPortalService.executeOperation(createRequest(scene));
-
-  const [entry, exit] = scene.created[0][1];
-  // An enabled behaviour still splits the movement path, so the token would be
-  // stopped on the exit waiting for a prompt that never comes.
-  assert.equal(entry.behaviors[0].disabled, false);
-  assert.equal(exit.behaviors[0].disabled, true);
-});
-
-test("both sides of a two way portal keep their behaviour enabled", async(t) => {
-  const caster = makeToken({ id: "caster", x: 100, y: 100 });
-  const scene = makeScene({ tokens: [caster] });
-  installGlobals(t, scene);
-  globalThis.fromUuid = async() => makeActivity();
-
-  await ScPortalService.executeOperation(createRequest(scene));
-
-  for (const region of scene.created[0][1]) {
-    assert.equal(region.behaviors[0].disabled, false);
-  }
-});
-
-test("only the sides that actually send a token accept entry", async(t) => {
-  const scene = makeScene({ tokens: [], portalOverrides: { oneWay: true } });
-  installGlobals(t, scene);
-
-  assert.equal(ScPortalService.acceptsEntry(scene, "p1", "entry"), true);
-  assert.equal(ScPortalService.acceptsEntry(scene, "p1", "exit"), false);
-  assert.equal(ScPortalService.acceptsEntry(scene, "nope", "entry"), false);
-});
-
-test("entry detection turned off means no side accepts entry", async(t) => {
-  const scene = makeScene({ tokens: [], portalOverrides: { triggerOnEnter: false } });
-  installGlobals(t, scene);
-
-  assert.equal(ScPortalService.acceptsEntry(scene, "p1", "entry"), false);
-  assert.equal(ScPortalService.acceptsEntry(scene, "p1", "exit"), false);
-});
-
-test("a portal side missing its behaviour is repaired once the subtype exists", async(t) => {
-  const scene = makeScene({ tokens: [] });
-  installGlobals(t, scene);
-  for (const region of scene.regions.values()) {
-    region.name = "Portal";
-    region.behaviors = [];
-    region.createEmbeddedDocuments = async(type, data) => {
-      region.behaviors.push(...data);
-      return data;
-    };
-  }
-
-  const repaired = await ScPortalService.repairMissingBehaviors(scene);
-
-  assert.equal(repaired, 2);
-  for (const region of scene.regions.values()) {
-    const [behavior] = region.behaviors;
-    assert.equal(behavior.type, "sc-more-activities.scPortal");
-    assert.equal(behavior.system.side, region.flags[MODULE_ID].portal.side);
-  }
-});
-
-test("repair disables the behaviour on the exit of a one way portal", async(t) => {
-  // Portals opened before the exit learned to stay out of the way are still on
-  // the scene, so the flag has to be corrected in place.
-  const scene = makeScene({ tokens: [], portalOverrides: { oneWay: true } });
-  installGlobals(t, scene);
-  for (const region of scene.regions.values()) {
-    region.behaviors = [{
-      id: `behavior-${region.id}`,
-      type: "sc-more-activities.scPortal",
-      disabled: false
-    }];
-    region.updateEmbeddedDocuments = async(type, updates) => {
-      for (const update of updates) {
-        const behavior = region.behaviors.find((entry) => entry.id === update._id);
-        Object.assign(behavior, update);
-      }
-      return updates;
-    };
-  }
-
-  const repaired = await ScPortalService.repairMissingBehaviors(scene);
-
-  assert.equal(repaired, 1);
-  const disabledBySide = new Map([...scene.regions.values()]
-    .map((region) => [region.flags[MODULE_ID].portal.side, region.behaviors[0].disabled]));
-  assert.equal(disabledBySide.get("entry"), false);
-  assert.equal(disabledBySide.get("exit"), true);
-});
-
-test("repair leaves correctly flagged behaviours untouched", async(t) => {
-  const scene = makeScene({ tokens: [] });
-  installGlobals(t, scene);
-  for (const region of scene.regions.values()) {
-    region.behaviors = [{ id: `behavior-${region.id}`, type: "sc-more-activities.scPortal", disabled: false }];
-    region.updateEmbeddedDocuments = async() => {
-      throw new Error("should not update");
-    };
-  }
-
-  assert.equal(await ScPortalService.repairMissingBehaviors(scene), 0);
-});
-
-test("repair does nothing while the subtype is still unregistered", async(t) => {
-  const scene = makeScene({ tokens: [] });
-  installGlobals(t, scene);
-  globalThis.game.documentTypes = { RegionBehavior: [] };
-  for (const region of scene.regions.values()) {
-    region.behaviors = [];
-    region.createEmbeddedDocuments = async() => {
-      throw new Error("must not be called");
-    };
-  }
-
-  assert.equal(await ScPortalService.repairMissingBehaviors(scene), 0);
-});
-
-test("repair leaves a side that already carries its behaviour alone", async(t) => {
-  const scene = makeScene({ tokens: [] });
-  installGlobals(t, scene);
-  for (const region of scene.regions.values()) {
-    region.behaviors = [{ type: "sc-more-activities.scPortal" }];
-    region.createEmbeddedDocuments = async() => {
-      throw new Error("must not be called");
-    };
-  }
-
-  assert.equal(await ScPortalService.repairMissingBehaviors(scene), 0);
-});
-
 /** A portal side as findTravellerForClick sees it. */
 function portalSide(center = { x: 150, y: 150 }) {
   return { center, radiusPixels: 50, shape: "square", portalId: "p1", side: "entry" };
@@ -966,7 +745,7 @@ test("a far away token is not dragged through the portal by the fallback", async
   assert.equal(ScPortalService.findTravellerForClick(portalSide(), scene), null);
 });
 
-test("a hidden portal draws nothing during play but keeps its behaviour", async(t) => {
+test("a hidden portal draws nothing during play", async(t) => {
   const caster = makeToken({ id: "caster", x: 100, y: 100 });
   const scene = makeScene({ tokens: [caster] });
   installGlobals(t, scene);
@@ -976,11 +755,8 @@ test("a hidden portal draws nothing during play but keeps its behaviour", async(
 
   assert.equal(result.ok, true);
   const [region] = scene.created[0][1];
-  // LAYER: only drawn while the Regions layer is open. Visibility is render
-  // only, so entry detection has to survive it.
+  // LAYER: only drawn while the Regions layer is open.
   assert.equal(region.visibility, CONST.REGION_VISIBILITY.LAYER);
-  assert.equal(region.behaviors[0].type, "sc-more-activities.scPortal");
-  assert.equal(region.behaviors[0].disabled, false);
 });
 
 test("visibility choices map to the matching Foundry constants", async(t) => {
@@ -1035,4 +811,162 @@ test("a larger portal produces a larger region and art tile", async(t) => {
   const [tile] = scene.created[1][1];
   assert.equal(tile.width, 200);
   assert.equal(tile.height, 200);
+});
+
+
+test("a confirmed click sends the token through the portal", async(t) => {
+  const clicker = makeToken({ id: "clicker", x: 100, y: 100 });
+  const scene = makeScene({ tokens: [clicker] });
+  installGlobals(t, scene);
+  globalThis.foundry.applications = { api: { DialogV2: { confirm: async() => true } } };
+
+  await ScPortalService.askToTravel(scene, ScPortalService.findPortalSide(scene, "p1", "entry"), clicker);
+
+  assert.deepEqual(movesOf(scene, "clicker"), [{ x: 900, y: 900, elevation: 0, action: "displace" }]);
+});
+
+test("a declined click leaves the token where it is", async(t) => {
+  const stayer = makeToken({ id: "stayer", x: 100, y: 100 });
+  const scene = makeScene({ tokens: [stayer] });
+  installGlobals(t, scene);
+  globalThis.foundry.applications = { api: { DialogV2: { confirm: async() => false } } };
+
+  await ScPortalService.askToTravel(scene, ScPortalService.findPortalSide(scene, "p1", "entry"), stayer);
+
+  assert.deepEqual(movesOf(scene, "stayer"), []);
+});
+
+test("the prompt carries the module layout and the portal details", async(t) => {
+  const reader = makeToken({ id: "reader", x: 100, y: 100 });
+  const scene = makeScene({ tokens: [reader], portalOverrides: { usesLeft: 2, oneWay: true } });
+  installGlobals(t, scene);
+  const configs = [];
+  globalThis.foundry.applications = {
+    api: {
+      DialogV2: {
+        confirm: async(config) => {
+          configs.push(config);
+          return false;
+        }
+      }
+    }
+  };
+
+  await ScPortalService.askToTravel(scene, ScPortalService.findPortalSide(scene, "p1", "entry"), reader);
+
+  const [config] = configs;
+  assert.deepEqual(config.classes, ["dialog", "sc-more-activities", "sc-ma-portal-prompt-dialog"]);
+  assert.match(config.content, /sc-ma-portal-prompt/);
+  assert.match(config.content, /reader/);
+  assert.match(config.content, /Crossings left: 2/);
+  assert.match(config.content, /only travels one way/);
+});
+
+test("an unlimited portal does not claim to have zero crossings left", async(t) => {
+  const reader = makeToken({ id: "reader", x: 100, y: 100 });
+  const scene = makeScene({ tokens: [reader] });
+  installGlobals(t, scene);
+  const configs = [];
+  globalThis.foundry.applications = {
+    api: {
+      DialogV2: {
+        confirm: async(config) => {
+          configs.push(config);
+          return false;
+        }
+      }
+    }
+  };
+
+  await ScPortalService.askToTravel(scene, ScPortalService.findPortalSide(scene, "p1", "entry"), reader);
+
+  assert.doesNotMatch(configs[0].content, /Crossings left/);
+  assert.doesNotMatch(configs[0].content, /one way/);
+});
+
+test("clicking again closes the question still open and asks afresh", async(t) => {
+  const repeater = makeToken({ id: "repeater", x: 100, y: 100 });
+  const scene = makeScene({ tokens: [repeater] });
+  installGlobals(t, scene);
+  const dialogs = installDialogs();
+  const portal = ScPortalService.findPortalSide(scene, "p1", "entry");
+
+  const first = ScPortalService.askToTravel(scene, portal, repeater);
+  await settle();
+  assert.equal(dialogs.length, 1);
+
+  const second = ScPortalService.askToTravel(scene, portal, repeater);
+  await settle();
+  assert.equal(dialogs.length, 2);
+
+  // The stale dialog was closed by the module; answering the fresh one sends
+  // the token through exactly once.
+  await first;
+  dialogs[1].answer(true);
+  await second;
+
+  assert.deepEqual(movesOf(scene, "repeater"), [{ x: 900, y: 900, elevation: 0, action: "displace" }]);
+});
+
+test("a replaced question does not release the prompt of its replacement", async(t) => {
+  const insister = makeToken({ id: "insister", x: 100, y: 100 });
+  const scene = makeScene({ tokens: [insister] });
+  installGlobals(t, scene);
+  const dialogs = installDialogs();
+  const portal = ScPortalService.findPortalSide(scene, "p1", "entry");
+
+  const first = ScPortalService.askToTravel(scene, portal, insister);
+  await settle();
+  const second = ScPortalService.askToTravel(scene, portal, insister);
+  await settle();
+  await first;
+
+  // With the second question still open, a third click must take over from
+  // it rather than find the token free and stack another dialog on top.
+  const third = ScPortalService.askToTravel(scene, portal, insister);
+  await settle();
+  assert.equal(dialogs.length, 3);
+  await second;
+  dialogs[2].answer(false);
+  await third;
+
+  assert.deepEqual(movesOf(scene, "insister"), []);
+});
+
+test("behaviours left by pre-release portals are stripped from the scene", async(t) => {
+  // Foundry keeps an undeclared behaviour subtype as raw data, and core calls
+  // a terrain hook on every enabled behaviour while planning any token move,
+  // so one of these on the scene breaks movement for every token in it.
+  const scene = makeScene({ tokens: [] });
+  installGlobals(t, scene);
+  for (const region of scene.regions.values()) {
+    region.behaviors = [
+      { id: `legacy-${region.id}`, type: "sc-more-activities.scPortal", disabled: false },
+      { id: `other-${region.id}`, type: "pauseGame", disabled: false }
+    ];
+    region.deleteEmbeddedDocuments = async(type, ids) => {
+      assert.equal(type, "RegionBehavior");
+      region.behaviors = region.behaviors.filter((behavior) => !ids.includes(behavior.id));
+      return ids;
+    };
+  }
+
+  assert.equal(await ScPortalService.removeLegacyBehaviors(scene), 2);
+  for (const region of scene.regions.values()) {
+    assert.deepEqual(region.behaviors.map((behavior) => behavior.type), ["pauseGame"]);
+  }
+});
+
+test("a player client leaves legacy behaviours for the GM to strip", async(t) => {
+  const scene = makeScene({ tokens: [] });
+  installGlobals(t, scene);
+  globalThis.game.user = { id: "player", isGM: false };
+  for (const region of scene.regions.values()) {
+    region.behaviors = [{ id: `legacy-${region.id}`, type: "sc-more-activities.scPortal" }];
+    region.deleteEmbeddedDocuments = async() => {
+      throw new Error("must not be called");
+    };
+  }
+
+  assert.equal(await ScPortalService.removeLegacyBehaviors(scene), 0);
 });
