@@ -64,6 +64,8 @@ The goal is to preserve the value of richer activity workflows while shaping the
 
 Some bundled activity icons are sourced from [game-icons.net](https://game-icons.net/),
 currently using artwork by Delapouite and Lorc.
+The portal activity uses [Magic Portal by Lorc](https://game-icons.net/1x1/lorc/magic-portal.html),
+recolored to match the module palette.
 Game-icons.net states that its icons are provided under the
 [Creative Commons Attribution 3.0 license](https://creativecommons.org/licenses/by/3.0/),
 which requires attribution to the original authors. See the
