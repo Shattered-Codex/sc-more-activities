@@ -6,6 +6,7 @@ import { registerScGrantActivity } from "./grant/registerScGrantActivity.js";
 import { registerScHookActivity } from "./hook/registerScHookActivity.js";
 import { registerScMacroActivity } from "./macro/registerScMacroActivity.js";
 import { registerScMovementActivity } from "./movement/registerScMovementActivity.js";
+import { registerScPortalActivity } from "./portal/registerScPortalActivity.js";
 import { registerScSoundActivity } from "./sound/registerScSoundActivity.js";
 import { registerScTeleportActivity } from "./teleport/registerScTeleportActivity.js";
 import { registerScWallActivity } from "./wall/registerScWallActivity.js";
@@ -22,6 +23,7 @@ export function registerBuiltInActivities(activitiesApi) {
     registerScGrantActivity(activitiesApi),
     registerScTeleportActivity(activitiesApi),
     registerScMovementActivity(activitiesApi),
+    registerScPortalActivity(activitiesApi),
     registerScWallActivity(activitiesApi)
   ]);
 }

@@ -49,6 +49,19 @@
           </article>
         {{/if}}
 
+        {{#if isPortalScope}}
+          <article class="sc-ma-preview-card sc-ma-preview-card--portal">
+            <div class="sc-ma-preview-card-label">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Sections.Portal" }}</div>
+            <div class="sc-ma-preview-stage sc-ma-preview-stage--portal">
+              <div class="sc-ma-preview-range"></div>
+              <div class="sc-ma-preview-origin"></div>
+              <div class="sc-ma-preview-portal-link"></div>
+              <div class="sc-ma-preview-portal-side sc-ma-preview-portal-side--entry"></div>
+              <div class="sc-ma-preview-portal-side sc-ma-preview-portal-side--exit"></div>
+            </div>
+          </article>
+        {{/if}}
+
         {{#if isWallScope}}
           <article class="sc-ma-preview-card sc-ma-preview-card--wall">
             <div class="sc-ma-preview-card-label">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Sections.Wall" }}</div>
@@ -66,134 +79,29 @@
     <section class="sc-ma-preview-colors-section sc-ma-preview-colors-section--active">
       <div class="sc-ma-preview-colors-settings">
         <div class="sc-ma-preview-colors-settings-section">
-          {{#if isTeleportScope}}
-            <h4>{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Sections.Teleport" }}</h4>
-            <div class="sc-ma-preview-colors-field-list">
+          <h4>{{ scopeLabel }}</h4>
+          <div class="sc-ma-preview-colors-field-list">
+            {{#each colorFields as |field|}}
               <div class="sc-ma-preview-colors-form-group form-group" data-field-type="color">
-                <label for="sc-ma-teleport-range-fill">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Fields.Fill.Label" }}</label>
+                <label for="{{ field.id }}">{{ field.label }}</label>
                 <div class="form-fields">
-                  <div class="sc-ma-color-control" data-color-control="teleportRangeFill">
+                  <div class="sc-ma-color-control" data-color-control="{{ field.key }}">
                     <input
                       type="text"
                       class="sc-ma-hex-input"
-                      data-hex-for="teleportRangeFill"
-                      value="{{ colors.teleportRangeFill }}"
+                      data-hex-for="{{ field.key }}"
+                      value="{{ field.value }}"
                       maxlength="7"
                       spellcheck="false"
                       autocomplete="off"
                       aria-label="Hex value"
                     />
-                    <input id="sc-ma-teleport-range-fill" type="color" name="teleportRangeFill" class="sc-ma-color-picker" value="{{ colors.teleportRangeFill }}">
+                    <input id="{{ field.id }}" type="color" name="{{ field.key }}" class="sc-ma-color-picker" value="{{ field.value }}">
                   </div>
                 </div>
               </div>
-
-              <div class="sc-ma-preview-colors-form-group form-group" data-field-type="color">
-                <label for="sc-ma-teleport-range-border">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Fields.Border.Label" }}</label>
-                <div class="form-fields">
-                  <div class="sc-ma-color-control" data-color-control="teleportRangeBorder">
-                    <input
-                      type="text"
-                      class="sc-ma-hex-input"
-                      data-hex-for="teleportRangeBorder"
-                      value="{{ colors.teleportRangeBorder }}"
-                      maxlength="7"
-                      spellcheck="false"
-                      autocomplete="off"
-                      aria-label="Hex value"
-                    />
-                    <input id="sc-ma-teleport-range-border" type="color" name="teleportRangeBorder" class="sc-ma-color-picker" value="{{ colors.teleportRangeBorder }}">
-                  </div>
-                </div>
-              </div>
-            </div>
-          {{/if}}
-
-          {{#if isMovementScope}}
-            <h4>{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Sections.Movement" }}</h4>
-            <div class="sc-ma-preview-colors-field-list">
-              <div class="sc-ma-preview-colors-form-group form-group" data-field-type="color">
-                <label for="sc-ma-movement-range-fill">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Fields.Fill.Label" }}</label>
-                <div class="form-fields">
-                  <div class="sc-ma-color-control" data-color-control="movementRangeFill">
-                    <input
-                      type="text"
-                      class="sc-ma-hex-input"
-                      data-hex-for="movementRangeFill"
-                      value="{{ colors.movementRangeFill }}"
-                      maxlength="7"
-                      spellcheck="false"
-                      autocomplete="off"
-                      aria-label="Hex value"
-                    />
-                    <input id="sc-ma-movement-range-fill" type="color" name="movementRangeFill" class="sc-ma-color-picker" value="{{ colors.movementRangeFill }}">
-                  </div>
-                </div>
-              </div>
-
-              <div class="sc-ma-preview-colors-form-group form-group" data-field-type="color">
-                <label for="sc-ma-movement-range-border">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Fields.Border.Label" }}</label>
-                <div class="form-fields">
-                  <div class="sc-ma-color-control" data-color-control="movementRangeBorder">
-                    <input
-                      type="text"
-                      class="sc-ma-hex-input"
-                      data-hex-for="movementRangeBorder"
-                      value="{{ colors.movementRangeBorder }}"
-                      maxlength="7"
-                      spellcheck="false"
-                      autocomplete="off"
-                      aria-label="Hex value"
-                    />
-                    <input id="sc-ma-movement-range-border" type="color" name="movementRangeBorder" class="sc-ma-color-picker" value="{{ colors.movementRangeBorder }}">
-                  </div>
-                </div>
-              </div>
-            </div>
-          {{/if}}
-
-          {{#if isWallScope}}
-            <h4>{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Sections.Wall" }}</h4>
-            <div class="sc-ma-preview-colors-field-list">
-              <div class="sc-ma-preview-colors-form-group form-group" data-field-type="color">
-                <label for="sc-ma-wall-range-fill">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Fields.Fill.Label" }}</label>
-                <div class="form-fields">
-                  <div class="sc-ma-color-control" data-color-control="wallRangeFill">
-                    <input
-                      type="text"
-                      class="sc-ma-hex-input"
-                      data-hex-for="wallRangeFill"
-                      value="{{ colors.wallRangeFill }}"
-                      maxlength="7"
-                      spellcheck="false"
-                      autocomplete="off"
-                      aria-label="Hex value"
-                    />
-                    <input id="sc-ma-wall-range-fill" type="color" name="wallRangeFill" class="sc-ma-color-picker" value="{{ colors.wallRangeFill }}">
-                  </div>
-                </div>
-              </div>
-
-              <div class="sc-ma-preview-colors-form-group form-group" data-field-type="color">
-                <label for="sc-ma-wall-range-border">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Fields.Border.Label" }}</label>
-                <div class="form-fields">
-                  <div class="sc-ma-color-control" data-color-control="wallRangeBorder">
-                    <input
-                      type="text"
-                      class="sc-ma-hex-input"
-                      data-hex-for="wallRangeBorder"
-                      value="{{ colors.wallRangeBorder }}"
-                      maxlength="7"
-                      spellcheck="false"
-                      autocomplete="off"
-                      aria-label="Hex value"
-                    />
-                    <input id="sc-ma-wall-range-border" type="color" name="wallRangeBorder" class="sc-ma-color-picker" value="{{ colors.wallRangeBorder }}">
-                  </div>
-                </div>
-              </div>
-            </div>
-          {{/if}}
+            {{/each}}
+          </div>
         </div>
       </div>
     </section>

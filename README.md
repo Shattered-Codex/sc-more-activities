@@ -42,7 +42,7 @@ The goal is to preserve the value of richer activity workflows while shaping the
 - A public registration hook and API for SC modules and third-party modules
 - A grouped activity creation dialog that separates native D&D 5e activities from Shattered Codex activities
 - A GM activity catalog with diagnostics, filters, and enable/disable controls
-- Preview color settings for teleport, movement, and wall overlays
+- Preview color settings for teleport, movement, wall, and portal overlays
 - Explicit preview/apply/restore migration tools for legacy `more-activities` data
 
 ## Included Activity Types
@@ -58,6 +58,7 @@ The goal is to preserve the value of richer activity workflows while shaping the
 - `sc-teleport`: move tokens through a guided teleport workflow
 - `sc-movement`: push or pull tokens, with an optional direction choice at use time and preview support
 - `sc-wall`: create wall previews and GM-mediated wall placement
+- `sc-portal`: open a linked pair of portals and ask tokens whether they want to cross
 
 ## Asset Credits
 
@@ -372,6 +373,72 @@ Limitations:
   `damage` activity step and read `roll.sum` there.
 - Results only flow between steps of the same execution. Once the flow ends, the result is gone — a later
   use starts fresh.
+
+## SC Portal Guide
+
+`sc-portal` opens a linked pair of portals on the scene. A token that finishes its movement inside one
+side, or clicks it, is asked whether it wants to cross to the other side.
+
+### Placing A Portal
+
+Using the activity opens the placement application. The first click places the entry side, the second
+places the exit side, and right click stops placing. Both sides are validated against **Placement
+range** measured from the acting token, and optionally against **Maximum distance between sides**.
+Both fields accept roll formulas.
+
+**Area** sets each side's footprint in grid squares, from 1×1 to 4×4. An even footprint snaps to a grid
+corner rather than a cell center, so a 2×2 portal covers four whole cells instead of straddling eight.
+
+Each side becomes a scene `Region` carrying an `SC Portal` region behavior, so the portal is visible on
+the canvas, respects the **Visible to** setting, and can be deleted by the GM from the Regions layer at
+any time. Setting **Visible to** to *Hidden (art only)* draws nothing during play, which is what you
+want once the portal has its own art; the region still fires its behavior, and the GM can still see and
+delete it on the Regions layer. Deleting one side closes the other. When entry or exit art is configured, a matching `Tile` is
+placed over the side and removed with it. The art can be an image or a video (`webm`, `mp4`, `ogv`);
+video plays looped and muted, which is what an animated portal usually wants.
+
+### Crossing
+
+- **Ask on entry**: a token that stops inside a portal is asked whether it wants to cross.
+- **Ask on click**: clicking a portal while controlling a token inside it, or next to it, asks the same
+  question.
+
+The question is shown to the first active player who owns the token, and to the GM when nobody else can
+answer. The token itself is always moved by the GM client, like every other canvas activity in this
+module.
+
+Entry rides on Foundry's own `tokenMoveIn` region event, so a token that walks *across* a portal stops
+on it and is asked, not just one that ends its movement there. Declining leaves the token standing on
+the portal where its movement stopped.
+
+> **Restart Foundry after installing or updating the module.** Entry detection needs the `SC Portal`
+> region behavior, declared through the `documentTypes` manifest field, and Foundry only reads package
+> manifests when the server starts. Until then, opening a portal warns you and the portal is created
+> without the behavior: clicking it still works, walking into it does nothing. Portals created in that
+> state repair themselves the next time you load the scene after the restart.
+
+### Grid, Snapping, And Occupied Spaces
+
+**Snap to grid** aligns both sides and the arriving token to the grid. On a scene without a grid there
+is nothing to snap to, so the setting is ignored and the portal is placed exactly where you click; the
+placement application says so when that happens.
+
+**Avoid occupied spaces** looks for a free space near the destination instead of dropping the token on
+top of another one, searching outwards a few cells at a time. When everything nearby is taken the
+crossing is refused rather than stacking tokens.
+
+### Closing A Portal
+
+A portal closes when any of these happens:
+
+- the configured number of crossings is spent;
+- the duration runs out;
+- the GM presses **Close portal** on the whispered chat card;
+- the GM deletes either side from the Regions layer.
+
+**Duration in rounds** is counted in combat rounds while the combat that opened the portal is running,
+and as the same amount of world time outside combat, so a portal opened out of initiative still
+expires. A duration of `0` keeps the portal open until it is closed.
 
 ## Migration From `more-activities`
 

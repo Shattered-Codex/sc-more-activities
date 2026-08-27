@@ -513,6 +513,8 @@
   --sc-ma-preview-movement-fill: #8fd3ff;
   --sc-ma-preview-wall-border: #d32f2f;
   --sc-ma-preview-wall-fill: #fff4a8;
+  --sc-ma-preview-portal-border: #8a63d2;
+  --sc-ma-preview-portal-fill: #c9b3f0;
   box-sizing: border-box;
   display: flex;
   flex: 1 1 auto;
@@ -657,7 +659,9 @@
 .sc-ma-preview-stage .sc-ma-preview-path,
 .sc-ma-preview-stage .sc-ma-preview-start,
 .sc-ma-preview-stage .sc-ma-preview-end,
-.sc-ma-preview-stage .sc-ma-preview-wall-line {
+.sc-ma-preview-stage .sc-ma-preview-wall-line,
+.sc-ma-preview-stage .sc-ma-preview-portal-side,
+.sc-ma-preview-stage .sc-ma-preview-portal-link {
   position: absolute;
 }
 
@@ -779,6 +783,50 @@
   top: 51%;
   transform: rotate(-16deg);
   width: 18%;
+}
+
+.sc-ma-preview-stage--portal .sc-ma-preview-range {
+  background: color-mix(in srgb, var(--sc-ma-preview-portal-fill) 30%, transparent 70%);
+  border: 2px solid var(--sc-ma-preview-portal-border);
+  border-radius: 999px;
+  height: 66%;
+  left: 8%;
+  top: 16%;
+  width: 62%;
+}
+
+.sc-ma-preview-stage--portal .sc-ma-preview-origin {
+  background: var(--sc-ma-preview-portal-border);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--sc-ma-preview-portal-fill) 28%, transparent 72%);
+  height: 10px;
+  left: 22%;
+  top: 47%;
+  width: 10px;
+}
+
+.sc-ma-preview-stage--portal .sc-ma-preview-portal-link {
+  border-top: 2px dashed var(--sc-ma-preview-portal-border);
+  left: 40%;
+  top: 49%;
+  width: 24%;
+}
+
+.sc-ma-preview-stage--portal .sc-ma-preview-portal-side {
+  background: color-mix(in srgb, var(--sc-ma-preview-portal-fill) 38%, transparent 62%);
+  border: 2px solid var(--sc-ma-preview-portal-border);
+  border-radius: 4px;
+  height: 22px;
+  top: 38%;
+  width: 22px;
+}
+
+.sc-ma-preview-stage--portal .sc-ma-preview-portal-side--entry {
+  left: 34%;
+}
+
+.sc-ma-preview-stage--portal .sc-ma-preview-portal-side--exit {
+  box-shadow: 0 0 14px color-mix(in srgb, var(--sc-ma-preview-portal-fill) 32%, transparent 68%);
+  left: 62%;
 }
 
 .sc-ma-preview-colors-section {
@@ -2844,4 +2892,22 @@
 .chat-card.sc-ma-canvas-card .targets .action-list .name-stacked {
   align-self: center;
   min-width: 0;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Portal placement                                                          */
+/* ------------------------------------------------------------------------- */
+
+.sc-more-activities .sc-ma-portal-placement .sc-ma-placement-row i.fas {
+  color: var(--sc-ma-accent, #39f08c);
+  margin-right: 0.25rem;
+}
+
+.sc-more-activities .sc-ma-portal-placement .sc-ma-placement-row span:last-child {
+  text-align: right;
+}
+
+.sc-ma-portal-card button[data-action="sc-ma-close-portal"] {
+  width: 100%;
+  margin-top: 0.35rem;
 }

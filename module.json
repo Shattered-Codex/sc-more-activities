@@ -45,6 +45,11 @@
     "styles": [
         "styles/sc-more-activities.css"
     ],
+    "documentTypes": {
+        "RegionBehavior": {
+            "scPortal": {}
+        }
+    },
     "relationships": {
         "systems": [
             {

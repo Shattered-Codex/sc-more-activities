@@ -1,0 +1,153 @@
+<section class="tab activity-{{ tab.id }} {{ tab.cssClass }}" data-tab="{{ tab.id }}" data-group="{{ tab.group }}">
+  {{#if appliedEffects}}{{> "systems/dnd5e/templates/activity/parts/activity-effects.hbs" }}{{/if}}
+
+  <fieldset>
+    <legend>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Sections.Placement" }}</legend>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.PlacementRange.Label" }}</label>
+      <div class="form-fields">
+        <input type="text" name="portal.placementRange" value="{{ portal.placementRange }}">
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.PlacementRange.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.LinkRange.Label" }}</label>
+      <div class="form-fields">
+        <input type="text" name="portal.linkRange" value="{{ portal.linkRange }}">
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.LinkRange.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.Shape.Label" }}</label>
+      <div class="form-fields">
+        <select name="portal.shape">
+          {{ selectOptions shapeOptions selected=portal.shape valueAttr="value" labelAttr="label" }}
+        </select>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.Shape.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.Size.Label" }}</label>
+      <div class="form-fields">
+        <select name="portal.size">
+          {{ selectOptions sizeOptions selected=portal.size valueAttr="value" labelAttr="label" }}
+        </select>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.Size.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.SnapToGrid.Label" }}</label>
+      <div class="form-fields">
+        <input type="checkbox" name="portal.snapToGrid" {{#if portal.snapToGrid}}checked{{/if}}>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.SnapToGrid.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.AvoidOccupied.Label" }}</label>
+      <div class="form-fields">
+        <input type="checkbox" name="portal.avoidOccupied" {{#if portal.avoidOccupied}}checked{{/if}}>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.AvoidOccupied.Hint" }}</p>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Sections.Behavior" }}</legend>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.OneWay.Label" }}</label>
+      <div class="form-fields">
+        <input type="checkbox" name="portal.oneWay" {{#if portal.oneWay}}checked{{/if}}>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.OneWay.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.TriggerOnEnter.Label" }}</label>
+      <div class="form-fields">
+        <input type="checkbox" name="portal.triggerOnEnter" {{#if portal.triggerOnEnter}}checked{{/if}}>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.TriggerOnEnter.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.TriggerOnClick.Label" }}</label>
+      <div class="form-fields">
+        <input type="checkbox" name="portal.triggerOnClick" {{#if portal.triggerOnClick}}checked{{/if}}>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.TriggerOnClick.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.AllowPlayerRequests.Label" }}</label>
+      <div class="form-fields">
+        <input type="checkbox" name="portal.allowPlayerRequests" {{#if portal.allowPlayerRequests}}checked{{/if}}>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.AllowPlayerRequests.Hint" }}</p>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Sections.Duration" }}</legend>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.MaxUses.Label" }}</label>
+      <div class="form-fields">
+        <input type="text" name="portal.maxUses" value="{{ portal.maxUses }}">
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.MaxUses.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.DurationRounds.Label" }}</label>
+      <div class="form-fields">
+        <input type="text" name="portal.durationRounds" value="{{ portal.durationRounds }}">
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.DurationRounds.Hint" }}</p>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Sections.Appearance" }}</legend>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.Visibility.Label" }}</label>
+      <div class="form-fields">
+        <select name="portal.visibility">
+          {{ selectOptions visibilityOptions selected=portal.visibility valueAttr="value" labelAttr="label" }}
+        </select>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.Visibility.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.Color.Label" }}</label>
+      <div class="form-fields">
+        <color-picker name="portal.color" value="{{ portal.color }}"></color-picker>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.Color.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.EntryImage.Label" }}</label>
+      <div class="form-fields">
+        <file-picker name="portal.entryImage" type="imagevideo" value="{{ portal.entryImage }}"></file-picker>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.EntryImage.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.ExitImage.Label" }}</label>
+      <div class="form-fields">
+        <file-picker name="portal.exitImage" type="imagevideo" value="{{ portal.exitImage }}"></file-picker>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.ExitImage.Hint" }}</p>
+    </div>
+  </fieldset>
+</section>

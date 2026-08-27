@@ -1,0 +1,88 @@
+<div class="sc-ma-placement sc-ma-portal-placement">
+  <div class="sc-ma-placement-summary">
+    <span>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.App.Shape" }}: {{ shapeLabel }} · {{ size }}</span>
+    {{#if hasPlacementRange}}
+      <span>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.App.PlacementRange" }}: {{ placementRange }} {{ rangeUnits }}</span>
+      {{#if hasOriginName}}
+        <span>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.App.MeasuredFrom" }}: {{ originName }}</span>
+      {{/if}}
+    {{/if}}
+    {{#if hasLinkRange}}
+      <span>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.App.LinkRange" }}: {{ linkDistance }} / {{ linkRange }} {{ rangeUnits }}</span>
+    {{/if}}
+    <span>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.App.Uses" }}: {{ maxUses }}</span>
+    {{#if hasDuration}}
+      <span>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.App.Duration" }}: {{ durationRounds }}</span>
+    {{/if}}
+    {{#if oneWay}}
+      <span>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Card.OneWay" }}</span>
+    {{/if}}
+  </div>
+
+  <div class="sc-ma-placement-list">
+    <div class="sc-ma-placement-row">
+      <span>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Side.Entry" }}</span>
+      <span>
+        {{#if hasEntry}}
+          <i class="fas fa-check"></i> {{ localize "SCMOREACTIVITIES.Activities.ScPortal.App.Placed" }}
+        {{else}}
+          {{ localize "SCMOREACTIVITIES.Activities.ScPortal.App.Pending" }}
+        {{/if}}
+      </span>
+    </div>
+    <div class="sc-ma-placement-row">
+      <span>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Side.Exit" }}</span>
+      <span>
+        {{#if hasExit}}
+          <i class="fas fa-check"></i> {{ localize "SCMOREACTIVITIES.Activities.ScPortal.App.Placed" }}
+        {{else}}
+          {{ localize "SCMOREACTIVITIES.Activities.ScPortal.App.Pending" }}
+        {{/if}}
+      </span>
+    </div>
+  </div>
+
+  <div class="sc-ma-placement-controls">
+    <button type="button" class="sc-ma-portal-place {{#if isPlacing}}placing{{/if}}" {{#if (or isSubmitting hasExit)}}disabled{{/if}}>
+      <i class="fas fa-crosshairs"></i>
+      {{#if isPlacing}}
+        {{ localize "SCMOREACTIVITIES.Activities.ScPortal.App.StopPlacement" }}
+      {{else}}
+        {{ localize "SCMOREACTIVITIES.Activities.ScPortal.App.StartPlacement" }}
+      {{/if}}
+    </button>
+
+    <button type="button" class="sc-ma-portal-clear" {{#unless canClear}}disabled{{/unless}}>
+      <i class="fas fa-eraser"></i>
+      {{ localize "SCMOREACTIVITIES.Activities.ScPortal.App.ClearPoints" }}
+    </button>
+  </div>
+
+  <p class="hint">
+    {{#if hasEntry}}
+      {{ localize "SCMOREACTIVITIES.Activities.ScPortal.App.Instructions.Exit" }}
+    {{else}}
+      {{ localize "SCMOREACTIVITIES.Activities.ScPortal.App.Instructions.Entry" }}
+    {{/if}}
+  </p>
+
+  {{#if snapDisabledByGrid}}
+    <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Warning.GridlessScene" }}</p>
+  {{/if}}
+
+  <div class="sc-ma-placement-controls">
+    <button type="button" class="sc-ma-portal-confirm" {{#unless canConfirm}}disabled{{/unless}}>
+      <i class="fas fa-check"></i>
+      {{ localize "SCMOREACTIVITIES.Activities.ScPortal.App.CreatePortal" }}
+    </button>
+
+    <button type="button" class="sc-ma-portal-cancel" {{#if isSubmitting}}disabled{{/if}}>
+      <i class="fas fa-times"></i>
+      {{ localize "SCMOREACTIVITIES.Actions.Cancel" }}
+    </button>
+  </div>
+
+  {{#if isPlacing}}
+    <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScPortal.App.PlacingStatus" }}</p>
+  {{/if}}
+</div>
