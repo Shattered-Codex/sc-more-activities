@@ -42,6 +42,23 @@ test("square and circle portals hit test their own shape", () => {
   assert.equal(ScPortalGeometry.containsPoint(circle, { x: 130, y: 100 }), true);
 });
 
+test("portal reach uses persisted token coordinates while Foundry animates prepared values", () => {
+  const portal = { center: { x: 150, y: 150 }, radiusPixels: 50, shape: "square" };
+  const token = makeToken({ id: "traveller", x: 1500, y: 1500 });
+  token._source = { x: 100, y: 100, width: 1, height: 1 };
+
+  assert.deepEqual(ScPortalGeometry.tokenCenter(token, SQUARE_GRID), { x: 150, y: 150 });
+  assert.equal(ScPortalGeometry.tokenReachesPortal(portal, token, SQUARE_GRID), true);
+});
+
+test("prepared animation coordinates cannot make a distant token reach a portal", () => {
+  const portal = { center: { x: 150, y: 150 }, radiusPixels: 50, shape: "square" };
+  const token = makeToken({ id: "traveller", x: 100, y: 100 });
+  token._source = { x: 1500, y: 1500, width: 1, height: 1 };
+
+  assert.equal(ScPortalGeometry.tokenReachesPortal(portal, token, SQUARE_GRID), false);
+});
+
 test("a blocked destination falls back to the nearest free cell", () => {
   const traveller = makeToken({ id: "traveller", x: 0, y: 0 });
   const blocker = makeToken({ id: "blocker", x: 200, y: 200 });

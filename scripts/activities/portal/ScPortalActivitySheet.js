@@ -29,7 +29,7 @@ export class ScPortalActivitySheet extends dnd5e.applications.activity.ActivityS
       color: this.activity?.portal?.color ?? "#8a63d2",
       entryImage: this.activity?.portal?.entryImage ?? "",
       exitImage: this.activity?.portal?.exitImage ?? "",
-      allowPlayerRequests: Boolean(this.activity?.portal?.allowPlayerRequests)
+      allowPlayerRequests: this.activity?.portal?.allowPlayerRequests !== false
     };
     context.shapeOptions = ScPortalActivitySheet.#shapeOptions();
     context.sizeOptions = ScPortalActivitySheet.#sizeOptions();

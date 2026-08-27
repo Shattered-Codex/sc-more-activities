@@ -20,7 +20,7 @@ export class ScPortalConfig {
       color: ScPortalConfig.#hexColor(config.color, "#8a63d2"),
       entryImage: String(config.entryImage ?? "").trim(),
       exitImage: String(config.exitImage ?? "").trim(),
-      allowPlayerRequests: Boolean(config.allowPlayerRequests)
+      allowPlayerRequests: config.allowPlayerRequests !== false
     };
   }
 

@@ -130,8 +130,8 @@ export class ScPortalGeometry {
 
   static tokenPixelSize(tokenDocument, scene = canvas?.scene) {
     const gridSize = ScPortalGeometry.gridSize(scene);
-    const documentWidth = Number(tokenDocument?.width);
-    const documentHeight = Number(tokenDocument?.height);
+    const documentWidth = Number(ScPortalGeometry.#sourceValue(tokenDocument, "width"));
+    const documentHeight = Number(ScPortalGeometry.#sourceValue(tokenDocument, "height"));
     return {
       width: Number.isFinite(documentWidth) && documentWidth > 0 ? documentWidth * gridSize : gridSize,
       height: Number.isFinite(documentHeight) && documentHeight > 0 ? documentHeight * gridSize : gridSize
@@ -139,8 +139,12 @@ export class ScPortalGeometry {
   }
 
   static tokenCenter(tokenDocument, scene = canvas?.scene) {
-    const x = Number(tokenDocument?.x);
-    const y = Number(tokenDocument?.y);
+    // Foundry animates prepared TokenDocument position fields while a movement
+    // is in progress. Region membership is defined against the persisted source
+    // values instead; using the prepared coordinates here can make a token that
+    // just stopped at a portal look as though it already moved beyond it.
+    const x = Number(ScPortalGeometry.#sourceValue(tokenDocument, "x"));
+    const y = Number(ScPortalGeometry.#sourceValue(tokenDocument, "y"));
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       return null;
     }
@@ -307,12 +311,17 @@ export class ScPortalGeometry {
       .map((document) => {
         const size = ScPortalGeometry.tokenPixelSize(document, scene);
         return {
-          x: Number(document.x) || 0,
-          y: Number(document.y) || 0,
+          x: Number(ScPortalGeometry.#sourceValue(document, "x")) || 0,
+          y: Number(ScPortalGeometry.#sourceValue(document, "y")) || 0,
           width: size.width,
           height: size.height
         };
       });
+  }
+
+  /** Read the non-animated document source when Foundry exposes one. */
+  static #sourceValue(document, field) {
+    return document?._source?.[field] ?? document?.[field];
   }
 
   static #sceneIsActive(scene) {

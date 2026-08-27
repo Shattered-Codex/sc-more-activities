@@ -23,6 +23,11 @@ test("an activity without portal data falls back to usable defaults", () => {
   assert.equal(config.oneWay, false);
   assert.equal(config.maxUses, "");
   assert.equal(config.visibility, "all");
+  assert.equal(config.allowPlayerRequests, true);
+});
+
+test("an explicitly disabled player-use option remains disabled", () => {
+  assert.equal(ScPortalConfig.fromActivity(makeActivity({ allowPlayerRequests: false })).allowPlayerRequests, false);
 });
 
 test("an empty or zero crossing limit both mean unlimited", () => {

@@ -106,7 +106,7 @@ export class ScPortalActivityData extends dnd5e.dataModels.activity.BaseActivity
         }),
         allowPlayerRequests: new fields.BooleanField({
           required: false,
-          initial: false
+          initial: true
         })
       })
     };
