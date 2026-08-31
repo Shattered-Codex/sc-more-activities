@@ -1,3 +1,5 @@
+import { ScRangeShape } from "../canvas/ScRangeShape.js";
+
 export class ScWallActivityData extends dnd5e.dataModels.activity.BaseActivityData {
   static defineSchema() {
     const fields = foundry.data.fields;
@@ -39,6 +41,7 @@ export class ScWallActivityData extends dnd5e.dataModels.activity.BaseActivityDa
           required: false,
           initial: "0"
         }),
+        rangeShape: ScRangeShape.field(fields),
         maxLength: new fields.StringField({
           required: false,
           initial: "60"

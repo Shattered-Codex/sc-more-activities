@@ -1,3 +1,5 @@
+import { ScRangeShape } from "../canvas/ScRangeShape.js";
+
 export class ScPortalActivityData extends dnd5e.dataModels.activity.BaseActivityData {
   /** Scene units per square assumed for portals stored before the footprint change. */
   static #LEGACY_SQUARE_UNITS = 5;
@@ -50,6 +52,7 @@ export class ScPortalActivityData extends dnd5e.dataModels.activity.BaseActivity
           required: false,
           initial: ""
         }),
+        rangeShape: ScRangeShape.field(fields),
         shape: new fields.StringField({
           required: false,
           initial: "square",

@@ -16,6 +16,7 @@ test("an activity without portal data falls back to usable defaults", () => {
   const config = ScPortalConfig.fromActivity({});
   assert.equal(config.placementRange, 30);
   assert.equal(config.linkRange, "");
+  assert.equal(config.rangeShape, "circle");
   assert.equal(config.shape, "square");
   assert.equal(config.squares, 1);
   assert.equal(config.snapToGrid, true);
@@ -24,6 +25,12 @@ test("an activity without portal data falls back to usable defaults", () => {
   assert.equal(config.maxUses, "");
   assert.equal(config.visibility, "all");
   assert.equal(config.allowPlayerRequests, true);
+});
+
+test("portal range shape is normalized independently from its footprint", () => {
+  const config = ScPortalConfig.fromActivity(makeActivity({ rangeShape: "square", shape: "circle" }));
+  assert.equal(config.rangeShape, "square");
+  assert.equal(config.shape, "circle");
 });
 
 test("an explicitly disabled player-use option remains disabled", () => {

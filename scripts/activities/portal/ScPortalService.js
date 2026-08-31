@@ -705,7 +705,12 @@ export class ScPortalService {
       }
 
       for (const point of [entry, exit]) {
-        if (ScCanvasActivityService.euclideanSceneDistance(originCenter, point, scene) > config.placementRange) {
+        if (ScCanvasActivityService.rangeSceneDistance(
+          originCenter,
+          point,
+          config.rangeShape,
+          scene
+        ) > config.placementRange) {
           return ScPortalService.#failure(
             "SCMOREACTIVITIES.Activities.ScPortal.Warning.OutOfRange",
             "The portal must be placed within {range}.",
@@ -716,7 +721,7 @@ export class ScPortalService {
     }
 
     if (config.linkRange !== "" && config.linkRange > 0
-      && ScCanvasActivityService.euclideanSceneDistance(entry, exit, scene) > config.linkRange) {
+      && ScCanvasActivityService.rangeSceneDistance(entry, exit, config.rangeShape, scene) > config.linkRange) {
       return ScPortalService.#failure(
         "SCMOREACTIVITIES.Activities.ScPortal.Warning.LinkTooFar",
         "The two portal sides must be within {range} of each other.",

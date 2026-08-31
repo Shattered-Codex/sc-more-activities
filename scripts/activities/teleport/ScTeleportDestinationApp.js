@@ -5,6 +5,7 @@ import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
 import { ScCanvasResultCard } from "../canvas/ScCanvasResultCard.js";
 import { ScSaveRequestCard } from "../canvas/ScSaveRequestCard.js";
 import { ScTargetSaveService } from "../canvas/ScTargetSaveService.js";
+import { ScRangeShape } from "../canvas/ScRangeShape.js";
 import { Logger } from "../../support/Logger.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -318,21 +319,25 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
    * Redraws the range ring and the wall marks, but only when something they
    * depend on actually changed. A pointer move does not.
    */
-  #drawStatic(originCenter, rangePixels, borderColor, fillColor) {
-    const signature = `${originCenter?.x}:${originCenter?.y}:${rangePixels}:${borderColor}:${fillColor}`;
+  #drawStatic(originCenter, rangeDistance, borderColor, fillColor, rangeShape, scene = canvas?.scene) {
+    const squareRange = ScRangeShape.isSquare(rangeShape);
+    const rangePixels = rangeDistance > 0 ? ScRangeShape.pixels(rangeDistance, scene) : Infinity;
+    const signature = `${originCenter?.x}:${originCenter?.y}:${rangePixels}:${borderColor}:${fillColor}:${squareRange}`;
     if (this.staticSignature === signature) {
       return;
     }
     this.staticSignature = signature;
 
     this.staticGraphics.clear();
-    if (Number.isFinite(rangePixels) && rangePixels > 0 && originCenter) {
-      this.staticGraphics.lineStyle(2, borderColor, 0.9);
-      this.staticGraphics.beginFill(fillColor, 0.12);
-      this.staticGraphics.drawCircle(originCenter.x, originCenter.y, rangePixels);
-      this.staticGraphics.endFill();
-    }
-    this.#drawWalls(originCenter, rangePixels);
+    ScRangeShape.drawPreview(this.staticGraphics, {
+      center: originCenter,
+      distance: rangeDistance,
+      rangeShape,
+      scene,
+      borderColor,
+      fillColor
+    });
+    this.#drawWalls(originCenter, rangePixels, squareRange);
   }
 
   #drawPreview() {
@@ -357,10 +362,14 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     const outOfRangeFill = 0xff6b6b;
 
     const originCenter = ScCanvasActivityService.getTokenCenter(origin);
-    const distancePixels = Number(canvas?.dimensions?.distancePixels ?? 0);
-    const rangePixels = config.teleportDistance > 0 ? config.teleportDistance * distancePixels : Infinity;
-
-    this.#drawStatic(originCenter, rangePixels, borderColor, fillColor);
+    this.#drawStatic(
+      originCenter,
+      config.teleportDistance,
+      colors.borderColor,
+      colors.fillColor,
+      config.rangeShape,
+      canvas?.scene
+    );
 
     if (!this.hoverPoint) {
       return;
@@ -404,7 +413,11 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
       return;
     }
 
-    const distance = ScCanvasActivityService.euclideanSceneDistance(originCenter, preview.destination);
+    const distance = ScCanvasActivityService.rangeSceneDistance(
+      originCenter,
+      preview.destination,
+      this.#config().rangeShape
+    );
     if (!Number.isFinite(distance)) {
       return;
     }
@@ -478,7 +491,7 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
 
     const config = this.#config();
     const originCenter = ScCanvasActivityService.getTokenCenter(origin);
-    const distance = ScCanvasActivityService.euclideanSceneDistance(originCenter, destination);
+    const distance = ScCanvasActivityService.rangeSceneDistance(originCenter, destination, config.rangeShape);
     if (config.teleportDistance > 0 && distance > config.teleportDistance) {
       ui.notifications?.warn?.(Constants.localize(
         "SCMOREACTIVITIES.Activities.ScTeleport.Warning.DestinationOutOfRange",
@@ -574,12 +587,13 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     const config = this.activity?.teleport ?? {};
     return {
       teleportDistance: Math.max(0, Number(config.teleportDistance ?? 30) || 0),
+      rangeShape: ScRangeShape.normalize(config.rangeShape),
       snapToGrid: config.snapToGrid !== false
     };
   }
 
-  #drawWalls(originCenter, rangePixels) {
-    const segments = this.#visibleWallSegments(originCenter, rangePixels);
+  #drawWalls(originCenter, rangePixels, squareRange) {
+    const segments = this.#visibleWallSegments(originCenter, rangePixels, squareRange);
     if (!segments.length) {
       return;
     }
@@ -596,18 +610,18 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
    * the sight tests below are far too costly to redo on every pointer move, and
    * nothing they depend on changes while the origin token stands still.
    */
-  #visibleWallSegments(originCenter, rangePixels) {
+  #visibleWallSegments(originCenter, rangePixels, squareRange) {
     const walls = canvas?.walls?.placeables ?? [];
     if (!walls.length || !originCenter) {
       return [];
     }
 
-    const signature = `${originCenter.x}:${originCenter.y}:${rangePixels}:${walls.length}`;
+    const signature = `${originCenter.x}:${originCenter.y}:${rangePixels}:${squareRange}:${walls.length}`;
     if (this.wallSegmentsCache?.signature === signature) {
       return this.wallSegmentsCache.segments;
     }
 
-    const candidates = ScTeleportDestinationApp.#collectWallSegments(walls, originCenter, rangePixels);
+    const candidates = ScTeleportDestinationApp.#collectWallSegments(walls, originCenter, rangePixels, squareRange);
     const probe = ScTeleportDestinationApp.#sightProbe(originCenter);
     const segments = ScTeleportDestinationApp.#filterToVisible(candidates, originCenter, probe);
     this.wallSegmentsCache = { signature, segments };
@@ -688,7 +702,7 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     return Math.min(Math.max(budget, 1), ScTeleportDestinationApp.#MAX_WALL_SAMPLES);
   }
 
-  static #collectWallSegments(walls, originCenter, rangePixels) {
+  static #collectWallSegments(walls, originCenter, rangePixels, squareRange) {
     const CONST = globalThis.CONST;
     const secretDoor = CONST?.WALL_DOOR_TYPES?.SECRET;
     const openState = CONST?.WALL_DOOR_STATES?.OPEN;
@@ -718,14 +732,49 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
       if (![a.x, a.y, b.x, b.y].every(Number.isFinite)) {
         continue;
       }
-      if (Number.isFinite(rangePixels)
-        && ScTeleportDestinationApp.#segmentDistanceToPoint(a, b, originCenter) > rangePixels) {
-        continue;
+      if (Number.isFinite(rangePixels)) {
+        const inRange = squareRange
+          ? ScTeleportDestinationApp.#segmentIntersectsSquare(a, b, originCenter, rangePixels)
+          : ScTeleportDestinationApp.#segmentDistanceToPoint(a, b, originCenter) <= rangePixels;
+        if (!inRange) {
+          continue;
+        }
       }
       segments.push([a, b]);
     }
 
     return segments;
+  }
+
+  static #segmentIntersectsSquare(a, b, center, radius) {
+    const minX = center.x - radius;
+    const maxX = center.x + radius;
+    const minY = center.y - radius;
+    const maxY = center.y + radius;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    let near = 0;
+    let far = 1;
+
+    for (const [start, delta, min, max] of [
+      [a.x, dx, minX, maxX],
+      [a.y, dy, minY, maxY]
+    ]) {
+      if (delta === 0) {
+        if (start < min || start > max) {
+          return false;
+        }
+        continue;
+      }
+      const first = (min - start) / delta;
+      const second = (max - start) / delta;
+      near = Math.max(near, Math.min(first, second));
+      far = Math.min(far, Math.max(first, second));
+      if (near > far) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**

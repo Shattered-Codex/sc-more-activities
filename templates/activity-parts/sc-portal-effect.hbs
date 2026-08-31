@@ -21,6 +21,16 @@
     </div>
 
     <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.RangeShape.Label" }}</label>
+      <div class="form-fields">
+        <select name="portal.rangeShape">
+          {{ selectOptions rangeShapeOptions selected=portal.rangeShape valueAttr="value" labelAttr="label" }}
+        </select>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.RangeShape.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
       <label>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.Fields.Shape.Label" }}</label>
       <div class="form-fields">
         <select name="portal.shape">

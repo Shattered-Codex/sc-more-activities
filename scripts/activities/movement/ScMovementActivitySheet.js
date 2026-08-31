@@ -3,6 +3,7 @@ import {
   MOVEMENT_TYPES
 } from "../canvas/ScCanvasActivityConstants.js";
 import { ScTargetSaveService } from "../canvas/ScTargetSaveService.js";
+import { ScRangeShape } from "../canvas/ScRangeShape.js";
 
 export class ScMovementActivitySheet extends dnd5e.applications.activity.ActivitySheet {
   static DEFAULT_OPTIONS = {
@@ -24,6 +25,7 @@ export class ScMovementActivitySheet extends dnd5e.applications.activity.Activit
       type: this.activity?.movement?.type ?? MOVEMENT_TYPES.PUSH,
       distance: this.activity?.movement?.distance ?? 10,
       maxRange: this.activity?.movement?.maxRange ?? 0,
+      rangeShape: ScRangeShape.normalize(this.activity?.movement?.rangeShape),
       maxTargets: this.activity?.movement?.maxTargets ?? 1,
       snapToGrid: this.activity?.movement?.snapToGrid !== false,
       save: {
@@ -34,6 +36,7 @@ export class ScMovementActivitySheet extends dnd5e.applications.activity.Activit
     };
     context.targetSourceOptions = ScMovementActivitySheet.#targetSourceOptions();
     context.movementTypeOptions = ScMovementActivitySheet.#movementTypeOptions();
+    context.rangeShapeOptions = ScRangeShape.options();
     // The save gate only applies to external targets, so the section is tied
     // to the targeted-tokens source; self and controlled keep the direct flow.
     context.movementShowsSave = context.movement.targetSource === CANVAS_TARGET_SOURCES.TARGETS;

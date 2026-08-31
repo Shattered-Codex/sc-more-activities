@@ -76,10 +76,11 @@ function makeCanvas() {
 
   globalThis.canvas = {
     dimensions: {
-      distancePixels: 10
+      // Deliberately wrong: range previews must use the scene grid ratio.
+      distancePixels: 999
     },
     scene: {
-      grid: { size: 100 }
+      grid: { size: 100, distance: 10 }
     },
     app: {
       view: CANVAS_VIEW
@@ -111,7 +112,7 @@ function patchCanvasService(t, calls, { distance = 0 } = {}) {
     getOriginTokenObject: ScCanvasActivityService.getOriginTokenObject,
     getTokenCenter: ScCanvasActivityService.getTokenCenter,
     snapCenterPoint: ScCanvasActivityService.snapCenterPoint,
-    euclideanSceneDistance: ScCanvasActivityService.euclideanSceneDistance,
+    rangeSceneDistance: ScCanvasActivityService.rangeSceneDistance,
     executeTeleportPlacement: ScCanvasActivityService.executeTeleportPlacement,
     getTeleportPlacementPreview: ScCanvasActivityService.getTeleportPlacementPreview
   };
@@ -119,7 +120,7 @@ function patchCanvasService(t, calls, { distance = 0 } = {}) {
   ScCanvasActivityService.getOriginTokenObject = () => ({ id: "origin-token" });
   ScCanvasActivityService.getTokenCenter = () => ({ x: 0, y: 0 });
   ScCanvasActivityService.snapCenterPoint = (point) => point;
-  ScCanvasActivityService.euclideanSceneDistance = () => distance;
+  ScCanvasActivityService.rangeSceneDistance = () => distance;
   ScCanvasActivityService.executeTeleportPlacement = async(activity, placement) => {
     calls.push({ activity, placement });
     return { ok: true };
@@ -134,6 +135,107 @@ function patchCanvasService(t, calls, { distance = 0 } = {}) {
     globalThis.window.handlers.clear();
   });
 }
+
+test("draws an optional square teleport range while keeping circles as the default", async(t) => {
+  class Graphics {
+    constructor() {
+      this.commands = [];
+      this.parent = null;
+    }
+
+    clear() { return this; }
+    lineStyle() { return this; }
+    beginFill() { return this; }
+    drawCircle(...args) {
+      this.commands.push(["circle", ...args]);
+      return this;
+    }
+    drawRect(...args) {
+      this.commands.push(["rect", ...args]);
+      return this;
+    }
+    endFill() { return this; }
+    moveTo() { return this; }
+    lineTo() { return this; }
+    destroy() {}
+  }
+
+  globalThis.PIXI = { Graphics };
+  const calls = [];
+  patchCanvasService(t, calls);
+  const { stageChildren } = makeCanvas();
+  t.after(() => delete globalThis.PIXI);
+
+  const squareApp = new ScTeleportDestinationApp(
+    { teleport: { teleportDistance: 30, rangeShape: "square" } },
+    [{ id: "target-token" }]
+  );
+  await squareApp._onRender({}, {});
+  assert.deepEqual(stageChildren[0].commands, [["rect", -300, -300, 600, 600]]);
+  await squareApp.close();
+
+  const circleApp = new ScTeleportDestinationApp(
+    { teleport: { teleportDistance: 30, rangeShape: "circle" } },
+    [{ id: "target-token" }]
+  );
+  await circleApp._onRender({}, {});
+  assert.deepEqual(stageChildren[0].commands, [["circle", 0, 0, 300]]);
+  await circleApp.close();
+});
+
+test("includes corner walls in a square teleport range", async(t) => {
+  class Graphics {
+    constructor() {
+      this.commands = [];
+      this.parent = null;
+    }
+
+    clear() { return this; }
+    lineStyle() { return this; }
+    beginFill() { return this; }
+    drawCircle() { return this; }
+    drawRect() { return this; }
+    endFill() { return this; }
+    moveTo(x, y) {
+      this.commands.push(["moveTo", x, y]);
+      return this;
+    }
+    lineTo(x, y) {
+      this.commands.push(["lineTo", x, y]);
+      return this;
+    }
+    destroy() {}
+  }
+
+  globalThis.PIXI = { Graphics };
+  globalThis.CONST = {
+    WALL_DOOR_TYPES: { NONE: 0, SECRET: 2 },
+    WALL_DOOR_STATES: { CLOSED: 0, OPEN: 1 },
+    WALL_MOVEMENT_TYPES: { NONE: 0, NORMAL: 20 }
+  };
+  const calls = [];
+  patchCanvasService(t, calls);
+  const { stageChildren } = makeCanvas();
+  globalThis.canvas.walls = {
+    placeables: [{ document: { c: [250, 250, 300, 300], door: 0, ds: 0, move: 20 } }]
+  };
+  t.after(() => {
+    delete globalThis.PIXI;
+    delete globalThis.CONST;
+  });
+
+  const app = new ScTeleportDestinationApp(
+    { teleport: { teleportDistance: 30, rangeShape: "square" } },
+    [{ id: "target-token" }]
+  );
+  await app._onRender({}, {});
+
+  assert.deepEqual(stageChildren[0].commands, [
+    ["moveTo", 250, 250],
+    ["lineTo", 300, 300]
+  ]);
+  await app.close();
+});
 
 test("places the teleport destination from a canvas pointer-up event", async(t) => {
   const calls = [];

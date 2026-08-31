@@ -126,8 +126,7 @@ function installGlobals(t, { targetsSelf = true } = {}) {
     getOriginTokenDocument: ScCanvasActivityService.getOriginTokenDocument,
     getOriginTokenObject: ScCanvasActivityService.getOriginTokenObject,
     getTokenCenter: ScCanvasActivityService.getTokenCenter,
-    executeMovement: ScCanvasActivityService.executeMovement,
-    removePreviewTemplate: ScCanvasActivityService.removePreviewTemplate
+    executeMovement: ScCanvasActivityService.executeMovement
   };
 
   ScCanvasActivityService.getMovementPreviewData = () => previewData({ targetsSelf });
@@ -135,7 +134,6 @@ function installGlobals(t, { targetsSelf = true } = {}) {
   ScCanvasActivityService.getOriginTokenObject = () => ORIGIN;
   ScCanvasActivityService.getTokenCenter = () => ({ x: 100, y: 100 });
   ScCanvasActivityService.executeMovement = async() => ({ ok: false });
-  ScCanvasActivityService.removePreviewTemplate = async() => {};
 
   const warnings = [];
   const previousWarn = globalThis.ui.notifications.warn;

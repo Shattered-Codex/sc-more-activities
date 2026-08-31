@@ -1,4 +1,5 @@
 import { ScTargetSaveService } from "../canvas/ScTargetSaveService.js";
+import { ScRangeShape } from "../canvas/ScRangeShape.js";
 
 export class ScTeleportActivitySheet extends dnd5e.applications.activity.ActivitySheet {
   static DEFAULT_OPTIONS = {
@@ -23,6 +24,7 @@ export class ScTeleportActivitySheet extends dnd5e.applications.activity.Activit
       onlyTargetSelf,
       targetRadius: this.activity?.teleport?.targetRadius ?? 15,
       teleportDistance: this.activity?.teleport?.teleportDistance ?? 30,
+      rangeShape: ScRangeShape.normalize(this.activity?.teleport?.rangeShape),
       keepArrangement: this.activity?.teleport?.keepArrangement !== false,
       clusterRadius: this.activity?.teleport?.clusterRadius ?? 5,
       snapToGrid: this.activity?.teleport?.snapToGrid !== false,
@@ -36,6 +38,7 @@ export class ScTeleportActivitySheet extends dnd5e.applications.activity.Activit
     // teleported and the actor is not locked to teleporting only itself.
     context.teleportShowsArrangement = maxTargets > 1 && !onlyTargetSelf;
     context.teleportShowsTargeting = !onlyTargetSelf;
+    context.rangeShapeOptions = ScRangeShape.options();
     context.saveAbilityOptions = ScTargetSaveService.abilityOptions();
     return context;
   }
@@ -53,4 +56,5 @@ export class ScTeleportActivitySheet extends dnd5e.applications.activity.Activit
     }
     return tabs;
   }
+
 }

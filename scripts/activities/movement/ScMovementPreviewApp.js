@@ -2,6 +2,7 @@ import { Constants } from "../../constants/Constants.js";
 import { Logger } from "../../support/Logger.js";
 import { ModuleSettings } from "../../settings/ModuleSettings.js";
 import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
+import { ScRangeShape } from "../canvas/ScRangeShape.js";
 import { ScCanvasResultCard } from "../canvas/ScCanvasResultCard.js";
 import { ScSaveRequestCard } from "../canvas/ScSaveRequestCard.js";
 import { ScTargetSaveService } from "../canvas/ScTargetSaveService.js";
@@ -40,7 +41,6 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
     this.movementType = this.requiresMovementChoice ? null : activity?.movement?.type;
     this.originTokenId = ScCanvasActivityService.getOriginTokenDocument(activity)?.id ?? null;
     this.selectedTargetIds = [];
-    this.previewTemplate = null;
     this.previewGraphics = null;
     this.isSubmitting = false;
     this.isClosing = false;
@@ -172,7 +172,6 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
       });
     });
 
-    await this.#renderRangePreview();
     this.#drawPreviewState();
   }
 
@@ -183,8 +182,6 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
     this.#stopSelfDirectionSelection();
     this.#destroyPreviewGraphics();
     await super.close(options);
-    await ScCanvasActivityService.removePreviewTemplate(this.previewTemplate);
-    this.previewTemplate = null;
   }
 
   #prepopulateTargets() {
@@ -240,7 +237,14 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
         continue;
       }
 
-      const distance = origin ? ScCanvasActivityService.sceneDistanceBetweenTokens(origin, token, preview?.scene) : 0;
+      const distance = origin
+        ? ScCanvasActivityService.rangeSceneDistance(
+          ScCanvasActivityService.getTokenCenter(origin, preview?.scene),
+          ScCanvasActivityService.getTokenCenter(token, preview?.scene),
+          preview?.config?.rangeShape,
+          preview?.scene
+        )
+        : 0;
       const data = {
         id: tokenId,
         name: token?.name ?? token?.document?.name ?? "",
@@ -317,32 +321,6 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
     this.render();
   }
 
-  async #renderRangePreview() {
-    if (this.previewTemplate) {
-      return;
-    }
-
-    const preview = this.#previewData();
-    if (!preview || preview.config.maxRange <= 0) {
-      return;
-    }
-
-    const originCenter = ScCanvasActivityService.getTokenCenter(preview.origin, preview.scene);
-    if (!originCenter) {
-      return;
-    }
-
-    const previewColors = ModuleSettings.getMovementRangeColors();
-    this.previewTemplate = await ScCanvasActivityService.createPreviewTemplate({
-      type: "circle",
-      x: originCenter.x,
-      y: originCenter.y,
-      distance: preview.config.maxRange,
-      fillColor: previewColors.fillColor,
-      borderColor: previewColors.borderColor
-    });
-  }
-
   #ensurePreviewGraphics() {
     if (!globalThis.PIXI?.Graphics || this.previewGraphics) {
       return;
@@ -381,6 +359,14 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
     const movementFill = Number.parseInt(String(movementColors.fillColor ?? "#8fd3ff").slice(1), 16);
 
     const originCenter = ScCanvasActivityService.getTokenCenter(preview.origin, preview.scene);
+    ScRangeShape.drawPreview(this.previewGraphics, {
+      center: originCenter,
+      distance: preview.config.maxRange,
+      rangeShape: preview.config.rangeShape,
+      scene: preview.scene,
+      borderColor: movementColors.borderColor,
+      fillColor: movementColors.fillColor
+    });
     if (originCenter) {
       const radius = this.#pointMarkerPixelRadius();
       this.previewGraphics.lineStyle(2, 0xf4c542, 0.95);

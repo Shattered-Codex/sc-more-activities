@@ -2,6 +2,7 @@ import {
   CANVAS_TARGET_SOURCES,
   MOVEMENT_TYPES
 } from "../canvas/ScCanvasActivityConstants.js";
+import { ScRangeShape } from "../canvas/ScRangeShape.js";
 
 export class ScMovementActivityData extends dnd5e.dataModels.activity.BaseActivityData {
   static defineSchema() {
@@ -29,6 +30,7 @@ export class ScMovementActivityData extends dnd5e.dataModels.activity.BaseActivi
           initial: 0,
           min: 0
         }),
+        rangeShape: ScRangeShape.field(fields),
         maxTargets: new fields.NumberField({
           required: false,
           initial: 1,
