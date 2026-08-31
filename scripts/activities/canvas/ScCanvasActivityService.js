@@ -310,9 +310,6 @@ export class ScCanvasActivityService {
   }
 
   static rangeSceneDistance(pointA, pointB, rangeShape, scene = canvas?.scene) {
-    if (ScRangeShape.normalize(rangeShape) === ScRangeShape.VALUES.GRID) {
-      return ScCanvasActivityService.sceneDistanceBetweenPoints(pointA, pointB, scene);
-    }
     return ScRangeShape.distance(pointA, pointB, rangeShape, scene);
   }
 

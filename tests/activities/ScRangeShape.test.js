@@ -8,7 +8,7 @@ const SCENE = { grid: { size: 100, distance: 5 } };
 test("range shapes default to circle and expose the three supported choices", () => {
   assert.equal(ScRangeShape.normalize(undefined), "circle");
   assert.equal(ScRangeShape.normalize("unknown"), "circle");
-  assert.deepEqual(ScRangeShape.choices(), ["system", "circle", "square", "grid"]);
+  assert.deepEqual(ScRangeShape.choices(), ["system", "circle", "square"]);
 });
 
 test("system shape follows the D&D square-template setting", (t) => {
@@ -20,7 +20,6 @@ test("system shape follows the D&D square-template setting", (t) => {
   assert.equal(ScRangeShape.isSquare("system"), false);
   assert.equal(ScRangeShape.isSquare("square"), true);
   assert.equal(ScRangeShape.isSquare("circle"), false);
-  assert.equal(ScRangeShape.isSquare("grid"), false);
 });
 
 test("circle and square use matching Euclidean and diagonal distances", () => {
@@ -69,24 +68,4 @@ test("the shared preview converts scene units and applies its style", () => {
     ["square", -100, -200, 1200, 1200],
     ["endFill"]
   ]);
-});
-
-test("legacy grid measurement does not draw a misleading geometric boundary", () => {
-  const calls = [];
-  const graphics = {
-    lineStyle: (...args) => calls.push(["lineStyle", ...args]),
-    beginFill: (...args) => calls.push(["beginFill", ...args]),
-    drawCircle: (...args) => calls.push(["circle", ...args]),
-    drawRect: (...args) => calls.push(["square", ...args]),
-    endFill: () => calls.push(["endFill"])
-  };
-
-  ScRangeShape.drawPreview(graphics, {
-    center: { x: 100, y: 100 },
-    distance: 30,
-    rangeShape: "grid",
-    scene: SCENE
-  });
-
-  assert.deepEqual(calls, []);
 });

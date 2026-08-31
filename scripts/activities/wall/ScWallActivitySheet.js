@@ -32,7 +32,7 @@ export class ScWallActivitySheet extends dnd5e.applications.activity.ActivityShe
     };
     context.wallTypeOptions = ScWallActivitySheet.#wallTypeOptions();
     context.facingOptions = ScWallActivitySheet.#facingOptions();
-    context.rangeShapeOptions = ScRangeShape.options({ includeGrid: true });
+    context.rangeShapeOptions = ScRangeShape.options();
     return context;
   }
 

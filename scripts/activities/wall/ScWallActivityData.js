@@ -1,11 +1,6 @@
 import { ScRangeShape } from "../canvas/ScRangeShape.js";
 
 export class ScWallActivityData extends dnd5e.dataModels.activity.BaseActivityData {
-  static migrateData(source) {
-    ScRangeShape.migrateLegacyGridRange(source, "wall");
-    return super.migrateData(source);
-  }
-
   static defineSchema() {
     const fields = foundry.data.fields;
     const schema = super.defineSchema();
@@ -46,7 +41,7 @@ export class ScWallActivityData extends dnd5e.dataModels.activity.BaseActivityDa
           required: false,
           initial: "0"
         }),
-        rangeShape: ScRangeShape.field(fields, { includeGrid: true }),
+        rangeShape: ScRangeShape.field(fields),
         maxLength: new fields.StringField({
           required: false,
           initial: "60"

@@ -5,11 +5,6 @@ import {
 import { ScRangeShape } from "../canvas/ScRangeShape.js";
 
 export class ScMovementActivityData extends dnd5e.dataModels.activity.BaseActivityData {
-  static migrateData(source) {
-    ScRangeShape.migrateLegacyGridRange(source, "movement");
-    return super.migrateData(source);
-  }
-
   static defineSchema() {
     const fields = foundry.data.fields;
     return {
@@ -35,7 +30,7 @@ export class ScMovementActivityData extends dnd5e.dataModels.activity.BaseActivi
           initial: 0,
           min: 0
         }),
-        rangeShape: ScRangeShape.field(fields, { includeGrid: true }),
+        rangeShape: ScRangeShape.field(fields),
         maxTargets: new fields.NumberField({
           required: false,
           initial: 1,

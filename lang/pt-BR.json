@@ -680,7 +680,6 @@
   "SCMOREACTIVITIES.Activities.Canvas.Fields.RangeShape.Choices.System": "Seguir configuração de D&D",
   "SCMOREACTIVITIES.Activities.Canvas.Fields.RangeShape.Choices.Circle": "Círculo",
   "SCMOREACTIVITIES.Activities.Canvas.Fields.RangeShape.Choices.Square": "Quadrado",
-  "SCMOREACTIVITIES.Activities.Canvas.Fields.RangeShape.Choices.Grid": "Medição da grade da cena (legado; sem prévia do limite)",
   "SCMOREACTIVITIES.Activities.Canvas.Warning.GmRequired": "Um GM precisa executar esta operação de canvas.",
   "SCMOREACTIVITIES.Activities.Canvas.Warning.MissingScene": "Abra uma cena ativa antes de usar esta atividade.",
   "SCMOREACTIVITIES.Activities.Canvas.Warning.MissingOrigin": "Selecione ou posicione primeiro o token do ator da atividade na cena.",
