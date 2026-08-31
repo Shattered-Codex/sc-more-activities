@@ -76,10 +76,11 @@ function makeCanvas() {
 
   globalThis.canvas = {
     dimensions: {
-      distancePixels: 10
+      // Deliberately wrong: range previews must use the scene grid ratio.
+      distancePixels: 999
     },
     scene: {
-      grid: { size: 100 }
+      grid: { size: 100, distance: 10 }
     },
     app: {
       view: CANVAS_VIEW
@@ -111,7 +112,6 @@ function patchCanvasService(t, calls, { distance = 0 } = {}) {
     getOriginTokenObject: ScCanvasActivityService.getOriginTokenObject,
     getTokenCenter: ScCanvasActivityService.getTokenCenter,
     snapCenterPoint: ScCanvasActivityService.snapCenterPoint,
-    euclideanSceneDistance: ScCanvasActivityService.euclideanSceneDistance,
     rangeSceneDistance: ScCanvasActivityService.rangeSceneDistance,
     executeTeleportPlacement: ScCanvasActivityService.executeTeleportPlacement,
     getTeleportPlacementPreview: ScCanvasActivityService.getTeleportPlacementPreview
@@ -120,7 +120,6 @@ function patchCanvasService(t, calls, { distance = 0 } = {}) {
   ScCanvasActivityService.getOriginTokenObject = () => ({ id: "origin-token" });
   ScCanvasActivityService.getTokenCenter = () => ({ x: 0, y: 0 });
   ScCanvasActivityService.snapCenterPoint = (point) => point;
-  ScCanvasActivityService.euclideanSceneDistance = () => distance;
   ScCanvasActivityService.rangeSceneDistance = () => distance;
   ScCanvasActivityService.executeTeleportPlacement = async(activity, placement) => {
     calls.push({ activity, placement });

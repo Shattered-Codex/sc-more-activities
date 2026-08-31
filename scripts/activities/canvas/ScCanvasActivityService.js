@@ -309,32 +309,20 @@ export class ScCanvasActivityService {
     return pixelDistance / gridSize * gridDistance;
   }
 
-  static euclideanSceneDistance(pointA, pointB, scene = canvas?.scene) {
-    // Straight-line distance in scene units, ignoring the grid's diagonal rules.
-    // This matches a drawn range circle (a Euclidean radius), unlike
-    // sceneDistanceBetweenPoints which follows grid measurement (a square on a
-    // 5e square grid).
-    const pixelDistance = Math.hypot(Number(pointB?.x) - Number(pointA?.x), Number(pointB?.y) - Number(pointA?.y));
-    const gridSize = Number(scene?.grid?.size ?? canvas?.grid?.size ?? 100) || 100;
-    const gridDistance = Number(scene?.grid?.distance ?? canvas?.grid?.distance ?? 5) || 5;
-    return pixelDistance / gridSize * gridDistance;
-  }
-
   static rangeSceneDistance(pointA, pointB, rangeShape, scene = canvas?.scene) {
+    if (ScRangeShape.normalize(rangeShape) === ScRangeShape.VALUES.GRID) {
+      return ScCanvasActivityService.sceneDistanceBetweenPoints(pointA, pointB, scene);
+    }
     return ScRangeShape.distance(pointA, pointB, rangeShape, scene);
   }
 
   static rangeDistanceBetweenTokens(tokenA, tokenB, rangeShape, scene = canvas?.scene) {
-    return ScRangeShape.distance(
+    return ScCanvasActivityService.rangeSceneDistance(
       ScCanvasActivityService.getTokenCenter(tokenA, scene),
       ScCanvasActivityService.getTokenCenter(tokenB, scene),
       rangeShape,
       scene
     );
-  }
-
-  static sceneDistanceBetweenTokens(tokenA, tokenB, scene = canvas?.scene) {
-    return ScCanvasActivityService.#sceneDistanceBetween(tokenA?.document ?? tokenA, tokenB?.document ?? tokenB, scene);
   }
 
   static snapCenterPoint(point, scene = canvas?.scene) {
@@ -375,47 +363,6 @@ export class ScCanvasActivityService {
       .filter(Boolean)
       .map((document) => document.object ?? canvas?.tokens?.get?.(document.id) ?? document)
       .filter(Boolean);
-  }
-
-  static async createPreviewTemplate(data = {}) {
-    try {
-      const scene = ScCanvasActivityService.#activeScene();
-      const [template] = await scene.createEmbeddedDocuments("MeasuredTemplate", [{
-        t: data.type ?? "circle",
-        x: Number(data.x) || 0,
-        y: Number(data.y) || 0,
-        direction: Number(data.direction) || 0,
-        distance: Number(data.distance) || 0,
-        fillColor: data.fillColor ?? "#39f08c",
-        borderColor: data.borderColor ?? "#24b86a",
-        user: game?.user?.id ?? null,
-        flags: {
-          [Constants.MODULE_ID]: {
-            preview: true
-          }
-        }
-      }]);
-      return template ?? null;
-    } catch (error) {
-      Logger.debug("Could not create canvas preview template.", error);
-      return null;
-    }
-  }
-
-  static async removePreviewTemplate(template) {
-    try {
-      const scene = template?.parent ?? canvas?.scene;
-      const id = template?.id;
-      if (scene && id) {
-        const existingTemplate = scene?.templates?.get?.(id);
-        if (!existingTemplate) {
-          return;
-        }
-        await scene.deleteEmbeddedDocuments("MeasuredTemplate", [id]);
-      }
-    } catch (error) {
-      Logger.debug("Could not remove canvas preview template.", error);
-    }
   }
 
   static #buildTeleportRequest(activity) {

@@ -680,6 +680,7 @@
   "SCMOREACTIVITIES.Activities.Canvas.Fields.RangeShape.Choices.System": "Follow D&D setting",
   "SCMOREACTIVITIES.Activities.Canvas.Fields.RangeShape.Choices.Circle": "Circle",
   "SCMOREACTIVITIES.Activities.Canvas.Fields.RangeShape.Choices.Square": "Square",
+  "SCMOREACTIVITIES.Activities.Canvas.Fields.RangeShape.Choices.Grid": "Scene grid measurement (legacy; no boundary preview)",
   "SCMOREACTIVITIES.Activities.Canvas.Warning.GmRequired": "A GM must execute this canvas operation.",
   "SCMOREACTIVITIES.Activities.Canvas.Warning.MissingScene": "Open an active scene before using this activity.",
   "SCMOREACTIVITIES.Activities.Canvas.Warning.MissingOrigin": "Select or place the activity actor token on the scene first.",

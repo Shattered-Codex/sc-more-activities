@@ -206,15 +206,13 @@ function installPlacementGlobals(t) {
     getOriginTokenDocument: ScCanvasActivityService.getOriginTokenDocument,
     getOriginTokenObject: ScCanvasActivityService.getOriginTokenObject,
     getTokenCenter: ScCanvasActivityService.getTokenCenter,
-    executeWallPlacement: ScCanvasActivityService.executeWallPlacement,
-    removePreviewTemplate: ScCanvasActivityService.removePreviewTemplate
+    executeWallPlacement: ScCanvasActivityService.executeWallPlacement
   };
 
   ScCanvasActivityService.getOriginTokenDocument = () => origin;
   ScCanvasActivityService.getOriginTokenObject = () => origin;
   ScCanvasActivityService.getTokenCenter = () => ({ x: 0, y: 0 });
   ScCanvasActivityService.executeWallPlacement = async() => ({ ok: false });
-  ScCanvasActivityService.removePreviewTemplate = async() => {};
 
   const warnings = [];
   const previousWarn = ui.notifications.warn;

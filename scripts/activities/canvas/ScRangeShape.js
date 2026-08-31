@@ -2,18 +2,21 @@ export class ScRangeShape {
   static VALUES = Object.freeze({
     SYSTEM: "system",
     CIRCLE: "circle",
-    SQUARE: "square"
+    SQUARE: "square",
+    GRID: "grid"
   });
 
   static choices() {
     return Object.values(ScRangeShape.VALUES);
   }
 
-  static field(fields) {
+  static field(fields, { includeGrid = false } = {}) {
     return new fields.StringField({
       required: false,
       initial: ScRangeShape.VALUES.CIRCLE,
-      choices: ScRangeShape.choices()
+      choices: includeGrid
+        ? ScRangeShape.choices()
+        : ScRangeShape.choices().filter((value) => value !== ScRangeShape.VALUES.GRID)
     });
   }
 
@@ -21,17 +24,29 @@ export class ScRangeShape {
     return ScRangeShape.choices().includes(value) ? value : ScRangeShape.VALUES.CIRCLE;
   }
 
-  static options() {
-    return [
+  static options({ includeGrid = false } = {}) {
+    const options = [
       [ScRangeShape.VALUES.CIRCLE, "Circle"],
       [ScRangeShape.VALUES.SQUARE, "Square"],
       [ScRangeShape.VALUES.SYSTEM, "System"]
-    ].map(([value, key]) => ({
+    ];
+    if (includeGrid) {
+      options.push([ScRangeShape.VALUES.GRID, "Grid"]);
+    }
+    return options.map(([value, key]) => ({
       value,
       label: globalThis.game?.i18n?.localize?.(
         `SCMOREACTIVITIES.Activities.Canvas.Fields.RangeShape.Choices.${key}`
       ) ?? key
     }));
+  }
+
+  static migrateLegacyGridRange(source, scope) {
+    const config = source?.[scope];
+    if (!source?._id || !config || Object.hasOwn(config, "rangeShape")) {
+      return;
+    }
+    config.rangeShape = ScRangeShape.VALUES.GRID;
   }
 
   static isSquare(value) {
@@ -90,6 +105,12 @@ export class ScRangeShape {
     borderAlpha = 0.9,
     fillAlpha = 0.12
   }) {
+    // Foundry grid measurement can use diagonal rules that have no honest
+    // circle-or-square boundary. Legacy activities keep their validation, but
+    // omit a potentially misleading geometric preview until a shape is chosen.
+    if (ScRangeShape.normalize(rangeShape) === ScRangeShape.VALUES.GRID) {
+      return;
+    }
     const radius = ScRangeShape.pixels(distance, scene);
     if (!graphics || !center || !Number.isFinite(radius) || radius <= 0) {
       return;

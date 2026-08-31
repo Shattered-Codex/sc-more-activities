@@ -36,7 +36,7 @@ export class ScMovementActivitySheet extends dnd5e.applications.activity.Activit
     };
     context.targetSourceOptions = ScMovementActivitySheet.#targetSourceOptions();
     context.movementTypeOptions = ScMovementActivitySheet.#movementTypeOptions();
-    context.rangeShapeOptions = ScRangeShape.options();
+    context.rangeShapeOptions = ScRangeShape.options({ includeGrid: true });
     // The save gate only applies to external targets, so the section is tied
     // to the targeted-tokens source; self and controlled keep the direct flow.
     context.movementShowsSave = context.movement.targetSource === CANVAS_TARGET_SOURCES.TARGETS;

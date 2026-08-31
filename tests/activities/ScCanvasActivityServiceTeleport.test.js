@@ -102,6 +102,23 @@ test("circle target range stays circular even when the grid measures diagonals a
   assert.equal(ScCanvasActivityService.rangeDistanceBetweenTokens(origin, diagonal, "square", scene), 30);
 });
 
+test("legacy grid range delegates to Foundry scene measurement", (t) => {
+  const scene = { grid: { size: 100, distance: 5 } };
+  globalThis.canvas = {
+    scene,
+    grid: {
+      size: 100,
+      measurePath: () => ({ distance: 17 })
+    }
+  };
+  t.after(() => delete globalThis.canvas);
+
+  assert.equal(
+    ScCanvasActivityService.rangeSceneDistance({ x: 0, y: 0 }, { x: 600, y: 600 }, "grid", scene),
+    17
+  );
+});
+
 test("server validation accepts a destination in a square range corner", async(t) => {
   const origin = makeToken({ id: "origin", x: 0, y: 0 });
   const target = makeToken({ id: "target", x: 100, y: 0 });

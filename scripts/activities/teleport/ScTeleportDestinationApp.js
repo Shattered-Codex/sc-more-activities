@@ -319,8 +319,9 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
    * Redraws the range ring and the wall marks, but only when something they
    * depend on actually changed. A pointer move does not.
    */
-  #drawStatic(originCenter, rangePixels, borderColor, fillColor, rangeShape) {
+  #drawStatic(originCenter, rangeDistance, borderColor, fillColor, rangeShape, scene = canvas?.scene) {
     const squareRange = ScRangeShape.isSquare(rangeShape);
+    const rangePixels = rangeDistance > 0 ? ScRangeShape.pixels(rangeDistance, scene) : Infinity;
     const signature = `${originCenter?.x}:${originCenter?.y}:${rangePixels}:${borderColor}:${fillColor}:${squareRange}`;
     if (this.staticSignature === signature) {
       return;
@@ -328,12 +329,14 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     this.staticSignature = signature;
 
     this.staticGraphics.clear();
-    if (Number.isFinite(rangePixels) && rangePixels > 0 && originCenter) {
-      this.staticGraphics.lineStyle(2, borderColor, 0.9);
-      this.staticGraphics.beginFill(fillColor, 0.12);
-      ScRangeShape.draw(this.staticGraphics, originCenter, rangePixels, rangeShape);
-      this.staticGraphics.endFill();
-    }
+    ScRangeShape.drawPreview(this.staticGraphics, {
+      center: originCenter,
+      distance: rangeDistance,
+      rangeShape,
+      scene,
+      borderColor,
+      fillColor
+    });
     this.#drawWalls(originCenter, rangePixels, squareRange);
   }
 
@@ -359,10 +362,14 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     const outOfRangeFill = 0xff6b6b;
 
     const originCenter = ScCanvasActivityService.getTokenCenter(origin);
-    const distancePixels = Number(canvas?.dimensions?.distancePixels ?? 0);
-    const rangePixels = config.teleportDistance > 0 ? config.teleportDistance * distancePixels : Infinity;
-
-    this.#drawStatic(originCenter, rangePixels, borderColor, fillColor, config.rangeShape);
+    this.#drawStatic(
+      originCenter,
+      config.teleportDistance,
+      colors.borderColor,
+      colors.fillColor,
+      config.rangeShape,
+      canvas?.scene
+    );
 
     if (!this.hoverPoint) {
       return;
