@@ -119,6 +119,29 @@ test("movement preview does not project an explicitly selected origin target wit
   assert.deepEqual(preview.updates, []);
 });
 
+test("movement range accepts diagonal corners only for square shape", (t) => {
+  const origin = makeToken({ id: "origin-token", x: 0, y: 0 });
+  const target = makeToken({ id: "target-token", x: 600, y: 600 });
+  const scene = makeScene([origin, target]);
+  installCanvasGlobals(t, scene);
+
+  const previewFor = (rangeShape) => ScCanvasActivityService.getMovementPreviewData(
+    makeActivity({
+      targetSource: CANVAS_TARGET_SOURCES.TARGETS,
+      maxRange: 30,
+      rangeShape
+    }),
+    {
+      originTokenId: origin.id,
+      tokenIds: [target.id],
+      useExplicitTokenIds: true
+    }
+  );
+
+  assert.equal(previewFor("circle").targets[0].inRange, false);
+  assert.equal(previewFor("square").targets[0].inRange, true);
+});
+
 test("movement preview projects a configured self target using an explicit direction point", (t) => {
   const origin = makeToken({ id: "origin-token", name: "Origin", x: 200, y: 300 });
   const scene = makeScene([origin]);

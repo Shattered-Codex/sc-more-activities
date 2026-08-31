@@ -2,6 +2,7 @@ import { Constants } from "../../constants/Constants.js";
 import { ModuleSettings } from "../../settings/ModuleSettings.js";
 import { ScDocumentWindowMinimizer } from "../../applications/ScDocumentWindowMinimizer.js";
 import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
+import { ScRangeShape } from "../canvas/ScRangeShape.js";
 import { ScPortalConfig } from "./ScPortalConfig.js";
 import { ScPortalGeometry } from "./ScPortalGeometry.js";
 import { ScPortalService } from "./ScPortalService.js";
@@ -52,7 +53,6 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
     this.canvasContextMenuHandler = null;
     this.previewGraphics = null;
     this.previewLabels = null;
-    this.placementRangeTemplate = null;
     this.minimizedWindows = null;
     this.hasPannedToOrigin = false;
     this.sceneId = canvas?.scene?.id ?? null;
@@ -77,7 +77,12 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
       linkRange: this.config.linkRange === "" ? null : this.config.linkRange,
       hasLinkRange: this.config.linkRange !== "" && this.config.linkRange > 0,
       linkDistance: entry && exit
-        ? Math.round(ScCanvasActivityService.euclideanSceneDistance(entry, exit, canvas?.scene))
+        ? Math.round(ScCanvasActivityService.rangeSceneDistance(
+          entry,
+          exit,
+          this.config.rangeShape,
+          canvas?.scene
+        ))
         : 0,
       rangeUnits: ScPortalPlacementApp.#gridUnits(),
       originName: this.#originTokenObject()?.name
@@ -131,7 +136,6 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
     this.element.querySelector(".sc-ma-portal-confirm")?.addEventListener("click", () => this.#confirm());
     this.element.querySelector(".sc-ma-portal-cancel")?.addEventListener("click", () => this.close());
 
-    await this.#renderPlacementRangeMarker();
     this.#panToOrigin();
     this.#drawPreviewState();
   }
@@ -180,7 +184,6 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
     this.isClosing = true;
     this.#stopCanvasListener();
     this.#destroyPreviewGraphics();
-    await this.#clearPlacementRangeMarker();
     ScDocumentWindowMinimizer.restoreWindows(this.minimizedWindows ?? []);
     this.minimizedWindows = null;
     await super.close(options);
@@ -412,6 +415,7 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
       placementRange: this.config.placementRange,
       entryPoint: this.points.length === 1 ? this.points[0] : null,
       linkRange: this.config.linkRange,
+      rangeShape: this.config.rangeShape,
       scene: canvas?.scene
     });
   }
@@ -426,6 +430,7 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
     placementRange = 0,
     entryPoint = null,
     linkRange = "",
+    rangeShape = "circle",
     scene = null
   } = {}) {
     if (!point) {
@@ -436,13 +441,13 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
       if (!originCenter) {
         return "origin";
       }
-      if (ScCanvasActivityService.euclideanSceneDistance(originCenter, point, scene) > placementRange) {
+      if (ScCanvasActivityService.rangeSceneDistance(originCenter, point, rangeShape, scene) > placementRange) {
         return "range";
       }
     }
 
     if (entryPoint && linkRange !== "" && linkRange > 0
-      && ScCanvasActivityService.euclideanSceneDistance(entryPoint, point, scene) > linkRange) {
+      && ScCanvasActivityService.rangeSceneDistance(entryPoint, point, rangeShape, scene) > linkRange) {
       return "linkRange";
     }
 
@@ -478,32 +483,6 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
       "SCMOREACTIVITIES.Activities.Canvas.Warning.InvalidPosition",
       "The requested canvas position is invalid."
     ));
-  }
-
-  async #renderPlacementRangeMarker() {
-    if (this.config.placementRange <= 0 || this.placementRangeTemplate) {
-      return;
-    }
-
-    const originCenter = this.#originCenter();
-    if (!originCenter) {
-      return;
-    }
-
-    const previewColors = ModuleSettings.getPortalRangeColors();
-    this.placementRangeTemplate = await ScCanvasActivityService.createPreviewTemplate({
-      type: "circle",
-      x: originCenter.x,
-      y: originCenter.y,
-      distance: this.config.placementRange,
-      fillColor: previewColors.fillColor,
-      borderColor: previewColors.borderColor
-    });
-  }
-
-  async #clearPlacementRangeMarker() {
-    await ScCanvasActivityService.removePreviewTemplate(this.placementRangeTemplate);
-    this.placementRangeTemplate = null;
   }
 
   #ensurePreviewGraphics() {
@@ -553,8 +532,30 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
 
     graphics.clear();
     this.#clearLabels();
+    const originCenter = this.#originCenter();
+    const colors = ModuleSettings.getPortalRangeColors();
+    ScRangeShape.drawPreview(graphics, {
+      center: originCenter,
+      distance: this.config.placementRange,
+      rangeShape: this.config.rangeShape,
+      scene: canvas?.scene,
+      borderColor: colors.borderColor,
+      fillColor: colors.fillColor
+    });
     const radius = ScPortalGeometry.radiusPixels(this.config.squares, canvas?.scene);
     const [entry, exit] = this.points;
+    if (entry && !exit && this.config.linkRange !== "") {
+      ScRangeShape.drawPreview(graphics, {
+        center: entry,
+        distance: this.config.linkRange,
+        rangeShape: this.config.rangeShape,
+        scene: canvas?.scene,
+        borderColor: colors.borderColor,
+        fillColor: colors.fillColor,
+        borderAlpha: 0.75,
+        fillAlpha: 0.08
+      });
+    }
     const entryLabel = Constants.localize("SCMOREACTIVITIES.Activities.ScPortal.Side.Entry", "Entry");
     const exitLabel = Constants.localize("SCMOREACTIVITIES.Activities.ScPortal.Side.Exit", "Exit");
 
@@ -577,9 +578,9 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
     // The hover preview wears the colours and name of the side it will become,
     // so the user always knows which one the next click places.
     const valid = !this.#placementIssue(this.hoverPoint);
-    const colors = valid ? (entry ? SIDE_COLORS.exit : SIDE_COLORS.entry) : INVALID_COLORS;
-    this.#drawSide(graphics, this.hoverPoint, radius, colors);
-    this.#drawLabel(this.hoverPoint, radius, entry ? exitLabel : entryLabel, colors.fill);
+    const sideColors = valid ? (entry ? SIDE_COLORS.exit : SIDE_COLORS.entry) : INVALID_COLORS;
+    this.#drawSide(graphics, this.hoverPoint, radius, sideColors);
+    this.#drawLabel(this.hoverPoint, radius, entry ? exitLabel : entryLabel, sideColors.fill);
     if (entry) {
       this.#drawLink(graphics, entry, this.hoverPoint, radius, valid ? LINK_COLOR : INVALID_COLORS.border, 0.6);
     }

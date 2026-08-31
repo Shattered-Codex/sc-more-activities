@@ -145,3 +145,22 @@ test("placed wall creation exposes mutable Wall data before document creation", 
   assert.equal(result.ok, true);
   assertDecoratedCreation(fixture);
 });
+
+test("wall placement accepts a diagonal corner only for square range", async(t) => {
+  const fixture = installWallGlobals(t);
+  fixture.activity.wall.referenceRange = 30;
+  const placement = {
+    originTokenId: fixture.origin.id,
+    walls: [{ points: [{ x: 750, y: 750 }, { x: 750, y: 650 }] }]
+  };
+
+  fixture.activity.wall.rangeShape = "circle";
+  const circular = await ScCanvasActivityService.executeWallPlacement(fixture.activity, placement);
+  assert.equal(circular.ok, false);
+  assert.equal(fixture.created.length, 0);
+
+  fixture.activity.wall.rangeShape = "square";
+  const square = await ScCanvasActivityService.executeWallPlacement(fixture.activity, placement);
+  assert.equal(square.ok, true);
+  assert.equal(fixture.created.length, 1);
+});

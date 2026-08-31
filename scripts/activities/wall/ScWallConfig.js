@@ -1,4 +1,5 @@
 import { ScCanvasFormula } from "../canvas/ScCanvasFormula.js";
+import { ScRangeShape } from "../canvas/ScRangeShape.js";
 
 export class ScWallConfig {
   static fromActivity(activity) {
@@ -12,6 +13,7 @@ export class ScWallConfig {
       panelSpacing: ScWallConfig.resolveNumber(config.panelSpacing, item, 0, { min: 0 }),
       maxPanels: ScWallConfig.resolveLimit(config.maxPanels, item),
       referenceRange: ScWallConfig.resolveNumber(config.referenceRange, item, 0, { min: 0 }),
+      rangeShape: ScRangeShape.normalize(config.rangeShape),
       maxLength: ScWallConfig.resolveNumber(config.maxLength, item, 60, { min: 0 }),
       blocksMovement: config.blocksMovement !== false,
       blocksSight: config.blocksSight !== false,

@@ -1,4 +1,5 @@
 import { ScCanvasFormula } from "../canvas/ScCanvasFormula.js";
+import { ScRangeShape } from "../canvas/ScRangeShape.js";
 
 export class ScPortalConfig {
   static fromActivity(activity) {
@@ -7,6 +8,7 @@ export class ScPortalConfig {
     return {
       placementRange: ScCanvasFormula.resolveNumber(config.placementRange, item, 30, { min: 0 }),
       linkRange: ScCanvasFormula.resolveLimit(config.linkRange, item),
+      rangeShape: ScRangeShape.normalize(config.rangeShape),
       shape: config.shape === "circle" ? "circle" : "square",
       squares: ScPortalConfig.#squares(config.size),
       snapToGrid: config.snapToGrid !== false,

@@ -113,7 +113,9 @@ export class ScTeleportTargetApp extends HandlebarsApplicationMixin(ApplicationV
     }
 
     const origin = ScCanvasActivityService.getOriginTokenObject(this.activity);
-    const distance = origin ? ScCanvasActivityService.sceneDistanceBetweenTokens(origin, token) : 0;
+    const distance = origin
+      ? ScCanvasActivityService.rangeDistanceBetweenTokens(origin, token, config.rangeShape)
+      : 0;
     if (config.targetRadius > 0 && distance > config.targetRadius) {
       ui.notifications?.warn?.(Constants.format(
         "SCMOREACTIVITIES.Activities.ScTeleport.Warning.TargetOutOfRange",
@@ -167,7 +169,9 @@ export class ScTeleportTargetApp extends HandlebarsApplicationMixin(ApplicationV
         continue;
       }
 
-      const distance = origin ? ScCanvasActivityService.sceneDistanceBetweenTokens(origin, token) : 0;
+      const distance = origin
+        ? ScCanvasActivityService.rangeDistanceBetweenTokens(origin, token, config.rangeShape)
+        : 0;
       if (config.targetRadius > 0 && distance > config.targetRadius) {
         continue;
       }
@@ -199,7 +203,9 @@ export class ScTeleportTargetApp extends HandlebarsApplicationMixin(ApplicationV
         continue;
       }
 
-      const distance = origin ? ScCanvasActivityService.sceneDistanceBetweenTokens(origin, token) : 0;
+      const distance = origin
+        ? ScCanvasActivityService.rangeDistanceBetweenTokens(origin, token, config.rangeShape)
+        : 0;
       const tokenId = this.#tokenId(token);
       const isOrigin = origin && this.#tokenId(origin) === tokenId;
       if (isOrigin && !config.targetSelf) {
@@ -244,7 +250,8 @@ export class ScTeleportTargetApp extends HandlebarsApplicationMixin(ApplicationV
       maxTargets: onlyTargetSelf ? 1 : Math.max(1, Number(config.maxTargets ?? 1) || 1),
       targetSelf: Boolean(config.targetSelf) || onlyTargetSelf,
       onlyTargetSelf,
-      targetRadius: Math.max(0, Number(config.targetRadius ?? 15) || 0)
+      targetRadius: Math.max(0, Number(config.targetRadius ?? 15) || 0),
+      rangeShape: config.rangeShape ?? "circle"
     };
   }
 }

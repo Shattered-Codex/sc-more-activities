@@ -1,3 +1,5 @@
+import { ScRangeShape } from "../canvas/ScRangeShape.js";
+
 export class ScPortalActivitySheet extends dnd5e.applications.activity.ActivitySheet {
   static DEFAULT_OPTIONS = {
     classes: ["dnd5e2", "sheet", "activity-sheet", "sc-more-activities", "sc-ma-activity", "sc-ma-activity--portal"]
@@ -16,6 +18,7 @@ export class ScPortalActivitySheet extends dnd5e.applications.activity.ActivityS
     context.portal = {
       placementRange: this.activity?.portal?.placementRange ?? "30",
       linkRange: this.activity?.portal?.linkRange ?? "",
+      rangeShape: ScRangeShape.normalize(this.activity?.portal?.rangeShape),
       shape: this.activity?.portal?.shape ?? "square",
       size: this.activity?.portal?.size ?? "1",
       snapToGrid: this.activity?.portal?.snapToGrid !== false,
@@ -30,6 +33,7 @@ export class ScPortalActivitySheet extends dnd5e.applications.activity.ActivityS
       allowPlayerRequests: this.activity?.portal?.allowPlayerRequests !== false
     };
     context.shapeOptions = ScPortalActivitySheet.#shapeOptions();
+    context.rangeShapeOptions = ScRangeShape.options();
     context.sizeOptions = ScPortalActivitySheet.#sizeOptions();
     context.visibilityOptions = ScPortalActivitySheet.#visibilityOptions();
     return context;

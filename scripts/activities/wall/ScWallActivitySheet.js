@@ -1,3 +1,5 @@
+import { ScRangeShape } from "../canvas/ScRangeShape.js";
+
 export class ScWallActivitySheet extends dnd5e.applications.activity.ActivitySheet {
   static DEFAULT_OPTIONS = {
     classes: ["dnd5e2", "sheet", "activity-sheet", "sc-more-activities", "sc-ma-activity", "sc-ma-activity--wall"]
@@ -21,6 +23,7 @@ export class ScWallActivitySheet extends dnd5e.applications.activity.ActivityShe
       panelSpacing: this.activity?.wall?.panelSpacing ?? "0",
       maxPanels: this.activity?.wall?.maxPanels ?? "",
       referenceRange: this.activity?.wall?.referenceRange ?? "0",
+      rangeShape: ScRangeShape.normalize(this.activity?.wall?.rangeShape),
       maxLength: this.activity?.wall?.maxLength ?? "60",
       blocksMovement: this.activity?.wall?.blocksMovement !== false,
       blocksSight: this.activity?.wall?.blocksSight !== false,
@@ -29,6 +32,7 @@ export class ScWallActivitySheet extends dnd5e.applications.activity.ActivityShe
     };
     context.wallTypeOptions = ScWallActivitySheet.#wallTypeOptions();
     context.facingOptions = ScWallActivitySheet.#facingOptions();
+    context.rangeShapeOptions = ScRangeShape.options();
     return context;
   }
 

@@ -1,3 +1,5 @@
+import { ScRangeShape } from "../canvas/ScRangeShape.js";
+
 export class ScTeleportActivityData extends dnd5e.dataModels.activity.BaseActivityData {
   static defineSchema() {
     const fields = foundry.data.fields;
@@ -33,6 +35,7 @@ export class ScTeleportActivityData extends dnd5e.dataModels.activity.BaseActivi
           initial: 30,
           min: 0
         }),
+        rangeShape: ScRangeShape.field(fields),
         keepArrangement: new fields.BooleanField({
           required: false,
           initial: true

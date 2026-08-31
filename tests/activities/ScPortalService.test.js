@@ -526,6 +526,26 @@ test("a side placed beyond the placement range is refused", async(t) => {
   assert.deepEqual(scene.created, []);
 });
 
+test("portal placement accepts diagonal corners only for square range", async(t) => {
+  const caster = makeToken({ id: "caster", x: 100, y: 100 });
+  const scene = makeScene({ tokens: [caster] });
+  installGlobals(t, scene);
+  const activity = makeActivity({ rangeShape: "circle" });
+  globalThis.fromUuid = async() => activity;
+  const request = createRequest(scene, {
+    entry: { x: 750, y: 750 },
+    exit: { x: 650, y: 650 }
+  });
+
+  const circular = await ScPortalService.executeOperation(request);
+  assert.equal(circular.ok, false);
+  assert.deepEqual(scene.created, []);
+
+  activity.portal.rangeShape = "square";
+  const square = await ScPortalService.executeOperation(request);
+  assert.equal(square.ok, true);
+});
+
 test("sides further apart than the link range are refused", async(t) => {
   const caster = makeToken({ id: "caster", x: 100, y: 100 });
   const scene = makeScene({ tokens: [caster] });

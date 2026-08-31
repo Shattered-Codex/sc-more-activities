@@ -2,6 +2,7 @@ import { Constants } from "../../constants/Constants.js";
 import { HOOKS } from "../../constants/Hooks.js";
 import { Logger } from "../../support/Logger.js";
 import { ScWallConfig } from "../wall/ScWallConfig.js";
+import { ScRangeShape } from "./ScRangeShape.js";
 import { ScWallGeometry } from "../wall/ScWallGeometry.js";
 import {
   CANVAS_TARGET_SOURCES,
@@ -182,7 +183,7 @@ export class ScCanvasActivityService {
     }
 
     const originCenter = ScCanvasActivityService.#tokenCenter(origin, scene);
-    const distance = ScCanvasActivityService.euclideanSceneDistance(originCenter, point, scene);
+    const distance = ScCanvasActivityService.rangeSceneDistance(originCenter, point, config.rangeShape, scene);
     const teleportDistance = Math.max(0, Number(config.teleportDistance ?? 0) || 0);
     const inRange = teleportDistance <= 0 || distance <= teleportDistance;
 
@@ -317,6 +318,19 @@ export class ScCanvasActivityService {
     const gridSize = Number(scene?.grid?.size ?? canvas?.grid?.size ?? 100) || 100;
     const gridDistance = Number(scene?.grid?.distance ?? canvas?.grid?.distance ?? 5) || 5;
     return pixelDistance / gridSize * gridDistance;
+  }
+
+  static rangeSceneDistance(pointA, pointB, rangeShape, scene = canvas?.scene) {
+    return ScRangeShape.distance(pointA, pointB, rangeShape, scene);
+  }
+
+  static rangeDistanceBetweenTokens(tokenA, tokenB, rangeShape, scene = canvas?.scene) {
+    return ScRangeShape.distance(
+      ScCanvasActivityService.getTokenCenter(tokenA, scene),
+      ScCanvasActivityService.getTokenCenter(tokenB, scene),
+      rangeShape,
+      scene
+    );
   }
 
   static sceneDistanceBetweenTokens(tokenA, tokenB, scene = canvas?.scene) {
@@ -511,6 +525,7 @@ export class ScCanvasActivityService {
     const normalizedConfig = {
       distance: Math.max(0, Number(config.distance ?? 10) || 0),
       maxRange: Math.max(0, Number(config.maxRange ?? 0) || 0),
+      rangeShape: ScRangeShape.normalize(config.rangeShape),
       maxTargets: Math.max(1, Number(config.maxTargets ?? 1) || 1),
       snapToGrid: config.snapToGrid !== false,
       targetSource: config.targetSource ?? CANVAS_TARGET_SOURCES.TARGETS,
@@ -550,8 +565,13 @@ export class ScCanvasActivityService {
     const skipped = [];
 
     for (const token of targets) {
-      const distance = ScCanvasActivityService.#sceneDistanceBetween(origin, token, scene);
       const currentCenter = ScCanvasActivityService.#tokenCenter(token, scene);
+      const distance = ScCanvasActivityService.rangeSceneDistance(
+        originCenter,
+        currentCenter,
+        normalizedConfig.rangeShape,
+        scene
+      );
       const inRange = normalizedConfig.maxRange <= 0 || distance <= normalizedConfig.maxRange;
 
       let destinationCenter = null;
@@ -913,7 +933,7 @@ export class ScCanvasActivityService {
     const teleportDistance = Number(config.teleportDistance ?? 0);
     if (explicitDestination && teleportDistance > 0) {
       const originCenter = ScCanvasActivityService.#tokenCenter(origin, scene);
-      const distance = ScCanvasActivityService.euclideanSceneDistance(originCenter, destination, scene);
+      const distance = ScCanvasActivityService.rangeSceneDistance(originCenter, destination, config.rangeShape, scene);
       if (distance > teleportDistance) {
         return ScCanvasActivityService.#failure(
           "SCMOREACTIVITIES.Activities.ScTeleport.Warning.DestinationOutOfRange",
@@ -931,7 +951,7 @@ export class ScCanvasActivityService {
     if (targetRadius > 0 && origin) {
       eligibleTargets = [];
       for (const token of limitedTargets) {
-        if (ScCanvasActivityService.#sceneDistanceBetween(origin, token, scene) > targetRadius) {
+        if (ScCanvasActivityService.rangeDistanceBetweenTokens(origin, token, config.rangeShape, scene) > targetRadius) {
           skipped.push(token.name);
         } else {
           eligibleTargets.push(token);
@@ -1045,7 +1065,12 @@ export class ScCanvasActivityService {
     const skipped = [];
 
     for (const token of targets) {
-      const range = ScCanvasActivityService.#sceneDistanceBetween(origin, token, scene);
+      const range = ScCanvasActivityService.rangeSceneDistance(
+        originCenter,
+        ScCanvasActivityService.#tokenCenter(token, scene),
+        config.rangeShape,
+        scene
+      );
       if (maxRange > 0 && range > maxRange) {
         skipped.push(token.name);
         continue;
@@ -1122,6 +1147,7 @@ export class ScCanvasActivityService {
           placement.points,
           originCenter,
           config.referenceRange,
+          config.rangeShape,
           scene
         )) {
           return ScCanvasActivityService.#failure(
@@ -1157,6 +1183,7 @@ export class ScCanvasActivityService {
           segments,
           originCenter,
           config.referenceRange,
+          config.rangeShape,
           scene
         )) {
           return ScCanvasActivityService.#failure(
@@ -1454,7 +1481,7 @@ export class ScCanvasActivityService {
     return Math.max(0, count - 1);
   }
 
-  static #pointsWithinWallPlacementRange(points, originCenter, range, scene) {
+  static #pointsWithinWallPlacementRange(points, originCenter, range, rangeShape, scene) {
     if (range <= 0) {
       return true;
     }
@@ -1462,10 +1489,12 @@ export class ScCanvasActivityService {
       return false;
     }
 
-    return points.every((point) => ScCanvasActivityService.sceneDistanceBetweenPoints(originCenter, point, scene) <= range);
+    return points.every((point) => (
+      ScCanvasActivityService.rangeSceneDistance(originCenter, point, rangeShape, scene) <= range
+    ));
   }
 
-  static #segmentsWithinWallPlacementRange(segments, originCenter, range, scene) {
+  static #segmentsWithinWallPlacementRange(segments, originCenter, range, rangeShape, scene) {
     if (range <= 0) {
       return true;
     }
@@ -1476,7 +1505,7 @@ export class ScCanvasActivityService {
     return segments.every((segment) => ScCanvasActivityService.#pointsWithinWallPlacementRange([
       { x: segment?.x1, y: segment?.y1 },
       { x: segment?.x2, y: segment?.y2 }
-    ], originCenter, range, scene));
+    ], originCenter, range, rangeShape, scene));
   }
 
   static #teleportDestination(config, origin) {

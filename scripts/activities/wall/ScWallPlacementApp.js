@@ -2,6 +2,7 @@ import { Constants } from "../../constants/Constants.js";
 import { ModuleSettings } from "../../settings/ModuleSettings.js";
 import { ScDocumentWindowMinimizer } from "../../applications/ScDocumentWindowMinimizer.js";
 import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
+import { ScRangeShape } from "../canvas/ScRangeShape.js";
 import { ScWallConfig } from "./ScWallConfig.js";
 import { ScWallGeometry } from "./ScWallGeometry.js";
 
@@ -45,7 +46,6 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
     this.hoverPoint = null;
     this.previewGraphics = null;
     this.previewText = null;
-    this.placementRangeTemplate = null;
     this.sceneId = canvas?.scene?.id ?? null;
     this.originTokenId = ScCanvasActivityService.getOriginTokenDocument(activity)?.id ?? null;
     this.selectedFacing = this.config.facing === "any" ? "away" : this.config.facing;
@@ -141,7 +141,6 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
       });
     });
 
-    await this.#renderPlacementRangeMarker();
     this.#drawPreviewState();
   }
 
@@ -151,7 +150,6 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
     this.isClosing = true;
     this.#stopCanvasListener();
     this.#destroyPreviewGraphics();
-    await this.#clearPlacementRangeMarker();
     ScDocumentWindowMinimizer.restoreWindows(this.minimizedWindows ?? []);
     this.minimizedWindows = null;
     await super.close(options);
@@ -546,33 +544,6 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
     return total;
   }
 
-  async #renderPlacementRangeMarker() {
-    const config = this.#config();
-    if (config.referenceRange <= 0 || this.placementRangeTemplate) {
-      return;
-    }
-
-    const originCenter = this.#originCenter();
-    if (!originCenter) {
-      return;
-    }
-
-    const previewColors = ModuleSettings.getWallRangeColors();
-    this.placementRangeTemplate = await ScCanvasActivityService.createPreviewTemplate({
-      type: "circle",
-      x: originCenter.x,
-      y: originCenter.y,
-      distance: config.referenceRange,
-      fillColor: previewColors.fillColor,
-      borderColor: previewColors.borderColor
-    });
-  }
-
-  async #clearPlacementRangeMarker() {
-    await ScCanvasActivityService.removePreviewTemplate(this.placementRangeTemplate);
-    this.placementRangeTemplate = null;
-  }
-
   #ensurePreviewGraphics() {
     if (!globalThis.PIXI?.Graphics) {
       return;
@@ -630,6 +601,17 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
     }
 
     graphics.clear();
+    const config = this.#config();
+    const originCenter = this.#originCenter();
+    const colors = ModuleSettings.getWallRangeColors();
+    ScRangeShape.drawPreview(graphics, {
+      center: originCenter,
+      distance: config.referenceRange,
+      rangeShape: config.rangeShape,
+      scene: canvas?.scene,
+      borderColor: colors.borderColor,
+      fillColor: colors.fillColor
+    });
     this.#drawPlacedWalls(graphics);
     this.#drawCurrentPlacement(graphics);
 
@@ -785,7 +767,11 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
       return false;
     }
 
-    return ScCanvasActivityService.sceneDistanceBetweenPoints(originCenter, point) <= range;
+    return ScCanvasActivityService.rangeSceneDistance(
+      originCenter,
+      point,
+      this.#config().rangeShape
+    ) <= range;
   }
 
   #canPlacePoint(point) {

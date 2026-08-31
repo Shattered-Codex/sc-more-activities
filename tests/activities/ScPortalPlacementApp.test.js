@@ -36,6 +36,26 @@ test("a point beyond the range is reported as out of range", () => {
   assert.equal(issue({ point: { x: 1050, y: 150 } }), "range");
 });
 
+test("a diagonal corner can be square-only for placement and link range", () => {
+  const corner = { x: 750, y: 750 };
+  assert.equal(issue({ point: corner, rangeShape: "circle" }), "range");
+  assert.equal(issue({ point: corner, rangeShape: "square" }), null);
+  assert.equal(issue({
+    point: corner,
+    placementRange: 0,
+    entryPoint: ORIGIN,
+    linkRange: 30,
+    rangeShape: "circle"
+  }), "linkRange");
+  assert.equal(issue({
+    point: corner,
+    placementRange: 0,
+    entryPoint: ORIGIN,
+    linkRange: 30,
+    rangeShape: "square"
+  }), null);
+});
+
 test("an unresolved origin is its own problem, not an out of range point", () => {
   // Reporting "must be placed within 30" for this sent the user looking for a
   // distance problem when the real one is a missing token on the scene.

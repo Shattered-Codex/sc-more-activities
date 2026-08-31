@@ -31,13 +31,18 @@ function makeScene(tokens) {
   };
 }
 
-function installGlobals(t, { scene, activity }) {
+function installGlobals(t, { scene, activity, squareTemplates = false }) {
   globalThis.game = {
     i18n: {
       localize: (key) => key,
       format: (key) => key
     },
     user: { id: "gm", isGM: true },
+    settings: {
+      get(namespace, key) {
+        return namespace === "dnd5e" && key === "gridAlignedSquareTemplates" && squareTemplates;
+      }
+    },
     users: new Map([["player", { id: "player", isGM: false, active: true }]]),
     scenes: new Map([[scene.id, scene]])
   };
@@ -55,6 +60,110 @@ function installGlobals(t, { scene, activity }) {
     delete globalThis.fromUuid;
   });
 }
+
+test("square teleport range counts a diagonal as one space", () => {
+  const scene = { grid: { size: 100, distance: 5 } };
+  const origin = { x: 0, y: 0 };
+  const diagonal = { x: 600, y: 600 };
+
+  globalThis.game = { settings: { get: () => false } };
+  assert.ok(ScCanvasActivityService.rangeSceneDistance(origin, diagonal, "system", scene) > 30);
+  globalThis.game.settings.get = () => true;
+  assert.ok(ScCanvasActivityService.rangeSceneDistance(origin, diagonal, undefined, scene) > 30);
+  assert.equal(
+    ScCanvasActivityService.rangeSceneDistance(origin, diagonal, "system", scene),
+    30
+  );
+  globalThis.game.settings.get = () => false;
+  assert.equal(
+    ScCanvasActivityService.rangeSceneDistance(origin, diagonal, "square", scene),
+    30
+  );
+  assert.ok(
+    ScCanvasActivityService.rangeSceneDistance(origin, diagonal, "circle", scene) > 30
+  );
+  delete globalThis.game;
+});
+
+test("circle target range stays circular even when the grid measures diagonals as squares", (t) => {
+  const scene = { grid: { size: 100, distance: 5 } };
+  const origin = makeToken({ id: "origin", x: 0, y: 0 });
+  const diagonal = makeToken({ id: "diagonal", x: 600, y: 600 });
+  globalThis.canvas = {
+    scene,
+    grid: {
+      size: 100,
+      measurePath: () => ({ distance: 30 })
+    }
+  };
+  t.after(() => delete globalThis.canvas);
+
+  assert.ok(ScCanvasActivityService.rangeDistanceBetweenTokens(origin, diagonal, "circle", scene) > 30);
+  assert.equal(ScCanvasActivityService.rangeDistanceBetweenTokens(origin, diagonal, "square", scene), 30);
+});
+
+test("server validation accepts a destination in a square range corner", async(t) => {
+  const origin = makeToken({ id: "origin", x: 0, y: 0 });
+  const target = makeToken({ id: "target", x: 100, y: 0 });
+  const scene = makeScene([origin, target]);
+  const activity = {
+    actor: { testUserPermission: () => true },
+    teleport: {
+      maxTargets: 1,
+      targetRadius: 0,
+      teleportDistance: 30,
+      rangeShape: "square",
+      snapToGrid: false
+    }
+  };
+  installGlobals(t, { scene, activity, squareTemplates: false });
+
+  const result = await ScCanvasActivityService.handleCanvasQuery({
+    operation: "teleport",
+    activityUuid: "Activity.abc",
+    sceneId: "scene-1",
+    requestUserId: "player",
+    originTokenId: "origin",
+    tokenIds: ["target"],
+    destination: { x: 650, y: 650 }
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(scene.updates.length, 1);
+});
+
+test("teleport target range accepts a diagonal corner only for square shape", async(t) => {
+  const origin = makeToken({ id: "origin", x: 0, y: 0 });
+  const target = makeToken({ id: "target", x: 600, y: 600 });
+  const scene = makeScene([origin, target]);
+  const activity = {
+    actor: { testUserPermission: () => true },
+    teleport: {
+      maxTargets: 1,
+      targetRadius: 30,
+      teleportDistance: 0,
+      rangeShape: "circle",
+      snapToGrid: false
+    }
+  };
+  installGlobals(t, { scene, activity });
+  const payload = {
+    operation: "teleport",
+    activityUuid: "Activity.abc",
+    sceneId: "scene-1",
+    requestUserId: "player",
+    originTokenId: "origin",
+    tokenIds: ["target"],
+    destination: { x: 300, y: 300 }
+  };
+
+  const circular = await ScCanvasActivityService.handleCanvasQuery(payload);
+  assert.equal(circular.ok, false);
+
+  activity.teleport.rangeShape = "square";
+  const square = await ScCanvasActivityService.handleCanvasQuery(payload);
+  assert.equal(square.ok, true);
+});
 
 test("teleport execution re-validates the target radius and skips far targets", async(t) => {
   const origin = makeToken({ id: "origin", x: 0, y: 0 });
