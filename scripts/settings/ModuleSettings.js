@@ -3,6 +3,7 @@ import { SETTINGS_KEYS } from "../constants/SettingsKeys.js";
 
 export class ModuleSettings {
   static DEBUG_LOGGING = SETTINGS_KEYS.DEBUG_LOGGING;
+  static ALLOW_PLAYER_TOKEN_MOVEMENT = SETTINGS_KEYS.ALLOW_PLAYER_TOKEN_MOVEMENT;
   static PREVIEW_COLORS = SETTINGS_KEYS.PREVIEW_COLORS;
   static PREVIEW_COLORS_MENU = SETTINGS_KEYS.PREVIEW_COLORS_MENU;
   static MIGRATION_BACKUPS = SETTINGS_KEYS.MIGRATION_BACKUPS;
@@ -11,8 +12,6 @@ export class ModuleSettings {
   static MIGRATION_INCLUDE_EXTERNAL_PACKS = SETTINGS_KEYS.MIGRATION_INCLUDE_EXTERNAL_PACKS;
   static MIGRATION_UNLOCK_PACKS = SETTINGS_KEYS.MIGRATION_UNLOCK_PACKS;
   static MIGRATION_MENU = SETTINGS_KEYS.MIGRATION_MENU;
-  static SUPPORT_MENU = SETTINGS_KEYS.SUPPORT_MENU;
-  static DOCUMENTATION_MENU = SETTINGS_KEYS.DOCUMENTATION_MENU;
   static DEFAULT_PREVIEW_COLORS = Object.freeze({
     teleportRangeBorder: "#24b86a",
     teleportRangeFill: "#39f08c",
@@ -42,6 +41,16 @@ export class ModuleSettings {
 
   static isCanvasResultCardsEnabled() {
     return ModuleSettings.#getBoolean(SETTINGS_KEYS.CANVAS_RESULT_CARDS, true);
+  }
+
+  /**
+   * Whether a player may move a token they do not own through a module
+   * movement or teleport activity. The activity's own range, distance, and
+   * target limits are re-validated on the GM client either way; this only
+   * lifts the ownership requirement on the moved token.
+   */
+  static isPlayerTokenMovementAllowed() {
+    return ModuleSettings.#getBoolean(SETTINGS_KEYS.ALLOW_PLAYER_TOKEN_MOVEMENT, true);
   }
 
   static isMigrationCompendiumScanEnabled() {

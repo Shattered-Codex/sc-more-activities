@@ -1,6 +1,7 @@
 import { Constants } from "../../constants/Constants.js";
 import { HOOKS } from "../../constants/Hooks.js";
 import { Logger } from "../../support/Logger.js";
+import { ModuleSettings } from "../../settings/ModuleSettings.js";
 import { ScWallConfig } from "../wall/ScWallConfig.js";
 import { ScRangeShape } from "./ScRangeShape.js";
 import { ScWallGeometry } from "../wall/ScWallGeometry.js";
@@ -1691,8 +1692,20 @@ export class ScCanvasActivityService {
     );
   }
 
+  /**
+   * Ownership of the moved token is the default requirement, but a world
+   * setting lifts it: pushing, pulling, and teleporting are usually aimed at
+   * enemies, which a player never owns. Lifting it stays bounded — the caller
+   * still has to own the activity, the origin token still has to belong to the
+   * activity's actor, and the configured range and distance are re-validated
+   * on the GM client before anything moves.
+   */
   static #canMoveToken(token, user) {
     if (user?.isGM) {
+      return true;
+    }
+
+    if (ModuleSettings.isPlayerTokenMovementAllowed()) {
       return true;
     }
 

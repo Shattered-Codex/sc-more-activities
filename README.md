@@ -79,9 +79,11 @@ which requires attribution to the original authors. See the
 - Flushes accepted registrations into `dnd5e` during module initialization
 - Exposes registration diagnostics so GMs can see what loaded, what failed, and why
 - Lets GMs disable registered activity types without removing their definitions
+- Lets players move and teleport tokens they do not own, under a world setting
 - Opens a dedicated **Activity Catalog** from module settings
 - Opens a dedicated **More Activities Migration** tool from module settings
-- Keeps wiki and Patreon actions available directly from module settings
+- Gathers every module option into a dedicated **Module Settings** window
+- Keeps wiki, Patreon, and Discord links in one row at the bottom of module settings
 - Includes English and Brazilian Portuguese localization
 
 ## Requirements
@@ -114,6 +116,61 @@ SC - More Activities does not replace the native D&D 5e activity system. It exte
 - registered third-party activities can join the same registry flow and provide their own metadata
 
 This keeps the familiar D&D 5e workflow while making SC and external activity types easier to manage.
+
+## Module Settings
+
+Every option lives in one window instead of a flat list. Open
+**Configure Settings → Module Settings → SC - More Activities → Open settings**.
+
+The window uses a sidebar rail, one tab per area:
+
+| Tab | Scope | Who can change it |
+| --- | --- | --- |
+| **Gameplay** | World | GM only |
+| **Migration** | World | GM only |
+| **Diagnostics** | Client | Every user, including players |
+
+A player who opens the window sees only **Diagnostics** — the world tabs are the
+GM's, and a player's save never writes one.
+
+An edited tab shows a dot on its rail entry and the footer shows **Unsaved
+changes** until you press **Save Changes**; saving keeps the window open and the
+pill turns to **Saved**. **Reset defaults** restores only the visible tab, and
+since nothing is written until you save, it stays cancellable. The tabs are
+keyboard navigable with the arrow keys, Home, and End.
+
+The activity catalog, migration tools, and preview colors keep their own buttons
+in the settings list. The wiki, Patreon, and Discord links sit together in one
+row at the bottom of the module's section.
+
+### Players may move tokens they do not own
+
+**Default: enabled.**
+
+Push, pull, and teleport are normally aimed at enemies, and a player never owns
+an enemy token. With this setting on, a player using a movement or teleport
+activity can move a target regardless of who owns it, instead of being stopped
+by *"You do not have permission to move one or more selected tokens."*
+
+Turning it off restores the stricter rule: a player may only move tokens they
+own, and anything else has to go through the GM.
+
+The setting only lifts the ownership requirement on the *moved* token. Every
+other guard stays in place, on the GM's client, where the move actually runs:
+
+- the player must own the actor or item that carries the activity
+- the origin token must belong to that activity's actor
+- the activity's own range, distance, target count, and shape are re-validated
+  at execution time, not trusted from the request
+- destinations are clamped to the scene bounds
+
+Portals are not covered: a portal still moves only tokens the traveller owns.
+
+### Other options in the window
+
+- **Result chat cards** — post a summary card of who moved, resisted, or fell out of range
+- **Migration** — compendium scope, external pack scanning, pack unlocking, and backup retention
+- **Debug logging** — per-browser console logging, available to players too
 
 ## Activity Catalog
 

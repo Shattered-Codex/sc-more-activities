@@ -2,11 +2,12 @@ import { Constants } from "../constants/Constants.js";
 import { HOOKS } from "../constants/Hooks.js";
 import { SETTINGS_KEYS } from "../constants/SettingsKeys.js";
 import { ModuleSettings } from "./ModuleSettings.js";
+import { CommunityLinks } from "./CommunityLinks.js";
+import { ModuleSettingsApp } from "./ModuleSettingsApp.js";
+import { ModuleSettingsCatalog } from "./ModuleSettingsCatalog.js";
 import { ActivityCatalogApp } from "../applications/ActivityCatalogApp.js";
 import { MoreActivitiesMigrationApp } from "../applications/MoreActivitiesMigrationApp.js";
-import { DocumentationMenu } from "./DocumentationMenu.js";
 import { PreviewColorMenu } from "./PreviewColorMenu.js";
-import { SupportMenu } from "./SupportMenu.js";
 
 export class ModuleSettingsRegistrar {
   #registered = false;
@@ -17,53 +18,45 @@ export class ModuleSettingsRegistrar {
     }
     this.#registered = true;
 
-    this.#registerDebugLoggingSetting();
-    this.#registerCanvasResultCardsSetting();
+    this.#registerCatalogSettings();
     this.#registerDisabledActivityTypesSetting();
     this.#registerPreviewColorsSetting();
     this.#registerMigrationBackupsSetting();
-    this.#registerMigrationBackupRetentionSetting();
-    this.#registerMigrationScopeSettings();
-    this.#registerSupportMenu();
-    this.#registerDocumentationMenu();
+    this.#registerModuleSettingsMenu();
     this.#registerActivityCatalogMenu();
     this.#registerMigrationMenu();
     this.#registerPreviewColorsMenu();
 
     Hooks.on("renderSettingsConfig", (_app, html) => {
+      ModuleSettingsApp.bindSettingsButton(html);
       ActivityCatalogApp.bindSettingsButton(html);
-      SupportMenu.bindSettingsButton(html);
-      DocumentationMenu.bindSettingsButton(html);
-      ModuleSettingsRegistrar.#prioritizeSpecialMenus(html);
+      CommunityLinks.inject(html);
     });
   }
 
-  #registerDebugLoggingSetting() {
-    game.settings.register(Constants.MODULE_ID, SETTINGS_KEYS.DEBUG_LOGGING, {
-      name: Constants.localize("SCMOREACTIVITIES.Settings.DebugLogging.Name", "Debug logging"),
-      hint: Constants.localize(
-        "SCMOREACTIVITIES.Settings.DebugLogging.Hint",
-        "Log SC - More Activities lifecycle and diagnostic messages to the browser console."
-      ),
-      scope: "client",
-      config: true,
-      type: Boolean,
-      default: false
-    });
+  /**
+   * Registers every setting the module surfaces in its own window. They all
+   * declare `config: false`, so Foundry's flat module list stays clean and the
+   * window is the one place a GM configures the module.
+   */
+  #registerCatalogSettings() {
+    for (const field of ModuleSettingsCatalog.fields()) {
+      game.settings.register(Constants.MODULE_ID, field.key, ModuleSettingsCatalog.registration(field));
+    }
   }
 
-  #registerCanvasResultCardsSetting() {
-    game.settings.register(Constants.MODULE_ID, SETTINGS_KEYS.CANVAS_RESULT_CARDS, {
-      name: Constants.localize("SCMOREACTIVITIES.Settings.CanvasResultCards.Name", "Result chat cards"),
+  #registerModuleSettingsMenu() {
+    game.settings.registerMenu(Constants.MODULE_ID, SETTINGS_KEYS.MODULE_SETTINGS_MENU, {
+      name: Constants.localize("SCMOREACTIVITIES.Settings.Window.Name", "Module settings"),
+      label: Constants.localize("SCMOREACTIVITIES.Settings.Window.Label", "Open settings"),
       hint: Constants.localize(
-        "SCMOREACTIVITIES.Settings.CanvasResultCards.Hint",
-        "Post a chat card summarizing who was moved or teleported, who resisted, and who was out of range."
+        "SCMOREACTIVITIES.Settings.Window.Hint",
+        "Open a dedicated window with every SC - More Activities option, grouped by area."
       ),
-      scope: "world",
-      config: true,
-      restricted: true,
-      type: Boolean,
-      default: true
+      icon: "fa-solid fa-sliders",
+      type: ModuleSettingsApp,
+      // Players still get the client-only section, so this is not GM-gated.
+      restricted: false
     });
   }
 
@@ -116,76 +109,6 @@ export class ModuleSettingsRegistrar {
     });
   }
 
-  #registerMigrationBackupRetentionSetting() {
-    game.settings.register(Constants.MODULE_ID, SETTINGS_KEYS.MIGRATION_BACKUP_RETENTION, {
-      name: Constants.localize("SCMOREACTIVITIES.Settings.MigrationBackupRetention.Name", "Migration backup retention"),
-      hint: Constants.localize(
-        "SCMOREACTIVITIES.Settings.MigrationBackupRetention.Hint",
-        "How many more-activities migration backups to keep in world settings."
-      ),
-      scope: "world",
-      config: true,
-      restricted: true,
-      type: Number,
-      default: 3,
-      range: {
-        min: 1,
-        max: 10,
-        step: 1
-      }
-    });
-  }
-
-  #registerMigrationScopeSettings() {
-    game.settings.register(Constants.MODULE_ID, SETTINGS_KEYS.MIGRATION_INCLUDE_COMPENDIUMS, {
-      name: Constants.localize(
-        "SCMOREACTIVITIES.Settings.MigrationIncludeCompendiums.Name",
-        "Scan compendiums during migration"
-      ),
-      hint: Constants.localize(
-        "SCMOREACTIVITIES.Settings.MigrationIncludeCompendiums.Hint",
-        "Include world compendium packs when previewing and applying the legacy more-activities migration."
-      ),
-      scope: "world",
-      config: true,
-      restricted: true,
-      type: Boolean,
-      default: true
-    });
-
-    game.settings.register(Constants.MODULE_ID, SETTINGS_KEYS.MIGRATION_INCLUDE_EXTERNAL_PACKS, {
-      name: Constants.localize(
-        "SCMOREACTIVITIES.Settings.MigrationIncludeExternalPacks.Name",
-        "Include system and module compendiums"
-      ),
-      hint: Constants.localize(
-        "SCMOREACTIVITIES.Settings.MigrationIncludeExternalPacks.Hint",
-        "Also scan compendiums owned by the system or by other modules. Those packs are usually overwritten on update, so keep this off unless you know you need it."
-      ),
-      scope: "world",
-      config: true,
-      restricted: true,
-      type: Boolean,
-      default: false
-    });
-
-    game.settings.register(Constants.MODULE_ID, SETTINGS_KEYS.MIGRATION_UNLOCK_PACKS, {
-      name: Constants.localize(
-        "SCMOREACTIVITIES.Settings.MigrationUnlockPacks.Name",
-        "Unlock locked compendiums during migration"
-      ),
-      hint: Constants.localize(
-        "SCMOREACTIVITIES.Settings.MigrationUnlockPacks.Hint",
-        "Temporarily unlock locked compendiums while applying or restoring a migration, then re-lock them afterwards."
-      ),
-      scope: "world",
-      config: true,
-      restricted: true,
-      type: Boolean,
-      default: true
-    });
-  }
-
   #registerActivityCatalogMenu() {
     game.settings.registerMenu(Constants.MODULE_ID, SETTINGS_KEYS.ACTIVITY_CATALOG_MENU, {
       name: Constants.localize("SCMOREACTIVITIES.Settings.ActivityCatalogMenu.Name", "Activity catalog"),
@@ -226,79 +149,5 @@ export class ModuleSettingsRegistrar {
       type: PreviewColorMenu,
       restricted: false
     });
-  }
-
-  #registerSupportMenu() {
-    game.settings.registerMenu(Constants.MODULE_ID, SETTINGS_KEYS.SUPPORT_MENU, {
-      name: Constants.localize("SCMOREACTIVITIES.Settings.SupportMenu.Name", "Support the developer"),
-      label: Constants.localize("SCMOREACTIVITIES.Settings.SupportMenu.Label", "Patreon support"),
-      hint: Constants.localize(
-        "SCMOREACTIVITIES.Settings.SupportMenu.Hint",
-        "Support Shattered Codex development on Patreon."
-      ),
-      icon: "fas fa-heart",
-      type: SupportMenu,
-      restricted: true
-    });
-  }
-
-  #registerDocumentationMenu() {
-    game.settings.registerMenu(Constants.MODULE_ID, SETTINGS_KEYS.DOCUMENTATION_MENU, {
-      name: Constants.localize("SCMOREACTIVITIES.Settings.DocumentationMenu.Name", "Documentation"),
-      label: Constants.localize("SCMOREACTIVITIES.Settings.DocumentationMenu.Label", "Open wiki"),
-      hint: Constants.localize(
-        "SCMOREACTIVITIES.Settings.DocumentationMenu.Hint",
-        "Open the SC - More Activities documentation wiki."
-      ),
-      icon: "fas fa-hat-wizard",
-      type: DocumentationMenu,
-      restricted: true
-    });
-  }
-
-  static #prioritizeSpecialMenus(html) {
-    const root = ModuleSettingsRegistrar.#resolveRoot(html);
-    if (!root) {
-      return;
-    }
-
-    const supportKey = `${Constants.MODULE_ID}.${SETTINGS_KEYS.SUPPORT_MENU}`;
-    const docsKey = `${Constants.MODULE_ID}.${SETTINGS_KEYS.DOCUMENTATION_MENU}`;
-    const supportRow = ModuleSettingsRegistrar.#findSettingsRow(root, supportKey);
-    const docsRow = ModuleSettingsRegistrar.#findSettingsRow(root, docsKey);
-    const anchor = supportRow ?? docsRow;
-    const parent = anchor?.parentElement ?? null;
-    if (!parent) {
-      return;
-    }
-
-    if (docsRow && docsRow.parentElement === parent) {
-      parent.prepend(docsRow);
-    }
-    if (supportRow && supportRow.parentElement === parent) {
-      parent.prepend(supportRow);
-    }
-  }
-
-  static #findSettingsRow(root, key) {
-    return root.querySelector([
-      `[data-setting-id="${key}"]`,
-      `[data-menu-id="${key}"]`,
-      `[data-key="${key}"]`,
-      `[data-setting="${key}"]`
-    ].join(",")) ?? null;
-  }
-
-  static #resolveRoot(html) {
-    if (!html) {
-      return null;
-    }
-    if (html.jquery || typeof html.get === "function") {
-      return html[0] ?? html.get(0) ?? null;
-    }
-    if (html instanceof Element || html?.querySelector) {
-      return html;
-    }
-    return null;
   }
 }

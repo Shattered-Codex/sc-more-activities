@@ -4,6 +4,7 @@ export class Constants {
   static LOCALIZATION_PREFIX = "SCMOREACTIVITIES";
   static MODULE_WIKI_URL = "https://wiki.shattered-codex.com/modules/sc-more-activities";
   static PATREON_URL = "https://www.patreon.com/c/shatteredcodex?utm_source=sc-more-activities&utm_medium=foundry_module&utm_campaign=support_button";
+  static DISCORD_URL = "https://discord.gg/nZJVbbkMTk";
 
   static localize(key, fallback = key) {
     const i18n = game?.i18n;
