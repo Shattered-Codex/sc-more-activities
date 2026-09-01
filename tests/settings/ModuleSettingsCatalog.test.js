@@ -179,7 +179,7 @@ test("the rail lists one tab per visible section, with the active one flagged", 
     activeTab: "migration"
   });
 
-  assert.deepEqual(context.tabs.map((tab) => tab.id), ["gameplay", "migration", "diagnostics"]);
+  assert.deepEqual(context.tabs.map((tab) => tab.id), ["gameplay", "activities", "migration", "diagnostics"]);
   assert.deepEqual(context.tabs.filter((tab) => tab.active).map((tab) => tab.id), ["migration"]);
   assert.deepEqual(context.sections.filter((section) => section.active).map((section) => section.id), ["migration"]);
   assert.ok(context.tabs.every((tab) => tab.icon && tab.label));
@@ -246,4 +246,51 @@ test("a snapshot compares normalized values, so a clamped edit is not dirty", ()
 
 test("an unknown section snapshots to an empty string instead of throwing", () => {
   assert.equal(ModuleSettingsCatalog.snapshot("nope", {}), "");
+});
+
+test("the activities tab is a registry-backed list, not a list of static fields", () => {
+  const groups = [{
+    category: "canvas",
+    categoryLabel: "Canvas",
+    enabledCount: 1,
+    total: 2,
+    rows: [{ type: "scTeleport", label: "Teleport", canToggle: true, enabled: true }]
+  }];
+  const context = ModuleSettingsCatalog.buildContext({
+    isGM: true,
+    readSetting: readDefaults,
+    activityGroups: groups
+  });
+
+  const activities = context.sections.find((section) => section.id === "activities");
+  assert.equal(activities.isActivityList, true);
+  assert.deepEqual(activities.fields, [], "the activities tab declares no static settings fields");
+  assert.deepEqual(activities.groups, groups);
+  assert.equal(activities.isEmpty, false);
+
+  const gameplay = context.sections.find((section) => section.id === "gameplay");
+  assert.equal(gameplay.isActivityList, false);
+  assert.deepEqual(gameplay.groups, [], "a fields tab never carries activity groups");
+});
+
+test("an empty registry flags the activities tab so the template can say so", () => {
+  const context = ModuleSettingsCatalog.buildContext({ isGM: true, readSetting: readDefaults });
+  const activities = context.sections.find((section) => section.id === "activities");
+
+  assert.equal(activities.isEmpty, true);
+  assert.ok(activities.emptyLabel.length > 0);
+});
+
+test("the activities tab snapshots through the caller, since its rows are dynamic", () => {
+  // Without a supplied snapshot the tab is stable, so it can never read dirty.
+  assert.equal(ModuleSettingsCatalog.snapshot("activities", {}), "");
+  assert.equal(ModuleSettingsCatalog.snapshot("activities", {}, { activitySnapshot: "abc" }), "abc");
+  // A fields tab ignores it.
+  const fields = ModuleSettingsCatalog.snapshot("gameplay", {}, { activitySnapshot: "abc" });
+  assert.notEqual(fields, "abc");
+});
+
+test("a player never gets the activities tab", () => {
+  const context = ModuleSettingsCatalog.buildContext({ isGM: false, readSetting: readDefaults });
+  assert.ok(!context.tabs.some((tab) => tab.id === "activities"));
 });

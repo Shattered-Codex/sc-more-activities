@@ -3,6 +3,7 @@ export const SETTINGS_KEYS = Object.freeze({
   DISABLED_ACTIVITY_TYPES: "disabledActivityTypes",
   CANVAS_RESULT_CARDS: "canvasResultCards",
   ALLOW_PLAYER_TOKEN_MOVEMENT: "allowPlayerTokenMovement",
+  ACTIVITY_GROUP_BY: "activityGroupBy",
   PREVIEW_COLORS: "previewColors",
   PREVIEW_COLORS_MENU: "previewColorsMenu",
   MIGRATION_BACKUPS: "moreActivitiesMigrationBackups",

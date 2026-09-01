@@ -18,14 +18,15 @@ export class MoreActivitiesMigrationApp extends HandlebarsApplicationMixin(Appli
 
   static DEFAULT_OPTIONS = {
     id: `${Constants.MODULE_ID}-migration-app`,
-    classes: ["sc-more-activities", "sc-ma-migration-app"],
+    // Shares the settings window's theme and shell, like the catalog does.
+    classes: ["sc-more-activities", "sc-ma-config-theme", "sc-ma-migration-app"],
     position: {
-      width: 980,
+      width: 1000,
       height: 760
     },
     tag: "section",
     window: {
-      contentClasses: ["sc-more-activities"],
+      contentClasses: ["sc-ma-config-theme"],
       icon: "fa-solid fa-arrows-rotate",
       resizable: true,
       title: Constants.localize("SCMOREACTIVITIES.Migration.Title", "More Activities Migration")

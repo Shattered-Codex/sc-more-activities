@@ -1,9 +1,15 @@
 import { Constants } from "../constants/Constants.js";
 import { SETTINGS_KEYS } from "../constants/SettingsKeys.js";
+import { ACTIVITY_GROUP_BY } from "./ActivityToggleList.js";
 
 export const SETTING_FIELD_TYPES = Object.freeze({
   CHECKBOX: "checkbox",
   NUMBER: "number"
+});
+
+export const SECTION_KINDS = Object.freeze({
+  FIELDS: "fields",
+  ACTIVITIES: "activities"
 });
 
 export const SETTING_SCOPES = Object.freeze({
@@ -50,6 +56,17 @@ const SECTIONS = Object.freeze([
         hintFallback: "Post a chat card summarizing who was moved or teleported, who resisted, and who was out of range."
       })
     ])
+  }),
+  Object.freeze({
+    id: "activities",
+    scope: SETTING_SCOPES.WORLD,
+    kind: SECTION_KINDS.ACTIVITIES,
+    icon: "fa-solid fa-wand-sparkles",
+    titleKey: "SCMOREACTIVITIES.Settings.Window.Sections.Activities.Title",
+    titleFallback: "Activities",
+    hintKey: "SCMOREACTIVITIES.Settings.Window.Sections.Activities.Hint",
+    hintFallback: "Turn activity types on or off for this world. A disabled type cannot be created or used until it is turned back on.",
+    fields: Object.freeze([])
   }),
   Object.freeze({
     id: "migration",
@@ -137,6 +154,10 @@ export class ModuleSettingsCatalog {
     return SECTIONS.flatMap((section) => section.fields);
   }
 
+  static kind(section) {
+    return section?.kind ?? SECTION_KINDS.FIELDS;
+  }
+
   static field(key) {
     return ModuleSettingsCatalog.fields().find((field) => field.key === key) ?? null;
   }
@@ -189,18 +210,58 @@ export class ModuleSettingsCatalog {
     return ids.includes(requestedTab) ? requestedTab : (ids[0] ?? null);
   }
 
-  static buildContext({ isGM = false, readSetting = () => undefined, activeTab = null, formId = "sc-ma-settings" } = {}) {
+  static buildContext({
+    isGM = false,
+    readSetting = () => undefined,
+    activeTab = null,
+    formId = "sc-ma-settings",
+    activityGroups = [],
+    activityGroupBy = ACTIVITY_GROUP_BY.CATEGORY,
+    activityIssues = null,
+    activityHiddenCount = 0
+  } = {}) {
     const visible = ModuleSettingsCatalog.visibleSections(isGM);
     const currentTab = ModuleSettingsCatalog.resolveTab(activeTab, isGM);
 
-    const sections = visible.map((section) => ({
-      id: section.id,
-      icon: section.icon,
-      title: Constants.localize(section.titleKey, section.titleFallback),
-      hint: Constants.localize(section.hintKey, section.hintFallback),
-      active: section.id === currentTab,
-      fields: section.fields.map((field) => ModuleSettingsCatalog.#fieldContext(field, readSetting))
-    }));
+    const sections = visible.map((section) => {
+      const kind = ModuleSettingsCatalog.kind(section);
+      const isActivityList = kind === SECTION_KINDS.ACTIVITIES;
+      return {
+        id: section.id,
+        icon: section.icon,
+        title: Constants.localize(section.titleKey, section.titleFallback),
+        hint: Constants.localize(section.hintKey, section.hintFallback),
+        active: section.id === currentTab,
+        kind,
+        isActivityList,
+        // Activity rows come from the live registry, so the caller supplies
+        // them; the catalog only decides where they belong.
+        groups: isActivityList ? activityGroups : [],
+        isEmpty: isActivityList && activityGroups.length === 0,
+        groupByLabel: isActivityList
+          ? Constants.localize("SCMOREACTIVITIES.Settings.Window.Sections.Activities.GroupBy", "Group by")
+          : "",
+        groupByOptions: isActivityList ? ModuleSettingsCatalog.#groupByOptions(activityGroupBy) : [],
+        searchLabel: isActivityList
+          ? Constants.localize("SCMOREACTIVITIES.Settings.Window.Sections.Activities.Search", "Filter activities")
+          : "",
+        noResultsLabel: isActivityList
+          ? Constants.localize("SCMOREACTIVITIES.Settings.Window.Sections.Activities.NoResults", "No activity matches this filter.")
+          : "",
+        issues: isActivityList ? ModuleSettingsCatalog.#issuesContext(activityIssues) : null,
+        hiddenLabel: isActivityList && activityHiddenCount > 0
+          ? Constants.format(
+            "SCMOREACTIVITIES.Settings.Window.Sections.Activities.Hidden",
+            { count: activityHiddenCount },
+            `${activityHiddenCount} legacy type(s) hidden.`
+          )
+          : "",
+        emptyLabel: isActivityList
+          ? Constants.localize("SCMOREACTIVITIES.Settings.Window.Sections.Activities.Empty", "No activity types are registered yet.")
+          : "",
+        fields: section.fields.map((field) => ModuleSettingsCatalog.#fieldContext(field, readSetting))
+      };
+    });
 
     return {
       isGM,
@@ -237,12 +298,61 @@ export class ModuleSettingsCatalog {
    * from a clean one. Only the tab's own fields are included, so editing one
    * tab never marks another as dirty.
    */
-  static snapshot(sectionId, values = {}) {
+  static snapshot(sectionId, values = {}, { activitySnapshot = null } = {}) {
     const section = SECTIONS.find((entry) => entry.id === sectionId);
     if (!section) {
       return "";
     }
+    if (ModuleSettingsCatalog.kind(section) === SECTION_KINDS.ACTIVITIES) {
+      // The rows are not static, so the activity list snapshots itself.
+      return activitySnapshot ?? "";
+    }
     return JSON.stringify(section.fields.map((field) => ModuleSettingsCatalog.normalize(field, values[field.key])));
+  }
+
+  /**
+   * Registration problems are summarized here and detailed in the Activity
+   * Catalog, so the GM sees the signal without the settings window growing a
+   * diagnostics table of its own.
+   */
+  static #issuesContext(issues) {
+    if (!issues?.hasIssues) {
+      return null;
+    }
+    return {
+      warningCount: issues.warningCount ?? 0,
+      rejectedCount: issues.rejectedCount ?? 0,
+      hasWarnings: (issues.warningCount ?? 0) > 0,
+      hasRejected: (issues.rejectedCount ?? 0) > 0,
+      warningLabel: Constants.format(
+        "SCMOREACTIVITIES.Settings.Window.Sections.Activities.Warnings",
+        { count: issues.warningCount ?? 0 },
+        `${issues.warningCount ?? 0} warning(s)`
+      ),
+      rejectedLabel: Constants.format(
+        "SCMOREACTIVITIES.Settings.Window.Sections.Activities.Rejected",
+        { count: issues.rejectedCount ?? 0 },
+        `${issues.rejectedCount ?? 0} rejected registration(s)`
+      ),
+      action: Constants.localize(
+        "SCMOREACTIVITIES.Settings.Window.Sections.Activities.OpenCatalog",
+        "Open the catalog"
+      )
+    };
+  }
+
+  static #groupByOptions(current) {
+    const active = Object.values(ACTIVITY_GROUP_BY).includes(current) ? current : ACTIVITY_GROUP_BY.CATEGORY;
+    return [
+      {
+        value: ACTIVITY_GROUP_BY.CATEGORY,
+        label: Constants.localize("SCMOREACTIVITIES.Settings.Window.Sections.Activities.GroupByCategory", "Category")
+      },
+      {
+        value: ACTIVITY_GROUP_BY.MODULE,
+        label: Constants.localize("SCMOREACTIVITIES.Settings.Window.Sections.Activities.GroupByModule", "Module")
+      }
+    ].map((option) => ({ ...option, active: option.value === active }));
   }
 
   static #fieldContext(field, readSetting) {

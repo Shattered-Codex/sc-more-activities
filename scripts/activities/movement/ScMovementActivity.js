@@ -1,6 +1,7 @@
 import { ActivityAvailability } from "../../availability/ActivityAvailability.js";
 import { ACTIVITY_TYPES } from "../ActivityTypes.js";
 import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
+import { ScCanvasUsageSettlement } from "../canvas/ScCanvasUsageSettlement.js";
 import { ScMovementActivityData } from "./ScMovementActivityData.js";
 import { ScMovementPreviewApp } from "./ScMovementPreviewApp.js";
 import { ScMovementActivitySheet } from "./ScMovementActivitySheet.js";
@@ -27,8 +28,14 @@ export class ScMovementActivity extends dnd5e.documents.activity.ActivityMixin(S
       return undefined;
     }
 
+    // Declared before super.use(): dnd5e finalizes the tracked record from its
+    // postUseActivity hook, and a record already finalized can no longer be
+    // held open — the chain would move on while the window is still up.
+    const settlement = ScCanvasUsageSettlement.begin(usage);
+
     const results = await super.use(usage, dialog, message);
     if (results === undefined) {
+      settlement?.cancel("usage-canceled");
       return results;
     }
 
@@ -36,10 +43,11 @@ export class ScMovementActivity extends dnd5e.documents.activity.ActivityMixin(S
       ui.notifications?.warn?.(game.i18n.localize(
         "SCMOREACTIVITIES.Activities.Canvas.Warning.MissingOrigin"
       ));
+      settlement?.cancel("missing-origin");
       return results;
     }
 
-    new ScMovementPreviewApp(this).render(true);
+    new ScMovementPreviewApp(this, { settlement }).render(true);
     return results;
   }
 }

@@ -1,5 +1,9 @@
 import { Constants } from "../constants/Constants.js";
+import { Logger } from "../support/Logger.js";
 import { SETTINGS_KEYS } from "../constants/SettingsKeys.js";
+import { ActivityAvailability } from "../availability/ActivityAvailability.js";
+import { ACTIVITY_GROUP_BY, ActivityToggleList } from "./ActivityToggleList.js";
+import { ActivityCatalogApp } from "../applications/ActivityCatalogApp.js";
 import { ModuleSettingsCatalog, SETTING_FIELD_TYPES } from "./ModuleSettingsCatalog.js";
 
 const api = foundry?.applications?.api ?? {};
@@ -26,6 +30,10 @@ export class ModuleSettingsApp extends HandlebarsApplicationMixin(ApplicationV2)
   #saved = false;
   #inputListener;
   #keydownListener;
+  #activityGroups = [];
+  #pendingValues = null;
+  #preserveBaselines = false;
+  #search = "";
 
   static DEFAULT_OPTIONS = {
     id: FORM_ID,
@@ -86,12 +94,35 @@ export class ModuleSettingsApp extends HandlebarsApplicationMixin(ApplicationV2)
   }
 
   async _prepareContext() {
-    return ModuleSettingsCatalog.buildContext({
-      isGM: this.#isGM(),
-      readSetting: (key) => ModuleSettingsApp.#readSetting(key),
+    const isGM = this.#isGM();
+    const groupBy = this.#groupBy();
+    // Edits made but not saved, carried across a regroup: switching the
+    // grouping re-renders the list, and losing pending work to a view change
+    // would be indefensible.
+    const pending = this.#pendingValues;
+
+    // Snapshotted per render: the rows must match the DOM the dirty tracker
+    // then reads back, even if a module registers a type while this is open.
+    const activities = isGM
+      ? ActivityToggleList.read({ isGM: true, groupBy, overrides: pending ?? {} })
+      : { groups: [], hiddenCount: 0, issues: null };
+    this.#activityGroups = activities.groups;
+
+    const context = ModuleSettingsCatalog.buildContext({
+      isGM,
+      readSetting: (key) => (pending && Object.hasOwn(pending, key)
+        ? pending[key]
+        : ModuleSettingsApp.#readSetting(key)),
       activeTab: this.#activeTab,
-      formId: FORM_ID
+      formId: FORM_ID,
+      activityGroups: this.#activityGroups,
+      activityGroupBy: groupBy,
+      activityIssues: activities.issues,
+      activityHiddenCount: activities.hiddenCount
     });
+
+    this.#pendingValues = null;
+    return context;
   }
 
   async _onRender(context, options) {
@@ -102,14 +133,28 @@ export class ModuleSettingsApp extends HandlebarsApplicationMixin(ApplicationV2)
     this.#activeTab = context?.activeTab ?? this.#activeTab;
 
     this.#root.addEventListener("click", (event) => this.#handleClick(event));
-    this.#root.addEventListener("input", this.#inputListener);
+    this.#root.addEventListener("input", (event) => {
+      if (event.target?.matches?.("[data-activity-search]")) {
+        this.#search = String(event.target.value ?? "");
+        this.#applySearch();
+        return;
+      }
+      this.#inputListener();
+    });
     this.#root.addEventListener("change", this.#inputListener);
     this.#root.addEventListener("keydown", this.#keydownListener);
     // A form tag without a submit handler would reload the page on Enter.
     this.#root.addEventListener("submit", (event) => event.preventDefault());
 
-    this.#captureBaselines();
-    this.#saved = false;
+    // A regroup keeps the baselines it re-rendered from, so a pending edit
+    // still reads as dirty afterwards.
+    if (this.#preserveBaselines) {
+      this.#preserveBaselines = false;
+    } else {
+      this.#captureBaselines();
+      this.#saved = false;
+    }
+    this.#applySearch();
     this.#refreshDirtyUI();
   }
 
@@ -200,6 +245,14 @@ export class ModuleSettingsApp extends HandlebarsApplicationMixin(ApplicationV2)
         event.preventDefault();
         this.selectTab(target.dataset.tabTarget);
         break;
+      case "setGrouping":
+        event.preventDefault();
+        void this.#setGrouping(target.dataset.groupBy);
+        break;
+      case "openCatalog":
+        event.preventDefault();
+        ActivityCatalogApp.open();
+        break;
       case "resetActiveTab":
         event.preventDefault();
         this.resetActiveTab();
@@ -238,12 +291,14 @@ export class ModuleSettingsApp extends HandlebarsApplicationMixin(ApplicationV2)
   }
 
   async #save() {
-    const writes = ModuleSettingsCatalog.collectWrites(this.#readForm(), { isGM: this.#isGM() });
+    const values = this.#readForm();
+    const writes = ModuleSettingsCatalog.collectWrites(values, { isGM: this.#isGM() });
 
     try {
       for (const { key, value } of writes) {
         await game.settings.set(Constants.MODULE_ID, key, value);
       }
+      await this.#saveActivityToggles(values);
     } catch (error) {
       ui.notifications?.error?.(Constants.format(
         "SCMOREACTIVITIES.Settings.Window.SaveFailed",
@@ -256,6 +311,25 @@ export class ModuleSettingsApp extends HandlebarsApplicationMixin(ApplicationV2)
     this.#captureBaselines();
     this.#saved = true;
     this.#refreshDirtyUI();
+  }
+
+  /**
+   * Writes the activity toggles as one settings update. Going through the
+   * availability setting directly, rather than one `setTypeEnabled` call per
+   * row, keeps a save to a single world-settings write and a single refresh
+   * for every connected client.
+   */
+  async #saveActivityToggles(values) {
+    if (!this.#isGM() || !this.#activityGroups.length) {
+      return;
+    }
+
+    const next = ActivityToggleList.mergeDisabledMap(
+      ActivityAvailability.getDisabledMap(),
+      this.#activityGroups,
+      values
+    );
+    await game.settings.set(Constants.MODULE_ID, SETTINGS_KEYS.DISABLED_ACTIVITY_TYPES, next);
   }
 
   // ---------------------------------------------------------------------------
@@ -272,6 +346,12 @@ export class ModuleSettingsApp extends HandlebarsApplicationMixin(ApplicationV2)
       }
       values[field.key] = field.type === SETTING_FIELD_TYPES.CHECKBOX ? control.checked : control.value;
     }
+    for (const row of ActivityToggleList.rows(this.#activityGroups)) {
+      const control = this.#root?.querySelector?.(`[data-activity-type="${row.type}"]`);
+      if (control) {
+        values[row.type] = control.checked;
+      }
+    }
     return values;
   }
 
@@ -279,7 +359,9 @@ export class ModuleSettingsApp extends HandlebarsApplicationMixin(ApplicationV2)
     const values = this.#readForm();
     this.#baselines = {};
     for (const tabId of ModuleSettingsCatalog.tabIds(this.#isGM())) {
-      this.#baselines[tabId] = ModuleSettingsCatalog.snapshot(tabId, values);
+      this.#baselines[tabId] = ModuleSettingsCatalog.snapshot(tabId, values, {
+        activitySnapshot: ActivityToggleList.snapshot(this.#activityGroups, values)
+      });
     }
   }
 
@@ -292,7 +374,9 @@ export class ModuleSettingsApp extends HandlebarsApplicationMixin(ApplicationV2)
     const values = this.#readForm();
     let anyDirty = false;
     for (const tabId of ModuleSettingsCatalog.tabIds(this.#isGM())) {
-      const dirty = ModuleSettingsCatalog.snapshot(tabId, values) !== this.#baselines[tabId];
+      const dirty = ModuleSettingsCatalog.snapshot(tabId, values, {
+        activitySnapshot: ActivityToggleList.snapshot(this.#activityGroups, values)
+      }) !== this.#baselines[tabId];
       anyDirty ||= dirty;
       const dot = root.querySelector(`[data-tab-dot="${tabId}"]`);
       if (dot) {
@@ -342,6 +426,65 @@ export class ModuleSettingsApp extends HandlebarsApplicationMixin(ApplicationV2)
 
   #isGM() {
     return game?.user?.isGM === true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Activities tab
+  // ---------------------------------------------------------------------------
+
+  #groupBy() {
+    return ActivityToggleList.normalizeGroupBy(
+      ModuleSettingsApp.#readSetting(SETTINGS_KEYS.ACTIVITY_GROUP_BY) ?? ACTIVITY_GROUP_BY.CATEGORY
+    );
+  }
+
+  async #setGrouping(next) {
+    const resolved = ActivityToggleList.normalizeGroupBy(next);
+    if (resolved !== next || resolved === this.#groupBy()) {
+      return;
+    }
+
+    this.#pendingValues = this.#readForm();
+    this.#preserveBaselines = true;
+    try {
+      await game.settings.set(Constants.MODULE_ID, SETTINGS_KEYS.ACTIVITY_GROUP_BY, resolved);
+    } catch (error) {
+      Logger.warn("Could not store the activity grouping preference.", error);
+    }
+    await this.render();
+  }
+
+  /** Filters the rendered rows; groups with nothing left are hidden too. */
+  #applySearch() {
+    const root = this.#root;
+    if (!root) {
+      return;
+    }
+
+    const term = this.#search.trim().toLowerCase();
+    const input = root.querySelector("[data-activity-search]");
+    if (input && input.value !== this.#search) {
+      input.value = this.#search;
+    }
+
+    let visible = 0;
+    for (const group of root.querySelectorAll("[data-activity-group]")) {
+      let groupVisible = 0;
+      for (const row of group.querySelectorAll("[data-activity-row]")) {
+        const match = !term || String(row.dataset.search ?? "").includes(term);
+        row.hidden = !match;
+        if (match) {
+          groupVisible += 1;
+        }
+      }
+      group.hidden = groupVisible === 0;
+      visible += groupVisible;
+    }
+
+    const empty = root.querySelector("[data-activity-no-results]");
+    if (empty) {
+      empty.hidden = !(term && visible === 0);
+    }
   }
 
   static #readSetting(key) {

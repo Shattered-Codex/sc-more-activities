@@ -3,6 +3,12 @@ import { ModuleSettings } from "./ModuleSettings.js";
 
 /** Preview scopes, in the order they appear in the picker. */
 const SCOPES = ["teleport", "movement", "wall", "portal"];
+const SCOPE_ICONS = Object.freeze({
+  teleport: "fa-solid fa-bolt",
+  movement: "fa-solid fa-arrows-up-down-left-right",
+  wall: "fa-solid fa-block-brick",
+  portal: "fa-solid fa-dungeon"
+});
 const DEFAULT_SCOPE = "teleport";
 
 const api = foundry?.applications?.api ?? {};
@@ -13,13 +19,16 @@ if (!ApplicationV2 || !HandlebarsApplicationMixin) {
 
 export class PreviewColorMenu extends HandlebarsApplicationMixin(ApplicationV2) {
   static DEFAULT_OPTIONS = {
-    classes: ["sc-more-activities", "sc-ma-preview-colors-app"],
+    // Shares the settings window's theme and shell, like the catalog and the
+    // migration tools; the scopes become the rail.
+    classes: ["sc-more-activities", "sc-ma-config-theme", "sc-ma-preview-colors-app"],
     tag: "form",
     position: {
-      width: 1040,
-      height: 760
+      width: 820,
+      height: 640
     },
     window: {
+      contentClasses: ["sc-ma-config-theme"],
       icon: "fas fa-palette",
       resizable: true,
       title: Constants.localize("SCMOREACTIVITIES.Settings.PreviewColorsMenu.Name", "Preview colors")
@@ -43,6 +52,7 @@ export class PreviewColorMenu extends HandlebarsApplicationMixin(ApplicationV2) 
     return {
       selectedScope: scope,
       scopeLabel: PreviewColorMenu.#scopeLabel(scope),
+      scopeHint: PreviewColorMenu.#scopeHint(scope),
       isTeleportScope: scope === "teleport",
       isMovementScope: scope === "movement",
       isWallScope: scope === "wall",
@@ -51,6 +61,7 @@ export class PreviewColorMenu extends HandlebarsApplicationMixin(ApplicationV2) 
       scopeOptions: SCOPES.map((value) => ({
         value,
         label: PreviewColorMenu.#scopeLabel(value),
+        icon: SCOPE_ICONS[value],
         selected: scope === value
       }))
     };
@@ -71,6 +82,10 @@ export class PreviewColorMenu extends HandlebarsApplicationMixin(ApplicationV2) 
         `SCMOREACTIVITIES.Settings.PreviewColorsMenu.Fields.${labelKey}.Label`,
         labelKey
       ),
+      hint: Constants.localize(
+        `SCMOREACTIVITIES.Settings.PreviewColorsMenu.Fields.${labelKey}.Hint`,
+        labelKey
+      ),
       value: this.draftColors[key]
     }));
   }
@@ -80,17 +95,30 @@ export class PreviewColorMenu extends HandlebarsApplicationMixin(ApplicationV2) 
     return Constants.localize(`SCMOREACTIVITIES.Settings.PreviewColorsMenu.Sections.${name}`, name);
   }
 
+  static #scopeHint(scope) {
+    const name = scope.charAt(0).toUpperCase() + scope.slice(1);
+    return Constants.localize(
+      `SCMOREACTIVITIES.Settings.PreviewColorsMenu.Hints.${name}`,
+      "Colors used by this preview overlay, for your user only."
+    );
+  }
+
   async _onRender(context, options) {
     await super._onRender(context, options);
 
     this.#bindColorControls();
     this.#applyPreviewStyles();
-    this.element.querySelector("[name='selectedScope']")?.addEventListener("change", (event) => {
-      this.selectedScope = SCOPES.includes(event.currentTarget.value)
-        ? event.currentTarget.value
-        : DEFAULT_SCOPE;
-      this.render();
-    });
+    for (const button of this.element.querySelectorAll("[data-action='switchScope']")) {
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        const scope = event.currentTarget.dataset.scope;
+        if (!SCOPES.includes(scope) || scope === this.selectedScope) {
+          return;
+        }
+        this.selectedScope = scope;
+        this.render();
+      });
+    }
 
     this.element.querySelector("[data-action='save']")?.addEventListener("click", async (event) => {
       event.preventDefault();

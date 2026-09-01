@@ -34,13 +34,15 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
   };
 
   constructor(activity, options = {}) {
+    const { settlement = null, ...applicationOptions } = options;
     super({
       window: {
         title: Constants.localize("SCMOREACTIVITIES.Activities.ScPortal.App.Title", "Portal Placement")
       },
-      ...options
+      ...applicationOptions
     });
     this.activity = activity;
+    this.settlement = settlement;
     this.config = ScPortalConfig.fromActivity(activity);
     this.points = [];
     this.hoverPoint = null;
@@ -179,6 +181,8 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
   }
 
   async close(options = {}) {
+    // Backing out of the placement must stop a chain waiting on it.
+    this.settlement?.cancelIfPending("portal-canceled");
     // Flagged before the first await so a submission still in flight knows not
     // to re-render a window that is already going away.
     this.isClosing = true;
@@ -377,6 +381,12 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
         originTokenId: this.originTokenId
       });
       if (result?.ok) {
+        // Settled before the close, so a chain resumes on the operation
+        // itself rather than on the reporting that follows it.
+        this.settlement?.complete({
+          canceled: false,
+          activity: { canceled: false, portalCount: result.count ?? 0, skipped: result.skipped ?? [] }
+        });
         ui.notifications?.info?.(Constants.localize(
           "SCMOREACTIVITIES.Activities.ScPortal.Info.Created",
           "The portal is open."

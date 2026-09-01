@@ -1,112 +1,11 @@
-<section class="sc-ma-catalog-shell">
-  <header class="sc-ma-catalog-toolbar">
-    <div class="sc-ma-catalog-filters" role="search">
-      <label class="sc-ma-catalog-search">
-        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-        <input
-          type="search"
-          name="sc-ma-catalog-search"
-          data-catalog-filter
-          placeholder="{{ localize "SCMOREACTIVITIES.Catalog.Filters.Search.Placeholder" }}"
-        >
-      </label>
-
-      <select name="sc-ma-catalog-category" data-catalog-filter aria-label="{{ localize "SCMOREACTIVITIES.Catalog.Filters.Category.Label" }}">
-        <option value="all">{{ localize "SCMOREACTIVITIES.Catalog.Filters.Category.All" }}</option>
-        {{#each filters.categories as |category|}}
-          <option value="{{ category.value }}">{{ category.label }}</option>
-        {{/each}}
-      </select>
-
-      <select name="sc-ma-catalog-status" data-catalog-filter aria-label="{{ localize "SCMOREACTIVITIES.Catalog.Filters.Status.Label" }}">
-        {{#each filters.statuses as |status|}}
-          <option value="{{ status.value }}">{{ status.label }}</option>
-        {{/each}}
-      </select>
-
-      <select name="sc-ma-catalog-availability" data-catalog-filter aria-label="{{ localize "SCMOREACTIVITIES.Catalog.Filters.Availability.Label" }}">
-        {{#each filters.availability as |availability|}}
-          <option value="{{ availability.value }}">{{ availability.label }}</option>
-        {{/each}}
-      </select>
-    </div>
-
-    <div class="sc-ma-catalog-actions">
-      <button type="button" data-action="open-migration">
-        <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
-        <span>{{ localize "SCMOREACTIVITIES.Catalog.Actions.OpenMigration" }}</span>
-      </button>
-      <button type="button" data-action="clear-filters">
-        <i class="fa-solid fa-filter-circle-xmark" aria-hidden="true"></i>
-        <span>{{ localize "SCMOREACTIVITIES.Catalog.Actions.ClearFilters" }}</span>
-      </button>
-      <button type="button" data-action="copy-report">
-        <i class="fa-solid fa-copy" aria-hidden="true"></i>
-        <span>{{ localize "SCMOREACTIVITIES.Catalog.Actions.CopyReport" }}</span>
-      </button>
-      <button type="button" data-action="refresh">
-        <i class="fa-solid fa-rotate" aria-hidden="true"></i>
-        <span>{{ localize "SCMOREACTIVITIES.Catalog.Actions.Refresh" }}</span>
-      </button>
-    </div>
-  </header>
-
-  <section class="sc-ma-catalog-summary" aria-label="{{ localize "SCMOREACTIVITIES.Catalog.Summary.Label" }}">
-    {{#each summaries as |summary|}}
-      <div class="sc-ma-catalog-summary-item sc-ma-catalog-summary-item--{{ summary.key }}">
-        <i class="{{ summary.icon }}" aria-hidden="true"></i>
-        <span class="sc-ma-catalog-summary-value">{{ summary.value }}</span>
-        <span class="sc-ma-catalog-summary-label">{{ summary.label }}</span>
-      </div>
-    {{/each}}
-  </section>
-
-  <section class="sc-ma-catalog-lifecycle">
-    <div>
-      <span>{{ localize "SCMOREACTIVITIES.Catalog.Lifecycle.ModuleVersion" }}</span>
-      <strong>{{ api.moduleVersion }}</strong>
-    </div>
-    <div>
-      <span>{{ localize "SCMOREACTIVITIES.Catalog.Lifecycle.ApiVersion" }}</span>
-      <strong>{{ api.apiVersion }}</strong>
-    </div>
-    <div>
-      <span>{{ localize "SCMOREACTIVITIES.Catalog.Lifecycle.RegistryState" }}</span>
-      <strong>{{ api.lifecycleState }}</strong>
-    </div>
-    <div>
-      <span>{{ localize "SCMOREACTIVITIES.Catalog.Lifecycle.RegistryLocked" }}</span>
-      <strong>{{#if api.registryLocked}}{{ localize "SCMOREACTIVITIES.Common.Yes" }}{{else}}{{ localize "SCMOREACTIVITIES.Common.No" }}{{/if}}</strong>
-    </div>
-    <div>
-      <span>{{ localize "SCMOREACTIVITIES.Catalog.Lifecycle.NativeTypes" }}</span>
-      <strong>{{ diagnostics.nativeTypes }}</strong>
-    </div>
-  </section>
-
-  <section class="sc-ma-catalog-capabilities" aria-label="{{ localize "SCMOREACTIVITIES.Catalog.Capabilities.Label" }}">
-    {{#each api.capabilities as |capability|}}
-      <span class="sc-ma-catalog-capability {{#if capability.enabled}}is-enabled{{else}}is-disabled{{/if}}">
-        <i class="fa-solid {{#if capability.enabled}}fa-circle-check{{else}}fa-circle-xmark{{/if}}" aria-hidden="true"></i>
-        {{ capability.label }}
-      </span>
-    {{/each}}
-  </section>
-
-  <section class="sc-ma-catalog-diagnostics">
-    <span>{{ localize "SCMOREACTIVITIES.Catalog.Diagnostics.Duplicates" }}: <strong>{{ diagnostics.duplicates }}</strong></span>
-    <span>{{ localize "SCMOREACTIVITIES.Catalog.Diagnostics.LateRegistrations" }}: <strong>{{ diagnostics.lateRegistrations }}</strong></span>
-    <span>{{ localize "SCMOREACTIVITIES.Catalog.Diagnostics.NativeConflicts" }}: <strong>{{ diagnostics.nativeTypeConflicts }}</strong></span>
-    <span>{{ localize "SCMOREACTIVITIES.Catalog.Diagnostics.LegacyConflicts" }}: <strong>{{ diagnostics.legacyTypeConflicts }}</strong></span>
-  </section>
-
-  <section class="sc-ma-catalog-tabbed">
-    <nav class="sc-ma-catalog-tab-list" role="tablist" aria-label="{{ localize "SCMOREACTIVITIES.Catalog.Tabs.Label" }}">
+<section class="sc-ma-config sc-ma-catalog">
+  <div class="sc-ma-config__body">
+    <nav class="sc-ma-config__rail" role="tablist" aria-label="{{ localize "SCMOREACTIVITIES.Catalog.Tabs.Label" }}">
       {{#each tableTabs as |tab|}}
         <button
           type="button"
           id="{{ tab.tabId }}"
-          class="sc-ma-catalog-tab {{#if tab.active}}is-active{{/if}}"
+          class="sc-ma-config__tab {{#if tab.active}}is-active{{/if}}"
           role="tab"
           data-catalog-tab="{{ tab.key }}"
           aria-controls="{{ tab.panelId }}"
@@ -114,35 +13,77 @@
           tabindex="{{#if tab.active}}0{{else}}-1{{/if}}"
         >
           <i class="{{ tab.icon }}" aria-hidden="true"></i>
-          <span>{{ tab.label }}</span>
-          <strong>{{ tab.count }}</strong>
+          <span class="sc-ma-config__tab-label">{{ tab.label }}</span>
+          {{#if tab.count}}<span class="sc-ma-config__tab-count">{{ tab.count }}</span>{{/if}}
         </button>
       {{/each}}
     </nav>
 
-    <div class="sc-ma-catalog-tab-panels">
+    <div class="sc-ma-config__content">
+      <div class="sc-ma-config__filters" data-catalog-filters role="search" {{#unless filtersActive}}hidden{{/unless}}>
+        <label class="sc-ma-config__search">
+          <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+          <input
+            type="search"
+            class="sc-ma-input"
+            name="sc-ma-catalog-search"
+            data-catalog-filter
+            placeholder="{{ localize "SCMOREACTIVITIES.Catalog.Filters.Search.Placeholder" }}"
+            aria-label="{{ localize "SCMOREACTIVITIES.Catalog.Filters.Search.Placeholder" }}"
+            autocomplete="off"
+          >
+        </label>
+
+        <div class="sc-ma-config__filter-row">
+          <select class="sc-ma-select" name="sc-ma-catalog-category" data-catalog-filter aria-label="{{ localize "SCMOREACTIVITIES.Catalog.Filters.Category.Label" }}">
+            <option value="all">{{ localize "SCMOREACTIVITIES.Catalog.Filters.Category.All" }}</option>
+            {{#each filters.categories as |category|}}
+              <option value="{{ category.value }}">{{ category.label }}</option>
+            {{/each}}
+          </select>
+
+          <select class="sc-ma-select" name="sc-ma-catalog-status" data-catalog-filter aria-label="{{ localize "SCMOREACTIVITIES.Catalog.Filters.Status.Label" }}">
+            {{#each filters.statuses as |status|}}
+              <option value="{{ status.value }}">{{ status.label }}</option>
+            {{/each}}
+          </select>
+
+          <select class="sc-ma-select" name="sc-ma-catalog-availability" data-catalog-filter aria-label="{{ localize "SCMOREACTIVITIES.Catalog.Filters.Availability.Label" }}">
+            {{#each filters.availability as |availability|}}
+              <option value="{{ availability.value }}">{{ availability.label }}</option>
+            {{/each}}
+          </select>
+
+          <button type="button" class="sc-ma-btn sc-ma-btn--ghost sc-ma-btn--sm" data-action="clear-filters">
+            <i class="fa-solid fa-filter-circle-xmark" aria-hidden="true"></i>
+            <span>{{ localize "SCMOREACTIVITIES.Catalog.Actions.ClearFilters" }}</span>
+          </button>
+        </div>
+      </div>
+
+      {{!-- Registered --}}
       <section
         id="sc-ma-catalog-panel-registered"
-        class="sc-ma-catalog-tab-panel sc-ma-catalog-table-section sc-ma-catalog-table-section--primary {{#if tabStates.registered}}is-active{{/if}}"
+        class="sc-ma-config__panel sc-ma-config__scroll-panel {{#if tabStates.registered}}is-active{{/if}}"
         data-catalog-panel="registered"
         role="tabpanel"
         aria-labelledby="sc-ma-catalog-tab-registered"
         aria-hidden="{{#if tabStates.registered}}false{{else}}true{{/if}}"
         {{#unless tabStates.registered}}hidden{{/unless}}
       >
-        <header>
-          <h3>{{ localize "SCMOREACTIVITIES.Catalog.Sections.Registered" }}</h3>
-          <span>{{ registered.length }}</span>
+        <header class="sc-ma-config__panel-head">
+          <h2 class="sc-ma-config__panel-title">{{ localize "SCMOREACTIVITIES.Catalog.Sections.Registered" }}</h2>
+          <p class="sc-ma-config__panel-hint">{{ localize "SCMOREACTIVITIES.Catalog.Sections.RegisteredHint" }}</p>
         </header>
-        <div class="sc-ma-catalog-table-wrap">
-          <table class="sc-ma-catalog-table" data-catalog-table>
+
+        <div class="sc-ma-config__table-wrap">
+          <table class="sc-ma-config__table" data-catalog-table>
             <thead>
               <tr>
                 <th>{{ localize "SCMOREACTIVITIES.Catalog.Columns.Type" }}</th>
                 <th>{{ localize "SCMOREACTIVITIES.Catalog.Columns.Label" }}</th>
                 <th>{{ localize "SCMOREACTIVITIES.Catalog.Columns.Module" }}</th>
                 <th>{{ localize "SCMOREACTIVITIES.Catalog.Columns.Category" }}</th>
-                <th>{{ localize "SCMOREACTIVITIES.Catalog.Columns.Scope" }}</th>
                 <th>{{ localize "SCMOREACTIVITIES.Catalog.Columns.Status" }}</th>
                 <th>{{ localize "SCMOREACTIVITIES.Catalog.Columns.Availability" }}</th>
               </tr>
@@ -151,7 +92,7 @@
               {{#each registered as |entry|}}
                 <tr data-catalog-row data-kind="registered" data-status="{{ entry.status }}" data-availability="{{ entry.availability }}" data-category="{{ entry.category }}" data-search="{{ entry.searchText }}">
                   <td>
-                    <span class="sc-ma-catalog-type">
+                    <span class="sc-ma-config__type">
                       {{#if entry.iconIsPath}}
                         <img src="{{ entry.icon }}" alt="">
                       {{else}}
@@ -162,20 +103,19 @@
                   </td>
                   <td>
                     <strong>{{ entry.label }}</strong>
-                    {{#if entry.hint}}<span>{{ entry.hint }}</span>{{/if}}
+                    {{#if entry.hint}}<span class="sc-ma-config__sub">{{ entry.hint }}</span>{{/if}}
                   </td>
-                  <td>{{ entry.moduleId }}</td>
+                  <td><span class="sc-ma-config__mono">{{ entry.moduleId }}</span></td>
                   <td>{{ entry.categoryLabel }}</td>
-                  <td>{{ entry.scope }}</td>
                   <td>
-                    <span class="sc-ma-status {{ entry.statusClass }}">{{ entry.statusLabel }}</span>
+                    <span class="sc-ma-config-badge {{ entry.statusClass }}">{{ entry.statusLabel }}</span>
                     {{#if entry.warningCount}}
-                      <span class="sc-ma-catalog-warning-count">{{ entry.warningCount }}</span>
+                      <span class="sc-ma-config-warn"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>{{ entry.warningCount }}</span>
                     {{/if}}
                   </td>
                   <td>
                     {{#if entry.canToggleAvailability}}
-                      <label class="sc-ma-availability-switch" title="{{ entry.availabilityHint }}">
+                      <label class="sc-ma-switch" data-tooltip="{{ entry.availabilityHint }}">
                         <input
                           type="checkbox"
                           role="switch"
@@ -185,40 +125,39 @@
                           aria-label="{{ entry.availabilityActionLabel }}"
                           {{#if entry.enabled}}checked{{/if}}
                         >
-                        <span class="sc-ma-availability-switch-track" aria-hidden="true">
-                          <span></span>
-                        </span>
-                        <span class="sc-ma-availability-label">{{ entry.availabilityLabel }}</span>
+                        <span class="sc-ma-switch__track" aria-hidden="true"><span class="sc-ma-switch__thumb"></span></span>
                       </label>
                     {{else}}
-                      <span class="sc-ma-status {{ entry.availabilityClass }}" title="{{ entry.availabilityHint }}">{{ entry.availabilityLabel }}</span>
+                      <span class="sc-ma-config-badge {{ entry.availabilityClass }}" data-tooltip="{{ entry.availabilityHint }}">{{ entry.availabilityLabel }}</span>
                     {{/if}}
                   </td>
                 </tr>
               {{/each}}
               <tr data-empty-row hidden>
-                <td colspan="7">{{ localize "SCMOREACTIVITIES.Catalog.Empty.Filtered" }}</td>
+                <td colspan="6" class="sc-ma-config__table-empty">{{ localize "SCMOREACTIVITIES.Catalog.Empty.Filtered" }}</td>
               </tr>
             </tbody>
           </table>
         </div>
       </section>
 
+      {{!-- Rejected --}}
       <section
         id="sc-ma-catalog-panel-rejected"
-        class="sc-ma-catalog-tab-panel sc-ma-catalog-table-section {{#if tabStates.rejected}}is-active{{/if}}"
+        class="sc-ma-config__panel sc-ma-config__scroll-panel {{#if tabStates.rejected}}is-active{{/if}}"
         data-catalog-panel="rejected"
         role="tabpanel"
         aria-labelledby="sc-ma-catalog-tab-rejected"
         aria-hidden="{{#if tabStates.rejected}}false{{else}}true{{/if}}"
         {{#unless tabStates.rejected}}hidden{{/unless}}
       >
-        <header>
-          <h3>{{ localize "SCMOREACTIVITIES.Catalog.Sections.Rejected" }}</h3>
-          <span>{{ rejected.length }}</span>
+        <header class="sc-ma-config__panel-head">
+          <h2 class="sc-ma-config__panel-title">{{ localize "SCMOREACTIVITIES.Catalog.Sections.Rejected" }}</h2>
+          <p class="sc-ma-config__panel-hint">{{ localize "SCMOREACTIVITIES.Catalog.Sections.RejectedHint" }}</p>
         </header>
-        <div class="sc-ma-catalog-table-wrap">
-          <table class="sc-ma-catalog-table sc-ma-catalog-table--diagnostics" data-catalog-table>
+
+        <div class="sc-ma-config__table-wrap">
+          <table class="sc-ma-config__table" data-catalog-table>
             <thead>
               <tr>
                 <th>{{ localize "SCMOREACTIVITIES.Catalog.Columns.Type" }}</th>
@@ -231,34 +170,36 @@
               {{#each rejected as |entry|}}
                 <tr data-catalog-row data-kind="rejected" data-status="{{ entry.status }}" data-category="{{ entry.category }}" data-search="{{ entry.searchText }}">
                   <td><code>{{ entry.type }}</code></td>
-                  <td>{{ entry.moduleId }}</td>
-                  <td><span class="sc-ma-status {{ entry.statusClass }}">{{ entry.reason }}</span></td>
+                  <td><span class="sc-ma-config__mono">{{ entry.moduleId }}</span></td>
+                  <td><span class="sc-ma-config-badge {{ entry.statusClass }}">{{ entry.reason }}</span></td>
                   <td>{{ entry.message }}</td>
                 </tr>
               {{/each}}
               <tr data-empty-row hidden>
-                <td colspan="4">{{ localize "SCMOREACTIVITIES.Catalog.Empty.Filtered" }}</td>
+                <td colspan="4" class="sc-ma-config__table-empty">{{ localize "SCMOREACTIVITIES.Catalog.Empty.Filtered" }}</td>
               </tr>
             </tbody>
           </table>
         </div>
       </section>
 
+      {{!-- Warnings --}}
       <section
         id="sc-ma-catalog-panel-warnings"
-        class="sc-ma-catalog-tab-panel sc-ma-catalog-table-section {{#if tabStates.warnings}}is-active{{/if}}"
+        class="sc-ma-config__panel sc-ma-config__scroll-panel {{#if tabStates.warnings}}is-active{{/if}}"
         data-catalog-panel="warnings"
         role="tabpanel"
         aria-labelledby="sc-ma-catalog-tab-warnings"
         aria-hidden="{{#if tabStates.warnings}}false{{else}}true{{/if}}"
         {{#unless tabStates.warnings}}hidden{{/unless}}
       >
-        <header>
-          <h3>{{ localize "SCMOREACTIVITIES.Catalog.Sections.Warnings" }}</h3>
-          <span>{{ warnings.length }}</span>
+        <header class="sc-ma-config__panel-head">
+          <h2 class="sc-ma-config__panel-title">{{ localize "SCMOREACTIVITIES.Catalog.Sections.Warnings" }}</h2>
+          <p class="sc-ma-config__panel-hint">{{ localize "SCMOREACTIVITIES.Catalog.Sections.WarningsHint" }}</p>
         </header>
-        <div class="sc-ma-catalog-table-wrap">
-          <table class="sc-ma-catalog-table sc-ma-catalog-table--diagnostics" data-catalog-table>
+
+        <div class="sc-ma-config__table-wrap">
+          <table class="sc-ma-config__table" data-catalog-table>
             <thead>
               <tr>
                 <th>{{ localize "SCMOREACTIVITIES.Catalog.Columns.Type" }}</th>
@@ -271,18 +212,83 @@
               {{#each warnings as |entry|}}
                 <tr data-catalog-row data-kind="warning" data-status="{{ entry.status }}" data-category="{{ entry.category }}" data-search="{{ entry.searchText }}">
                   <td><code>{{ entry.type }}</code></td>
-                  <td>{{ entry.moduleId }}</td>
-                  <td><span class="sc-ma-status {{ entry.statusClass }}">{{ entry.reason }}</span></td>
+                  <td><span class="sc-ma-config__mono">{{ entry.moduleId }}</span></td>
+                  <td><span class="sc-ma-config-badge {{ entry.statusClass }}">{{ entry.reason }}</span></td>
                   <td>{{ entry.message }}</td>
                 </tr>
               {{/each}}
               <tr data-empty-row hidden>
-                <td colspan="4">{{ localize "SCMOREACTIVITIES.Catalog.Empty.Filtered" }}</td>
+                <td colspan="4" class="sc-ma-config__table-empty">{{ localize "SCMOREACTIVITIES.Catalog.Empty.Filtered" }}</td>
               </tr>
             </tbody>
           </table>
         </div>
       </section>
+
+      {{!-- Diagnostics --}}
+      <section
+        id="sc-ma-catalog-panel-diagnostics"
+        class="sc-ma-config__panel sc-ma-config__scroll-panel {{#if tabStates.diagnostics}}is-active{{/if}}"
+        data-catalog-panel="diagnostics"
+        role="tabpanel"
+        aria-labelledby="sc-ma-catalog-tab-diagnostics"
+        aria-hidden="{{#if tabStates.diagnostics}}false{{else}}true{{/if}}"
+        {{#unless tabStates.diagnostics}}hidden{{/unless}}
+      >
+        <header class="sc-ma-config__panel-head">
+          <h2 class="sc-ma-config__panel-title">{{ localize "SCMOREACTIVITIES.Catalog.Sections.Diagnostics" }}</h2>
+          <p class="sc-ma-config__panel-hint">{{ localize "SCMOREACTIVITIES.Catalog.Sections.DiagnosticsHint" }}</p>
+        </header>
+
+        <h3 class="sc-ma-config__group-title">{{ localize "SCMOREACTIVITIES.Catalog.Sections.Lifecycle" }}</h3>
+        <dl class="sc-ma-config__facts">
+          <div><dt>{{ localize "SCMOREACTIVITIES.Catalog.Lifecycle.ModuleVersion" }}</dt><dd>{{ api.moduleVersion }}</dd></div>
+          <div><dt>{{ localize "SCMOREACTIVITIES.Catalog.Lifecycle.ApiVersion" }}</dt><dd>{{ api.apiVersion }}</dd></div>
+          <div><dt>{{ localize "SCMOREACTIVITIES.Catalog.Lifecycle.RegistryState" }}</dt><dd>{{ api.lifecycleState }}</dd></div>
+          <div>
+            <dt>{{ localize "SCMOREACTIVITIES.Catalog.Lifecycle.RegistryLocked" }}</dt>
+            <dd>{{#if api.registryLocked}}{{ localize "SCMOREACTIVITIES.Common.Yes" }}{{else}}{{ localize "SCMOREACTIVITIES.Common.No" }}{{/if}}</dd>
+          </div>
+          <div><dt>{{ localize "SCMOREACTIVITIES.Catalog.Lifecycle.NativeTypes" }}</dt><dd>{{ diagnostics.nativeTypes }}</dd></div>
+        </dl>
+
+        <h3 class="sc-ma-config__group-title">{{ localize "SCMOREACTIVITIES.Catalog.Capabilities.Label" }}</h3>
+        <div class="sc-ma-catalog__capabilities">
+          {{#each api.capabilities as |capability|}}
+            <span class="sc-ma-catalog__capability {{#if capability.enabled}}is-enabled{{else}}is-disabled{{/if}}">
+              <i class="fa-solid {{#if capability.enabled}}fa-circle-check{{else}}fa-circle-xmark{{/if}}" aria-hidden="true"></i>
+              {{ capability.label }}
+            </span>
+          {{/each}}
+        </div>
+
+        <h3 class="sc-ma-config__group-title">{{ localize "SCMOREACTIVITIES.Catalog.Sections.Counters" }}</h3>
+        <dl class="sc-ma-config__facts">
+          {{#each summaries as |summary|}}
+            <div><dt><i class="{{ summary.icon }}" aria-hidden="true"></i> {{ summary.label }}</dt><dd>{{ summary.value }}</dd></div>
+          {{/each}}
+          <div><dt>{{ localize "SCMOREACTIVITIES.Catalog.Diagnostics.Duplicates" }}</dt><dd>{{ diagnostics.duplicates }}</dd></div>
+          <div><dt>{{ localize "SCMOREACTIVITIES.Catalog.Diagnostics.LateRegistrations" }}</dt><dd>{{ diagnostics.lateRegistrations }}</dd></div>
+          <div><dt>{{ localize "SCMOREACTIVITIES.Catalog.Diagnostics.NativeConflicts" }}</dt><dd>{{ diagnostics.nativeTypeConflicts }}</dd></div>
+          <div><dt>{{ localize "SCMOREACTIVITIES.Catalog.Diagnostics.LegacyConflicts" }}</dt><dd>{{ diagnostics.legacyTypeConflicts }}</dd></div>
+        </dl>
+      </section>
     </div>
-  </section>
+  </div>
+
+  <footer class="sc-ma-config__footer">
+    <span class="sc-ma-config__spacer"></span>
+    <button type="button" class="sc-ma-btn sc-ma-btn--ghost" data-action="open-migration">
+      <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i> {{ localize "SCMOREACTIVITIES.Catalog.Actions.OpenMigration" }}
+    </button>
+    <button type="button" class="sc-ma-btn" data-action="copy-report">
+      <i class="fa-solid fa-copy" aria-hidden="true"></i> {{ localize "SCMOREACTIVITIES.Catalog.Actions.CopyReport" }}
+    </button>
+    <button type="button" class="sc-ma-btn" data-action="refresh">
+      <i class="fa-solid fa-rotate" aria-hidden="true"></i> {{ localize "SCMOREACTIVITIES.Catalog.Actions.Refresh" }}
+    </button>
+    <button type="button" class="sc-ma-btn sc-ma-btn--primary" data-action="close">
+      <i class="fa-solid fa-xmark" aria-hidden="true"></i> {{ localize "SCMOREACTIVITIES.Actions.Close" }}
+    </button>
+  </footer>
 </section>

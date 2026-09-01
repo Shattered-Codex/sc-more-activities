@@ -4,6 +4,7 @@ import {
 } from "../canvas/ScCanvasActivityConstants.js";
 import { ScTargetSaveService } from "../canvas/ScTargetSaveService.js";
 import { ScRangeShape } from "../canvas/ScRangeShape.js";
+import { ScTokenSize } from "../canvas/ScTokenSize.js";
 
 export class ScMovementActivitySheet extends dnd5e.applications.activity.ActivitySheet {
   static DEFAULT_OPTIONS = {
@@ -26,6 +27,7 @@ export class ScMovementActivitySheet extends dnd5e.applications.activity.Activit
       distance: this.activity?.movement?.distance ?? 10,
       maxRange: this.activity?.movement?.maxRange ?? 0,
       rangeShape: ScRangeShape.normalize(this.activity?.movement?.rangeShape),
+      targetSize: ScTokenSize.normalize(this.activity?.movement?.targetSize),
       maxTargets: this.activity?.movement?.maxTargets ?? 1,
       snapToGrid: this.activity?.movement?.snapToGrid !== false,
       save: {
@@ -37,6 +39,11 @@ export class ScMovementActivitySheet extends dnd5e.applications.activity.Activit
     context.targetSourceOptions = ScMovementActivitySheet.#targetSourceOptions();
     context.movementTypeOptions = ScMovementActivitySheet.#movementTypeOptions();
     context.rangeShapeOptions = ScRangeShape.options();
+    context.targetSizeModeOptions = ScTokenSize.modeOptions();
+    context.targetSizeOptions = ScTokenSize.sizeOptions(context.movement.targetSize.sizes);
+    context.targetSizeOffsetOptions = ScTokenSize.offsetOptions();
+    context.targetSizeIsAbsolute = context.movement.targetSize.mode === ScTokenSize.MODES.ABSOLUTE;
+    context.targetSizeIsRelative = context.movement.targetSize.mode === ScTokenSize.MODES.RELATIVE;
     // The save gate only applies to external targets, so the section is tied
     // to the targeted-tokens source; self and controlled keep the direct flow.
     context.movementShowsSave = context.movement.targetSource === CANVAS_TARGET_SOURCES.TARGETS;

@@ -26,17 +26,19 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
 
   static DEFAULT_OPTIONS = {
     id: `${Constants.MODULE_ID}-activity-catalog`,
-    classes: ["sc-more-activities", "sc-ma-activity-catalog"],
+    // Shares the settings window's theme and shell so the two GM tools read as
+    // one product rather than two generations of the same module.
+    classes: ["sc-more-activities", "sc-ma-config-theme", "sc-ma-activity-catalog"],
     position: {
-      width: 920,
+      width: 980,
       height: 720
     },
     tag: "section",
     window: {
-      contentClasses: ["sc-more-activities"],
+      contentClasses: ["sc-ma-config-theme"],
       icon: "fa-solid fa-rectangle-list",
       resizable: true,
-      title: Constants.localize("SCMOREACTIVITIES.Catalog.Title", "Activity Catalog")
+      title: Constants.localize("SCMOREACTIVITIES.Catalog.Title", "More Activities — Catalog")
     }
   };
 
@@ -107,8 +109,12 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
       tabStates: {
         registered: this.#activeCatalogTab === "registered",
         rejected: this.#activeCatalogTab === "rejected",
-        warnings: this.#activeCatalogTab === "warnings"
+        warnings: this.#activeCatalogTab === "warnings",
+        diagnostics: this.#activeCatalogTab === "diagnostics"
       },
+      // Only the table tabs take the shared filter strip; the diagnostics panel
+      // has no rows to filter.
+      filtersActive: this.#activeCatalogTab !== "diagnostics",
       filters: {
         categories: ActivityCatalogApp.#buildCategoryOptions(rows),
         statuses: ActivityCatalogApp.#buildStatusOptions(),
@@ -152,6 +158,12 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
     migrationButton?.addEventListener("click", (event) => {
       event.preventDefault();
       MoreActivitiesMigrationApp.open();
+    });
+
+    const closeButton = root.querySelector('[data-action="close"]');
+    closeButton?.addEventListener("click", (event) => {
+      event.preventDefault();
+      void this.close();
     });
 
     this.#bindFilters();
@@ -246,6 +258,11 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
       panel.classList.toggle("is-active", active);
       panel.hidden = !active;
       panel.setAttribute("aria-hidden", String(!active));
+    }
+
+    const filters = root.querySelector("[data-catalog-filters]");
+    if (filters) {
+      filters.hidden = tabKey === "diagnostics";
     }
     this.#applyFilters();
   }
@@ -502,7 +519,7 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
         panelId: "sc-ma-catalog-panel-registered",
         tabId: "sc-ma-catalog-tab-registered",
         icon: "fa-solid fa-list-check",
-        label: Constants.localize("SCMOREACTIVITIES.Catalog.Sections.Registered", "Registered Activities"),
+        label: Constants.localize("SCMOREACTIVITIES.Catalog.Tabs.Registered", "Registered"),
         count: counts.registered,
         active: activeTab === "registered"
       },
@@ -511,7 +528,7 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
         panelId: "sc-ma-catalog-panel-rejected",
         tabId: "sc-ma-catalog-tab-rejected",
         icon: "fa-solid fa-triangle-exclamation",
-        label: Constants.localize("SCMOREACTIVITIES.Catalog.Sections.Rejected", "Rejected Registrations"),
+        label: Constants.localize("SCMOREACTIVITIES.Catalog.Tabs.Rejected", "Rejected"),
         count: counts.rejected,
         active: activeTab === "rejected"
       },
@@ -520,9 +537,17 @@ export class ActivityCatalogApp extends HandlebarsApplicationMixin(ApplicationV2
         panelId: "sc-ma-catalog-panel-warnings",
         tabId: "sc-ma-catalog-tab-warnings",
         icon: "fa-solid fa-circle-exclamation",
-        label: Constants.localize("SCMOREACTIVITIES.Catalog.Sections.Warnings", "Warnings"),
+        label: Constants.localize("SCMOREACTIVITIES.Catalog.Tabs.Warnings", "Warnings"),
         count: counts.warnings,
         active: activeTab === "warnings"
+      },
+      {
+        key: "diagnostics",
+        panelId: "sc-ma-catalog-panel-diagnostics",
+        tabId: "sc-ma-catalog-tab-diagnostics",
+        icon: "fa-solid fa-stethoscope",
+        label: Constants.localize("SCMOREACTIVITIES.Catalog.Tabs.Diagnostics", "Diagnostics"),
+        active: activeTab === "diagnostics"
       }
     ];
   }

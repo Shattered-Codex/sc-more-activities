@@ -1,126 +1,109 @@
-<div class="sc-ma-preview-colors-shell">
-  <header class="sc-ma-preview-colors-header">
-    <div class="sc-ma-preview-colors-copy">
-      <h4>{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Name" }}</h4>
-      <p class="hint">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Description" }}</p>
-    </div>
+{{!-- The root keeps `sc-ma-preview-colors-shell`: it declares the --sc-ma-preview-*
+      custom properties the sample overlays read, and the app writes the live
+      values onto this same element. --}}
+<section class="sc-ma-config sc-ma-preview-colors-shell">
+  <div class="sc-ma-config__body">
+    <nav class="sc-ma-config__rail" role="tablist" aria-label="{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Scope.Label" }}">
+      {{#each scopeOptions}}
+        <button
+          type="button"
+          role="tab"
+          id="sc-ma-preview-tab-{{ this.value }}"
+          class="sc-ma-config__tab{{#if this.selected}} is-active{{/if}}"
+          data-action="switchScope"
+          data-scope="{{ this.value }}"
+          aria-selected="{{#if this.selected}}true{{else}}false{{/if}}"
+          tabindex="{{#if this.selected}}0{{else}}-1{{/if}}"
+        >
+          <i class="{{ this.icon }}" aria-hidden="true"></i>
+          <span class="sc-ma-config__tab-label">{{ this.label }}</span>
+        </button>
+      {{/each}}
+    </nav>
 
-    <div class="sc-ma-preview-colors-header-controls">
-      <div class="form-group sc-ma-preview-colors-header-field">
-        <label for="sc-ma-preview-scope">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Scope.Label" }}</label>
-        <div class="form-fields">
-          <select id="sc-ma-preview-scope" name="selectedScope" class="sc-ma-preview-colors-select">
-            {{#each scopeOptions}}
-              <option value="{{ this.value }}" {{#if this.selected}}selected{{/if}}>{{ this.label }}</option>
-            {{/each}}
-          </select>
-        </div>
-      </div>
-    </div>
-  </header>
-
-  <div class="sc-ma-preview-colors-layout">
-    <section class="sc-ma-preview-colors-preview-panel">
-      <h4>{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Preview.Title" }}</h4>
-      <p class="hint">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Preview.Hint" }}</p>
+    <div class="sc-ma-config__content">
+      <header class="sc-ma-config__panel-head">
+        <h2 class="sc-ma-config__panel-title">{{ scopeLabel }}</h2>
+        <p class="sc-ma-config__panel-hint">{{ scopeHint }}</p>
+      </header>
 
       <div class="sc-ma-preview-single">
-        {{#if isTeleportScope}}
-          <article class="sc-ma-preview-card sc-ma-preview-card--teleport">
-            <div class="sc-ma-preview-card-label">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Sections.Teleport" }}</div>
-            <div class="sc-ma-preview-stage sc-ma-preview-stage--teleport">
+        <article class="sc-ma-preview-card sc-ma-preview-card--{{ selectedScope }}">
+          <div class="sc-ma-preview-card-label">{{ scopeLabel }}</div>
+          <div class="sc-ma-preview-stage sc-ma-preview-stage--{{ selectedScope }}">
+            {{#if isTeleportScope}}
               <div class="sc-ma-preview-range"></div>
               <div class="sc-ma-preview-origin"></div>
               <div class="sc-ma-preview-destination"></div>
-            </div>
-          </article>
-        {{/if}}
+            {{/if}}
 
-        {{#if isMovementScope}}
-          <article class="sc-ma-preview-card sc-ma-preview-card--movement">
-            <div class="sc-ma-preview-card-label">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Sections.Movement" }}</div>
-            <div class="sc-ma-preview-stage sc-ma-preview-stage--movement">
+            {{#if isMovementScope}}
               <div class="sc-ma-preview-range"></div>
               <div class="sc-ma-preview-origin"></div>
               <div class="sc-ma-preview-path"></div>
               <div class="sc-ma-preview-start"></div>
               <div class="sc-ma-preview-end"></div>
-            </div>
-          </article>
-        {{/if}}
+            {{/if}}
 
-        {{#if isPortalScope}}
-          <article class="sc-ma-preview-card sc-ma-preview-card--portal">
-            <div class="sc-ma-preview-card-label">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Sections.Portal" }}</div>
-            <div class="sc-ma-preview-stage sc-ma-preview-stage--portal">
+            {{#if isPortalScope}}
               <div class="sc-ma-preview-range"></div>
               <div class="sc-ma-preview-origin"></div>
               <div class="sc-ma-preview-portal-link"></div>
               <div class="sc-ma-preview-portal-side sc-ma-preview-portal-side--entry"></div>
               <div class="sc-ma-preview-portal-side sc-ma-preview-portal-side--exit"></div>
-            </div>
-          </article>
-        {{/if}}
+            {{/if}}
 
-        {{#if isWallScope}}
-          <article class="sc-ma-preview-card sc-ma-preview-card--wall">
-            <div class="sc-ma-preview-card-label">{{ localize "SCMOREACTIVITIES.Settings.PreviewColorsMenu.Sections.Wall" }}</div>
-            <div class="sc-ma-preview-stage sc-ma-preview-stage--wall">
+            {{#if isWallScope}}
               <div class="sc-ma-preview-range"></div>
               <div class="sc-ma-preview-origin"></div>
               <div class="sc-ma-preview-wall-line sc-ma-preview-wall-line--one"></div>
               <div class="sc-ma-preview-wall-line sc-ma-preview-wall-line--two"></div>
-            </div>
-          </article>
-        {{/if}}
-      </div>
-    </section>
-
-    <section class="sc-ma-preview-colors-section sc-ma-preview-colors-section--active">
-      <div class="sc-ma-preview-colors-settings">
-        <div class="sc-ma-preview-colors-settings-section">
-          <h4>{{ scopeLabel }}</h4>
-          <div class="sc-ma-preview-colors-field-list">
-            {{#each colorFields as |field|}}
-              <div class="sc-ma-preview-colors-form-group form-group" data-field-type="color">
-                <label for="{{ field.id }}">{{ field.label }}</label>
-                <div class="form-fields">
-                  <div class="sc-ma-color-control" data-color-control="{{ field.key }}">
-                    <input
-                      type="text"
-                      class="sc-ma-hex-input"
-                      data-hex-for="{{ field.key }}"
-                      value="{{ field.value }}"
-                      maxlength="7"
-                      spellcheck="false"
-                      autocomplete="off"
-                      aria-label="Hex value"
-                    />
-                    <input id="{{ field.id }}" type="color" name="{{ field.key }}" class="sc-ma-color-picker" value="{{ field.value }}">
-                  </div>
-                </div>
-              </div>
-            {{/each}}
+            {{/if}}
           </div>
-        </div>
+        </article>
       </div>
-    </section>
+
+      <div class="sc-ma-config__rows">
+        {{#each colorFields as |field|}}
+          <label class="sc-ma-config-row" for="{{ field.id }}">
+            <span class="sc-ma-config-row__copy">
+              <span class="sc-ma-config-row__name">{{ field.label }}</span>
+              <span class="sc-ma-config-row__hint">{{ field.hint }}</span>
+            </span>
+            <span class="sc-ma-config-row__control">
+              <span class="sc-ma-color-control" data-color-control="{{ field.key }}">
+                <input
+                  type="text"
+                  class="sc-ma-input sc-ma-hex-input"
+                  data-hex-for="{{ field.key }}"
+                  value="{{ field.value }}"
+                  maxlength="7"
+                  spellcheck="false"
+                  autocomplete="off"
+                  aria-label="{{ field.label }}"
+                />
+                <input id="{{ field.id }}" type="color" name="{{ field.key }}" class="sc-ma-color-picker" value="{{ field.value }}">
+              </span>
+            </span>
+          </label>
+        {{/each}}
+      </div>
+    </div>
   </div>
 
-  <footer class="form-footer sc-ma-preview-colors-footer" data-application-part="footer">
-    <div class="sc-ma-preview-colors-footer-tools">
-      <button type="button" data-action="reset">
-        <i class="fas fa-rotate-left"></i>
-        {{ localize "SCMOREACTIVITIES.Actions.ResetDefaults" }}
-      </button>
-    </div>
-    <button type="button" class="sc-ma-preview-colors-save" data-action="save">
-      <i class="fas fa-save"></i>
-      {{ localize "SCMOREACTIVITIES.Actions.Save" }}
+  <footer class="sc-ma-config__footer">
+    <button type="button" class="sc-ma-btn sc-ma-btn--ghost" data-action="reset">
+      <i class="fas fa-rotate-left" aria-hidden="true"></i>
+      {{ localize "SCMOREACTIVITIES.Actions.ResetDefaults" }}
     </button>
-    <button type="button" class="sc-ma-preview-colors-cancel" data-action="cancel">
-      <i class="fas fa-times"></i>
+    <span class="sc-ma-config__spacer"></span>
+    <button type="button" class="sc-ma-btn" data-action="cancel">
+      <i class="fas fa-times" aria-hidden="true"></i>
       {{ localize "SCMOREACTIVITIES.Actions.Cancel" }}
     </button>
+    <button type="button" class="sc-ma-btn sc-ma-btn--primary" data-action="save">
+      <i class="fas fa-save" aria-hidden="true"></i>
+      {{ localize "SCMOREACTIVITIES.Actions.Save" }}
+    </button>
   </footer>
-</div>
+</section>

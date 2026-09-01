@@ -205,3 +205,66 @@ test("the target selectors follow the setting through canMoveToken", (t) => {
   globalThis.game.settings.get = () => false;
   assert.equal(ScCanvasActivityService.canMoveToken(enemy, player), false);
 });
+
+test("the size rule blocks a target on the GM client, not just in the preview", async(t) => {
+  const origin = makeToken({ id: "hero", x: 100, y: 100, ownedBy: "player" });
+  const ogre = makeToken({ id: "ogre", x: 300, y: 100, ownedBy: "gm" });
+  const scene = makeScene([origin, ogre]);
+  installGlobals(t, scene, { allowPlayerTokenMovement: true });
+
+  const activity = makeActivity();
+  origin.actor = activity.actor;
+  origin.actor.system = { traits: { size: "med" } };
+  // A huge ogre is three steps up from a medium origin.
+  ogre.actor = { system: { traits: { size: "huge" } } };
+  activity.movement.targetSize = { mode: "relative", minOffset: -1, maxOffset: 1 };
+  globalThis.fromUuid = async(uuid) => (uuid === activity.uuid ? activity : null);
+
+  const result = await ScCanvasActivityService.handleCanvasQuery(
+    pushRequest(scene, activity, { originId: origin.id, targetId: ogre.id, executionKey: "key-size" })
+  );
+
+  assert.equal(result.ok, false, "no target survives the size rule");
+  assert.deepEqual(scene.moved, [], "the ogre must not move");
+});
+
+test("a target inside the size rule still moves", async(t) => {
+  const origin = makeToken({ id: "hero", x: 100, y: 100, ownedBy: "player" });
+  const goblin = makeToken({ id: "goblin", x: 300, y: 100, ownedBy: "gm" });
+  const scene = makeScene([origin, goblin]);
+  installGlobals(t, scene, { allowPlayerTokenMovement: true });
+
+  const activity = makeActivity();
+  origin.actor = activity.actor;
+  origin.actor.system = { traits: { size: "med" } };
+  goblin.actor = { system: { traits: { size: "sm" } } };
+  activity.movement.targetSize = { mode: "relative", minOffset: -1, maxOffset: 1 };
+  globalThis.fromUuid = async(uuid) => (uuid === activity.uuid ? activity : null);
+
+  const result = await ScCanvasActivityService.handleCanvasQuery(
+    pushRequest(scene, activity, { originId: origin.id, targetId: goblin.id, executionKey: "key-size-ok" })
+  );
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(scene.moved, [{ documentName: "Token", documents: [{ _id: goblin.id, x: 500, y: 100 }] }]);
+});
+
+test("an absolute size list is enforced server side too", async(t) => {
+  const origin = makeToken({ id: "hero", x: 100, y: 100, ownedBy: "player" });
+  const target = makeToken({ id: "target", x: 300, y: 100, ownedBy: "gm" });
+  const scene = makeScene([origin, target]);
+  installGlobals(t, scene, { allowPlayerTokenMovement: true });
+
+  const activity = makeActivity();
+  origin.actor = activity.actor;
+  target.actor = { system: { traits: { size: "med" } } };
+  activity.movement.targetSize = { mode: "absolute", sizes: ["tiny", "sm"] };
+  globalThis.fromUuid = async(uuid) => (uuid === activity.uuid ? activity : null);
+
+  const result = await ScCanvasActivityService.handleCanvasQuery(
+    pushRequest(scene, activity, { originId: origin.id, targetId: target.id, executionKey: "key-abs" })
+  );
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(scene.moved, []);
+});

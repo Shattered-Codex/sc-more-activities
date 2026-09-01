@@ -22,15 +22,25 @@ export class ScTeleportTargetApp extends HandlebarsApplicationMixin(ApplicationV
   };
 
   constructor(activity, options = {}) {
+    const { settlement = null, ...applicationOptions } = options;
     super({
       window: {
         title: Constants.localize("SCMOREACTIVITIES.Activities.ScTeleport.App.Targets.Title", "Teleport Targets")
       },
-      ...options
+      ...applicationOptions
     });
     this.activity = activity;
+    this.settlement = settlement;
     this.selectedTargets = [];
     this.#prepopulateTargets();
+  }
+
+  async close(options = {}) {
+    // Closing without handing off to the destination window means the user
+    // backed out, so a chain waiting on this usage must stop rather than
+    // continue as if the teleport had happened.
+    this.settlement?.cancelIfPending("teleport-canceled");
+    return super.close(options);
   }
 
   async _prepareContext() {
@@ -138,7 +148,10 @@ export class ScTeleportTargetApp extends HandlebarsApplicationMixin(ApplicationV
       return;
     }
 
-    new ScTeleportDestinationApp(this.activity, this.selectedTargets).render(true);
+    // Transferred before closing: this window's own close must not cancel a
+    // flow that the destination window is taking over.
+    const settlement = this.settlement?.transfer() ?? null;
+    new ScTeleportDestinationApp(this.activity, this.selectedTargets, { settlement }).render(true);
     this.close();
   }
 

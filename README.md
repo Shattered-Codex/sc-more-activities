@@ -78,7 +78,7 @@ which requires attribution to the original authors. See the
 - Uses a module-owned registry instead of ad hoc activity injection
 - Flushes accepted registrations into `dnd5e` during module initialization
 - Exposes registration diagnostics so GMs can see what loaded, what failed, and why
-- Lets GMs disable registered activity types without removing their definitions
+- Lets GMs switch activity types on and off from a grouped list in module settings
 - Lets players move and teleport tokens they do not own, under a world setting
 - Opens a dedicated **Activity Catalog** from module settings
 - Opens a dedicated **More Activities Migration** tool from module settings
@@ -127,8 +127,26 @@ The window uses a sidebar rail, one tab per area:
 | Tab | Scope | Who can change it |
 | --- | --- | --- |
 | **Gameplay** | World | GM only |
+| **Activities** | World | GM only |
 | **Migration** | World | GM only |
 | **Diagnostics** | Client | Every user, including players |
+
+The **Activities** tab lists registered activity types with a switch per type.
+A filter box narrows the list, and the rows group by **category** or by
+**module** — the choice is stored per user. Types in the `legacy` category are
+left out: they exist only so items saved before a rewrite keep working, and
+listing them buries the types a GM actually sets a world up with. They stay
+registered and keep whatever state they had, with a note giving the count; the
+Activity Catalog still lists and toggles them.
+
+Registration problems surface here too: a banner counts warnings and rejected
+registrations with a shortcut to the catalog, and a warned type carries a badge
+on its row. A type that never reached `dnd5e`, or that the
+registry reports as unavailable, is shown read-only with a badge instead of a
+switch — disabling it would record a preference for something that cannot run.
+Saving writes the whole tab as a single world-settings update, and a preference
+stored for a type that no installed module registers is preserved rather than
+dropped.
 
 A player who opens the window sees only **Diagnostics** — the world tabs are the
 GM's, and a player's save never writes one.
@@ -140,7 +158,13 @@ since nothing is written until you save, it stays cancellable. The tabs are
 keyboard navigable with the arrow keys, Home, and End.
 
 The activity catalog, migration tools, and preview colors keep their own buttons
-in the settings list. The wiki, Patreon, and Discord links sit together in one
+in the settings list. All four windows share the same shell — an icon rail, one
+panel per section, and a fixed footer — so they read as one tool.
+
+The **Preview colors** window puts the four scopes (teleport, movement, wall,
+portal) on the rail, with the live sample overlay above the two color fields.
+Editing a color updates the sample immediately; nothing is stored until you
+save, and switching scopes keeps unsaved edits. The wiki, Patreon, and Discord links sit together in one
 row at the bottom of the module's section.
 
 ### Players may move tokens they do not own
@@ -174,15 +198,71 @@ Portals are not covered: a portal still moves only tokens the traveller owns.
 
 ## Activity Catalog
 
-The Activity Catalog is a GM tool available from module settings.
+The Activity Catalog is the GM's diagnostic tool, available from module
+settings. It is where you look when a registration went wrong: what loaded, what
+was rejected, and why.
 
-It lets you:
+The everyday job of switching activity types on and off is easier from the
+settings window's **Activities** tab, which groups them by category. The
+catalog's table keeps its own inline switch, writing the same world setting, for
+when you are already looking at a row's module, scope, and warning count.
 
-- inspect registered activity types
-- review rejected registrations and warnings
-- filter entries by status, category, and availability
-- enable or disable registered types for the world
-- open migration tools from the same workflow
+It shares the settings window's shell — the same rail, panels, and footer — with
+one tab per concern:
+
+| Tab | What it answers |
+| --- | --- |
+| **Registered** | Every type that reached the registry, with its module, status, and availability switch |
+| **Rejected** | What the registry refused, and why |
+| **Warnings** | Registrations that went through with something worth knowing |
+| **Diagnostics** | Lifecycle state, API version, capabilities, and registry counters |
+
+The filter strip (search, category, status, availability) applies to the three
+table tabs and hides itself on Diagnostics. The footer carries **Copy report**,
+which puts the full registration report on the clipboard for a bug thread.
+
+## Canvas Activities In A Chain
+
+The canvas activities — teleport, movement, wall, portal — finish in a placement
+window that opens after `use()` has already returned. In a chain that used to
+mean the next step ran while the window was still on screen, and ran even if the
+placement was cancelled.
+
+They now hold their usage open until the window ends the flow:
+
+- placing confirms the step, and the chain resumes with the result
+- closing or cancelling the window reports a cancellation, which a chain with
+  **stop on cancel** honours
+- bailing out before the window opens at all — no token on the scene — also
+  reports a cancellation rather than leaving the chain waiting forever
+
+Teleport hands off between two windows (targets, then destination); the hand-off
+transfers the responsibility, so closing the first window on the way to the
+second is not read as a cancellation.
+
+This only applies to a tracked usage, which is what a chain creates. Clicking an
+activity directly is unaffected.
+
+## Target Size Rule
+
+`sc-movement` can restrict which token sizes it may move. The rule sits on the
+activity, under **Target size rule**, in one of three modes:
+
+| Mode | What it does |
+| --- | --- |
+| **Any size** | No restriction (the default) |
+| **Specific sizes** | Only the checked sizes — tiny, small, medium, large, huge, gargantuan |
+| **Relative to the origin** | A span of size steps from the activity's own token: `-1` to `+1` allows one step smaller through one step larger, `-5` to `-1` allows only smaller targets |
+
+A target outside the rule is marked **Wrong size** in the movement preview and
+is not moved. If no selected token passes, the activity cannot be used and says
+why. Like range, the rule is re-checked on the GM's client at execution time, so
+it holds even against a forged request.
+
+Two deliberately permissive edges, matching how `0` means unlimited elsewhere in
+this module: a token whose size cannot be read (no actor) always passes, and
+**Specific sizes** with nothing checked is treated as unconfigured rather than
+as a ban on everything.
 
 ## SC Conditional Chain Guide
 
@@ -498,6 +578,14 @@ and as the same amount of world time outside combat, so a portal opened out of i
 expires. A duration of `0` keeps the portal open until it is closed.
 
 ## Migration From `more-activities`
+
+The migration window shares the settings shell — rail, panels, footer — with one
+tab per stage: **Overview** (latest backup, preview warnings, backups on file),
+**Preview** (what a migration would change, before anything is written),
+**Apply** (what the last run changed), and **Backups** (snapshots and the last
+restore). The action buttons moved to the footer, and the progress bar sits
+above the panels so it stays visible whichever tab is open.
+
 
 This module includes explicit migration tools for the legacy `more-activities` module.
 

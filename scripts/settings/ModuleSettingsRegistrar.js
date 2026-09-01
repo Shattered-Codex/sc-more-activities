@@ -2,6 +2,7 @@ import { Constants } from "../constants/Constants.js";
 import { HOOKS } from "../constants/Hooks.js";
 import { SETTINGS_KEYS } from "../constants/SettingsKeys.js";
 import { ModuleSettings } from "./ModuleSettings.js";
+import { ACTIVITY_GROUP_BY } from "./ActivityToggleList.js";
 import { CommunityLinks } from "./CommunityLinks.js";
 import { ModuleSettingsApp } from "./ModuleSettingsApp.js";
 import { ModuleSettingsCatalog } from "./ModuleSettingsCatalog.js";
@@ -19,6 +20,7 @@ export class ModuleSettingsRegistrar {
     this.#registered = true;
 
     this.#registerCatalogSettings();
+    this.#registerActivityGroupBySetting();
     this.#registerDisabledActivityTypesSetting();
     this.#registerPreviewColorsSetting();
     this.#registerMigrationBackupsSetting();
@@ -57,6 +59,25 @@ export class ModuleSettingsRegistrar {
       type: ModuleSettingsApp,
       // Players still get the client-only section, so this is not GM-gated.
       restricted: false
+    });
+  }
+
+  /**
+   * How the Activities tab groups its rows. A per-user view preference, so it
+   * is client scoped and lives outside the window's saveable fields: picking a
+   * grouping is not an edit the GM has to confirm with Save.
+   */
+  #registerActivityGroupBySetting() {
+    game.settings.register(Constants.MODULE_ID, SETTINGS_KEYS.ACTIVITY_GROUP_BY, {
+      name: Constants.localize("SCMOREACTIVITIES.Settings.ActivityGroupBy.Name", "Activity grouping"),
+      hint: Constants.localize(
+        "SCMOREACTIVITIES.Settings.ActivityGroupBy.Hint",
+        "Stores whether this user groups the Activities tab by category or by module."
+      ),
+      scope: "client",
+      config: false,
+      type: String,
+      default: ACTIVITY_GROUP_BY.CATEGORY
     });
   }
 
