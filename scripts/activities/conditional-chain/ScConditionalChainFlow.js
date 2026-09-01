@@ -3,6 +3,7 @@ import {
   FLOW_PROPERTY_OPERATORS,
   ScConditionalChainConditions
 } from "./ScConditionalChainConditions.js";
+import { ScTemplateOrigin } from "./ScTemplateOrigin.js";
 
 export const FLOW_END = "#end";
 
@@ -67,6 +68,7 @@ export class ScConditionalChainFlow {
       nodeId: String(raw?.nodeId ?? "").trim(),
       label: String(raw?.label ?? "").trim(),
       activityId: String(raw?.activityId ?? "").trim(),
+      templateOrigin: ScTemplateOrigin.normalize(raw?.templateOrigin),
       conditionType,
       condition: {
         path: String(raw?.condition?.path ?? "").trim(),

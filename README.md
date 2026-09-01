@@ -221,6 +221,40 @@ The filter strip (search, category, status, availability) applies to the three
 table tabs and hides itself on Diagnostics. The footer carries **Copy report**,
 which puts the full registration report on the clipboard for a bug thread.
 
+## Template Origin In A Chain
+
+A chain step whose activity has an area can borrow the landing point of an
+earlier step instead of asking for a second click. Pick that step under
+**Template origin**; leaving it on *Place it as usual* keeps the system's own
+interactive placement.
+
+The field only appears where it can do something. The step's own area must be
+**orientation free** — a circle, sphere or cylinder, or a cube while square
+templates are grid aligned. A cone, a line, or a rotatable cube keeps the
+system's interactive placement, because skipping it would take the aiming away
+from the player and pin the shape to a default direction.
+
+Some earlier step must also run an activity that produces a landing point.
+Today that means a teleport — the list of providers is one constant, so a
+future activity that lands somewhere joins it there. Only steps declared
+*before* the one being configured are offered: a later step cannot have run
+when the point is needed.
+
+If the placement fails, the step says so, since the interactive placement it
+replaced is already gone.
+
+Any earlier step can be referenced, not only the one immediately before, so a
+flow can teleport, branch through several steps, and still drop an area on the
+original landing point.
+
+The point comes from the step's result — today the teleport publishes one as
+`activity.destination`, which is also readable from a step condition. When the
+referenced step produced no point (it was cancelled, or it was a damage roll),
+the step falls back to the usual placement rather than dropping the template.
+
+The shape itself is still built by the system, so every rule about sizes and
+dimensions is the system's; only the centre is supplied.
+
 ## Canvas Activities In A Chain
 
 The canvas activities — teleport, movement, wall, portal — finish in a placement

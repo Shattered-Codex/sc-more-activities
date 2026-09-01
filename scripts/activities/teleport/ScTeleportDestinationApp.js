@@ -548,7 +548,13 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
           activity: {
             canceled: false,
             movedCount: result.count ?? 0,
-            skipped: result.skipped ?? []
+            skipped: result.skipped ?? [],
+            // Where the tokens landed, in scene pixels, so a later chain step
+            // can reason about the destination the user actually chose.
+            destination: {
+              x: Math.round(Number(destination?.x) || 0),
+              y: Math.round(Number(destination?.y) || 0)
+            }
           }
         });
         try {

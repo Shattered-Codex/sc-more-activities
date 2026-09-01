@@ -1,5 +1,6 @@
 import { FLOW_CONDITION_TYPES, FLOW_END, FLOW_ROLL_MODES, FLOW_ROLL_TYPES } from "./ScConditionalChainFlow.js";
 import { FLOW_PROPERTY_OPERATORS } from "./ScConditionalChainConditions.js";
+import { ScTemplateOrigin } from "./ScTemplateOrigin.js";
 
 export class ScConditionalChainActivityData extends dnd5e.dataModels.activity.BaseActivityData {
   static defineSchema() {
@@ -51,6 +52,7 @@ export class ScConditionalChainActivityData extends dnd5e.dataModels.activity.Ba
             blank: true,
             initial: ""
           }),
+          templateOrigin: ScTemplateOrigin.field(fields),
           conditionType: new fields.StringField({
             required: false,
             initial: FLOW_CONDITION_TYPES.ALWAYS,

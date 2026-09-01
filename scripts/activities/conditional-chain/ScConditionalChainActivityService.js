@@ -10,6 +10,8 @@ import {
   FLOW_ROLL_TYPES,
   ScConditionalChainFlow
 } from "./ScConditionalChainFlow.js";
+import { ScTemplateOrigin } from "./ScTemplateOrigin.js";
+import { ScTemplatePlacement } from "./ScTemplatePlacement.js";
 
 const LANG = "SCMOREACTIVITIES.Activities.ScConditionalChain";
 const MAX_REPORTED_ISSUES = 3;
@@ -47,6 +49,9 @@ export class ScConditionalChainActivityService {
     const visited = new Set();
     let currentId = flow.startNode;
     let lastResult = ScActivityResultTracker.getLastResult(usageContext.usage);
+    // Keyed by step id: a step may borrow the landing point of any earlier
+    // step, not only the one immediately before it.
+    const stepResults = new Map();
 
     while (currentId && currentId !== FLOW_END) {
       const node = nodeMap.get(currentId);
@@ -63,13 +68,14 @@ export class ScConditionalChainActivityService {
 
       if (node.activityId) {
         const childExecution = await ScConditionalChainActivityService.#runChildActivity(
-          activity, node, flow, chainContext, usageContext, lastResult
+          activity, node, flow, chainContext, usageContext, lastResult, stepResults
         );
         if (!childExecution.proceed) {
           return;
         }
         if (childExecution.lastResult !== undefined) {
           lastResult = childExecution.lastResult;
+          stepResults.set(node.nodeId, childExecution.lastResult);
         }
       }
 
@@ -127,7 +133,7 @@ export class ScConditionalChainActivityService {
   }
 
   /** Returns the child execution outcome and the latest result context when available. */
-  static async #runChildActivity(activity, node, flow, chainContext, usageContext, lastResult) {
+  static async #runChildActivity(activity, node, flow, chainContext, usageContext, lastResult, stepResults) {
     const target = activity?.item?.system?.activities?.get?.(node.activityId) ?? null;
     if (!target) {
       ScConditionalChainActivityService.#warnFormat("Warning.MissingChild", { activity: node.activityId },
@@ -164,11 +170,31 @@ export class ScConditionalChainActivityService {
           }
         };
       ScConditionalChainActivityService.#configureChildMessage(childMessage, flow, target);
+      // Resolved before the use so the system's interactive placement can be
+      // switched off in the same call; placing afterwards would leave the user
+      // clicking for a template the step already knows the position of.
+      const templatePoint = ScTemplateOrigin.resolvePoint(node.templateOrigin, stepResults);
+      // Only orientation-free shapes: a cone or ray must stay interactive so the
+      // player can still aim it.
+      const placesOwnTemplate = templatePoint !== null && ScTemplatePlacement.supportsPoint(target);
+      if (placesOwnTemplate) {
+        childUsage.create = { ...(childUsage.create ?? {}), measuredTemplate: false };
+      }
+
       childResults = await target.use(
         childUsage,
         usageContext.dialog ?? {},
         childMessage
       );
+
+      if (placesOwnTemplate && childResults !== undefined) {
+        const placed = await ScTemplatePlacement.place(target, templatePoint);
+        if (!placed.length) {
+          // The interactive placement was already suppressed, so a silent
+          // failure would leave the step with no area and no explanation.
+          ScTemplatePlacement.warnPlacementFailed(target);
+        }
+      }
     } catch (error) {
       ScActivityResultTracker.cancelUsage(childUsage, "child-error");
       Logger.error("Could not execute conditional chain child activity.", error);
