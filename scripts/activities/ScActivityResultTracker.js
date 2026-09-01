@@ -100,6 +100,44 @@ export class ScActivityResultTracker {
     });
   }
 
+  /**
+   * Declares that this usage finishes later, so a chain waits for it instead of
+   * moving on. Canvas activities need this: their placement window opens after
+   * `use()` has already returned, and without it the next chain step ran while
+   * the user was still choosing a destination — and ran even if they cancelled.
+   *
+   * @returns {boolean} whether the usage is tracked and will be waited on.
+   */
+  static awaitAsyncResult(usageLike) {
+    const meta = ScActivityResultTracker.#trackingMeta(usageLike);
+    if (!meta) {
+      return false;
+    }
+    const record = ScActivityResultTracker.#ensureRecord(meta);
+    if (record.finalized) {
+      return false;
+    }
+    record.awaitsAsyncResult = true;
+    return true;
+  }
+
+  /** Settles a usage previously declared through `awaitAsyncResult`. */
+  static completeAsyncResult(usageLike, partial = {}) {
+    const meta = ScActivityResultTracker.#trackingMeta(usageLike);
+    if (!meta) {
+      return;
+    }
+    const record = ScActivityResultTracker.#ensureRecord(meta);
+    if (record.finalized) {
+      return;
+    }
+    record.awaitsAsyncResult = false;
+    ScActivityResultTracker.#mergeRecord(record, partial);
+    if (record.useComplete) {
+      ScActivityResultTracker.#finalize(record);
+    }
+  }
+
   static async resolveUsageResult(activity, usageLike, immediateResults) {
     const meta = ScActivityResultTracker.#trackingMeta(usageLike);
     if (!meta) {

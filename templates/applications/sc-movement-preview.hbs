@@ -17,11 +17,11 @@
       <span class="sc-ma-mv-label">{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Range" }}</span>
       <span class="sc-ma-mv-value">{{ rangeLabel }}</span>
     </div>
-    <div class="sc-ma-mv-stat">
+    <div class="sc-ma-mv-stat" data-tooltip="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.TargetsHint" }}">
       <span class="sc-ma-mv-label">{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Targets" }}</span>
       <span class="sc-ma-mv-value">{{ targetCount }}<small>/{{ maxTargets }}</small></span>
     </div>
-    <div class="sc-ma-mv-stat">
+    <div class="sc-ma-mv-stat" data-tooltip="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.EligibleHint" }}">
       <span class="sc-ma-mv-label">{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Eligible" }}</span>
       <span class="sc-ma-mv-value {{#unless eligibleCount}}is-empty{{/unless}}">{{ eligibleCount }}</span>
     </div>
@@ -72,10 +72,10 @@
 
     <div class="sc-ma-placement-list">
       {{#each targets as |target|}}
-        <div class="sc-ma-placement-row {{#unless target.inRange}}is-out-of-range{{/unless}}">
+        <div class="sc-ma-placement-row {{#unless target.inRange}}is-out-of-range{{/unless}}{{#unless target.sizeAllowed}} is-wrong-size{{/unless}}">
           <span class="sc-ma-mv-target-name">{{ target.name }}</span>
           <span class="sc-ma-mv-target-distance">{{ target.distance }}</span>
-          <span class="sc-ma-mv-status {{#if target.inRange}}is-ok{{else}}is-bad{{/if}}">{{ target.statusLabel }}</span>
+          <span class="sc-ma-mv-status {{#if target.isMovable}}is-ok{{else}}is-bad{{/if}}">{{ target.statusLabel }}</span>
           <button type="button" class="sc-ma-target-delete" data-index="{{ target.index }}" aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.RemoveTarget" }}" data-tooltip="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.RemoveTarget" }}" {{#if ../isSubmitting}}disabled{{/if}}>
             <i class="fas fa-trash" aria-hidden="true"></i>
           </button>

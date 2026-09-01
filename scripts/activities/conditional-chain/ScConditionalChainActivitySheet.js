@@ -9,6 +9,8 @@ import {
   FLOW_ROLL_VALUE_OPERATORS,
   ScConditionalChainFlow
 } from "./ScConditionalChainFlow.js";
+import { ScTemplateOrigin } from "./ScTemplateOrigin.js";
+import { ScTemplatePlacement } from "./ScTemplatePlacement.js";
 
 const LANG = "SCMOREACTIVITIES.Activities.ScConditionalChain";
 const CUSTOM_PATH_OPTION = "__custom__";
@@ -130,10 +132,24 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
           .filter((other) => other.nodeId && other.nodeId !== node.nodeId)
           .map((other) => ({ value: other.nodeId, label: this.#nodeLabel(other) }))
       ];
+      const templateOrigin = ScTemplateOrigin.normalize(node.templateOrigin);
+      const templateOriginOptions = [
+        {
+          value: "",
+          label: game.i18n.localize("SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.TemplateOrigin.Default")
+        },
+        ...ScTemplateOrigin.stepOptions(flow.nodes, node.nodeId, availableActivityIndex)
+      ];
       return {
         ...node,
         index,
         number: index + 1,
+        templateOrigin,
+        templateOriginOptions,
+        // Worth showing only when this step has an area to place and some
+        // other step can actually supply a point for it.
+        showsTemplateOrigin: suggestionActivity?.supportsPoint === true
+          && templateOriginOptions.length > 1,
         isStart: node.nodeId === flow.startNode,
         isAlways: node.conditionType === FLOW_CONDITION_TYPES.ALWAYS,
         isActorProperty: node.conditionType === FLOW_CONDITION_TYPES.ACTOR_PROPERTY,
@@ -310,7 +326,10 @@ export class ScConditionalChainActivitySheet extends dnd5e.applications.activity
       .map((activity) => ({
         id: activity.id,
         name: activity.name,
-        type: activity.type
+        type: activity.type,
+        // Directional shapes keep the interactive placement, so they never
+        // offer a borrowed origin.
+        supportsPoint: ScTemplatePlacement.supportsPoint(activity)
       }))
       .sort((left, right) => left.name.localeCompare(right.name, game?.i18n?.lang ?? undefined));
   }

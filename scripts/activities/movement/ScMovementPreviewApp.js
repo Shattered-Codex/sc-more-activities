@@ -30,13 +30,15 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
   };
 
   constructor(activity, options = {}) {
+    const { settlement = null, ...applicationOptions } = options;
     super({
       window: {
         title: Constants.localize("SCMOREACTIVITIES.Activities.ScMovement.App.Title", "Movement Preview")
       },
-      ...options
+      ...applicationOptions
     });
     this.activity = activity;
+    this.settlement = settlement;
     this.requiresMovementChoice = activity?.movement?.type === MOVEMENT_TYPES.EITHER;
     this.movementType = this.requiresMovementChoice ? null : activity?.movement?.type;
     this.originTokenId = ScCanvasActivityService.getOriginTokenDocument(activity)?.id ?? null;
@@ -82,8 +84,12 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
 
     const maxRange = preview.config.maxRange;
     const requiresSelfDirection = this.#requiresSelfDirection(preview);
+    const movableCount = preview.targets.filter(
+      (target) => target.inRange && target.sizeAllowed !== false
+    ).length;
     const canExecute = !this.isSubmitting
       && this.selectedTargetIds.length > 0
+      && movableCount > 0
       && (!this.requiresMovementChoice || Boolean(this.movementType))
       && (!requiresSelfDirection || Boolean(this.selfDirectionPoint));
     return {
@@ -105,23 +111,34 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
       maxTargets: preview.config.maxTargets,
       hasRangeLimit: maxRange > 0,
       targetCount: preview.targets.length,
-      eligibleCount: preview.targets.filter((target) => target.inRange).length,
+      eligibleCount: ScCanvasActivityService.countTokensInRange(preview.origin, {
+        scene: preview.scene,
+        maxRange,
+        rangeShape: preview.config?.rangeShape,
+        targetSize: preview.config?.targetSize
+      }),
       targets: preview.targets.map((entry, index) => ({
         id: entry.token?.id ?? "",
         index,
         name: entry.token?.name ?? entry.token?.document?.name ?? "",
         distance: Math.round(Number(entry.distance) || 0),
         inRange: entry.inRange,
-        statusLabel: entry.inRange
-          ? Constants.localize("SCMOREACTIVITIES.Activities.ScMovement.App.InRange", "In range")
-          : Constants.localize("SCMOREACTIVITIES.Activities.ScMovement.App.OutOfRange", "Out of range")
+        sizeAllowed: entry.sizeAllowed !== false,
+        // One flag for the badge: a row is only "ok" when nothing blocks it.
+        isMovable: entry.inRange && entry.sizeAllowed !== false,
+        // One badge, so a row states the first reason it cannot be moved.
+        statusLabel: !entry.inRange
+          ? Constants.localize("SCMOREACTIVITIES.Activities.ScMovement.App.OutOfRange", "Out of range")
+          : entry.sizeAllowed === false
+            ? Constants.localize("SCMOREACTIVITIES.Activities.ScMovement.App.WrongSize", "Wrong size")
+            : Constants.localize("SCMOREACTIVITIES.Activities.ScMovement.App.InRange", "In range")
       })),
       tokenGroups: this.#availableTokens(preview),
       requiresSelfDirection,
       hasSelfDirection: Boolean(this.selfDirectionPoint),
       isChoosingSelfDirection: this.isChoosingSelfDirection,
       canExecute,
-      blockReason: canExecute ? "" : this.#blockReason(requiresSelfDirection)
+      blockReason: canExecute ? "" : this.#blockReason(requiresSelfDirection, movableCount)
     };
   }
 
@@ -176,6 +193,8 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
   }
 
   async close(options = {}) {
+    // Backing out of the placement must stop a chain waiting on it.
+    this.settlement?.cancelIfPending("movement-canceled");
     // Flagged before the first await so a submission still in flight knows not
     // to re-render a window that is already going away.
     this.isClosing = true;
@@ -406,7 +425,7 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
     return Math.max(Math.round(gridSize * 0.08), 6);
   }
 
-  #blockReason(requiresSelfDirection) {
+  #blockReason(requiresSelfDirection, movableCount = 1) {
     if (this.isSubmitting) {
       return "";
     }
@@ -429,6 +448,13 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
       return Constants.localize(
         "SCMOREACTIVITIES.Activities.ScMovement.Warning.MissingSelfDirection",
         "Choose a movement direction for the self target."
+      );
+    }
+
+    if (movableCount <= 0) {
+      return Constants.localize(
+        "SCMOREACTIVITIES.Activities.ScMovement.Warning.NoMovableTargets",
+        "No selected token can be moved: check the range and the target size rule."
       );
     }
 
@@ -624,6 +650,12 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
         // time. The summary card is reporting, so its failure is logged and
         // swallowed rather than undoing that.
         this.isCompleted = true;
+        // Settled before the close, so a chain resumes on the operation
+        // itself rather than on the reporting that follows it.
+        this.settlement?.complete({
+          canceled: false,
+          activity: { canceled: false, movedCount: result.count ?? 0, skipped: result.skipped ?? [] }
+        });
         try {
           await ScCanvasResultCard.createMovementCard(this.activity, {
             affected: ScCanvasResultCard.affectedEntries(sentEntries, result.skipped),

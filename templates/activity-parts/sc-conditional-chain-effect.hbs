@@ -65,6 +65,18 @@
           {{/if}}
         </div>
 
+        {{#if node.showsTemplateOrigin}}
+        <div class="form-group">
+          <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.TemplateOrigin.Label" }}</label>
+          <div class="form-fields">
+            <select name="flow.nodes.{{ node.index }}.templateOrigin.stepId">
+              {{ selectOptions node.templateOriginOptions selected=node.templateOrigin.stepId valueAttr="value" labelAttr="label" }}
+            </select>
+          </div>
+          <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.TemplateOrigin.Hint" }}</p>
+        </div>
+        {{/if}}
+
         <div class="form-group">
           <label>{{ localize "SCMOREACTIVITIES.Activities.ScConditionalChain.Fields.Node.ConditionType.Label" }}</label>
           <div class="form-fields">

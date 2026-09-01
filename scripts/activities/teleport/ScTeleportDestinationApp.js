@@ -43,9 +43,11 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
   };
 
   constructor(activity, selectedTargets, options = {}) {
-    super({ ...options });
+    const { settlement = null, ...applicationOptions } = options;
+    super({ ...applicationOptions });
     this.activity = activity;
     this.selectedTargets = selectedTargets;
+    this.settlement = settlement;
     this.isResolvingDestination = false;
     this.isClosing = false;
     this.isCompleted = false;
@@ -87,6 +89,10 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
   }
 
   async close(options = {}) {
+    // A close that is not the completed teleport is the user backing out.
+    // `complete` already settled the successful path, so this only fires for a
+    // genuine cancellation.
+    this.settlement?.cancelIfPending("teleport-canceled");
     // Flagged before the first await so a resolution still in flight knows not
     // to re-arm the canvas listeners behind a window that is already going away.
     this.isClosing = true;
@@ -535,6 +541,22 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
         // The summary card is reporting, so its failure is logged and
         // swallowed rather than undoing that.
         this.isCompleted = true;
+        // Settled before the card and the close, so a chain resumes on the
+        // teleport itself rather than on the reporting that follows it.
+        this.settlement?.complete({
+          canceled: false,
+          activity: {
+            canceled: false,
+            movedCount: result.count ?? 0,
+            skipped: result.skipped ?? [],
+            // Where the tokens landed, in scene pixels, so a later chain step
+            // can reason about the destination the user actually chose.
+            destination: {
+              x: Math.round(Number(destination?.x) || 0),
+              y: Math.round(Number(destination?.y) || 0)
+            }
+          }
+        });
         try {
           await ScCanvasResultCard.createTeleportCard(this.activity, {
             affected: ScCanvasResultCard.affectedEntries(sentEntries, result.skipped),

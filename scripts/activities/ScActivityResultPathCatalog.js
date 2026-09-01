@@ -80,7 +80,20 @@ const GROUPS = Object.freeze({
     "contest.defender.actorUuid",
     "contest.defender.tokenUuid"
   ]),
-  macro: Object.freeze(["value", "macro.value", "macro.returned"])
+  macro: Object.freeze(["value", "macro.value", "macro.returned"]),
+  // What every canvas activity reports once its placement window closes.
+  canvas: Object.freeze([
+    "activity.canceled",
+    "activity.movedCount",
+    "activity.skipped"
+  ]),
+  // A single landing point, which only an activity that moves everything to one
+  // place can report. Movement sends each token somewhere different, so it has
+  // no destination to offer and must not suggest one.
+  canvasDestination: Object.freeze([
+    "activity.destination.x",
+    "activity.destination.y"
+  ])
 });
 
 const ACTIVITY_GROUPS = Object.freeze({
@@ -90,7 +103,9 @@ const ACTIVITY_GROUPS = Object.freeze({
   save: Object.freeze(["common", "save", "roll", "dice"]),
   "sc-grant": Object.freeze(["common", "grant", "roll"]),
   "sc-contest": Object.freeze(["common", "contest"]),
-  "sc-macro": Object.freeze(["common", "macro"])
+  "sc-macro": Object.freeze(["common", "macro"]),
+  "sc-teleport": Object.freeze(["common", "canvas", "canvasDestination"]),
+  "sc-movement": Object.freeze(["common", "canvas"])
 });
 
 export class ScActivityResultPathCatalog {

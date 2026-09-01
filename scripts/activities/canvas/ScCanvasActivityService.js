@@ -1,8 +1,10 @@
 import { Constants } from "../../constants/Constants.js";
 import { HOOKS } from "../../constants/Hooks.js";
 import { Logger } from "../../support/Logger.js";
+import { ModuleSettings } from "../../settings/ModuleSettings.js";
 import { ScWallConfig } from "../wall/ScWallConfig.js";
 import { ScRangeShape } from "./ScRangeShape.js";
+import { ScTokenSize } from "./ScTokenSize.js";
 import { ScWallGeometry } from "../wall/ScWallGeometry.js";
 import {
   CANVAS_TARGET_SOURCES,
@@ -292,6 +294,61 @@ export class ScCanvasActivityService {
     return true;
   }
 
+  /**
+   * How many tokens on the scene are candidates for an activity centred on
+   * `origin`: within `maxRange`, perceivable, and movable by this user.
+   *
+   * Counted over the whole scene rather than over the already-selected
+   * targets, so the number answers "how many could I pick?" — which is what a
+   * range readout is read as. A range of 0 means unlimited.
+   */
+  static countTokensInRange(origin, {
+    scene = canvas?.scene,
+    maxRange = 0,
+    rangeShape = null,
+    targetSize = null,
+    user = game?.user
+  } = {}) {
+    const originDocument = origin?.document ?? origin;
+    if (!originDocument) {
+      return 0;
+    }
+
+    const originCenter = ScCanvasActivityService.getTokenCenter(originDocument, scene);
+    const limit = Number(maxRange) || 0;
+    let count = 0;
+
+    for (const token of ScCanvasActivityService.getSceneTokens(scene)) {
+      // A hidden token must not be countable: the number would betray that
+      // something is standing there.
+      if (!ScCanvasActivityService.canPerceiveToken(token, user)) {
+        continue;
+      }
+      if (!ScCanvasActivityService.canMoveToken(token, user)) {
+        continue;
+      }
+      if (limit > 0) {
+        const distance = ScCanvasActivityService.rangeSceneDistance(
+          originCenter,
+          ScCanvasActivityService.getTokenCenter(token, scene),
+          rangeShape,
+          scene
+        );
+        if (distance > limit) {
+          continue;
+        }
+      }
+      // The size rule is part of what makes a token pickable, so a count that
+      // ignored it would promise targets the activity then refuses.
+      if (!ScTokenSize.matchesTokens(targetSize, originDocument, token)) {
+        continue;
+      }
+      count += 1;
+    }
+
+    return count;
+  }
+
   static getTokenCenter(token, scene = canvas?.scene) {
     const document = token?.document ?? token;
     return ScCanvasActivityService.#tokenCenter(document, scene);
@@ -470,6 +527,7 @@ export class ScCanvasActivityService {
       distance: Math.max(0, Number(config.distance ?? 10) || 0),
       maxRange: Math.max(0, Number(config.maxRange ?? 0) || 0),
       rangeShape: ScRangeShape.normalize(config.rangeShape),
+      targetSize: ScTokenSize.normalize(config.targetSize),
       maxTargets: Math.max(1, Number(config.maxTargets ?? 1) || 1),
       snapToGrid: config.snapToGrid !== false,
       targetSource: config.targetSource ?? CANVAS_TARGET_SOURCES.TARGETS,
@@ -517,11 +575,12 @@ export class ScCanvasActivityService {
         scene
       );
       const inRange = normalizedConfig.maxRange <= 0 || distance <= normalizedConfig.maxRange;
+      const sizeAllowed = ScTokenSize.matchesTokens(normalizedConfig.targetSize, origin, token);
 
       let destinationCenter = null;
       let destinationPoint = null;
 
-      if (inRange) {
+      if (inRange && sizeAllowed) {
         let dx = currentCenter.x - originCenter.x;
         let dy = currentCenter.y - originCenter.y;
         let length = Math.hypot(dx, dy);
@@ -532,6 +591,7 @@ export class ScCanvasActivityService {
               token,
               distance,
               inRange,
+              sizeAllowed,
               currentCenter,
               destinationCenter,
               destinationPoint
@@ -569,6 +629,7 @@ export class ScCanvasActivityService {
         token,
         distance,
         inRange,
+        sizeAllowed,
         currentCenter,
         destinationCenter,
         destinationPoint
@@ -1016,6 +1077,12 @@ export class ScCanvasActivityService {
         scene
       );
       if (maxRange > 0 && range > maxRange) {
+        skipped.push(token.name);
+        continue;
+      }
+      // Re-checked here rather than trusted from the request: the size gate is
+      // a rule of the activity, so a forged payload must not step around it.
+      if (!ScTokenSize.matchesTokens(config.targetSize, origin, token)) {
         skipped.push(token.name);
         continue;
       }
@@ -1691,8 +1758,20 @@ export class ScCanvasActivityService {
     );
   }
 
+  /**
+   * Ownership of the moved token is the default requirement, but a world
+   * setting lifts it: pushing, pulling, and teleporting are usually aimed at
+   * enemies, which a player never owns. Lifting it stays bounded — the caller
+   * still has to own the activity, the origin token still has to belong to the
+   * activity's actor, and the configured range and distance are re-validated
+   * on the GM client before anything moves.
+   */
   static #canMoveToken(token, user) {
     if (user?.isGM) {
+      return true;
+    }
+
+    if (ModuleSettings.isPlayerTokenMovementAllowed()) {
       return true;
     }
 

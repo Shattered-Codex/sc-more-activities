@@ -1,0 +1,202 @@
+<section class="sc-ma-config" data-application-part="body">
+  <div class="sc-ma-config__body">
+    <nav class="sc-ma-config__rail" role="tablist" aria-label="{{ strings.tabsAria }}">
+      {{#each tabs}}
+        <button
+          type="button"
+          role="tab"
+          id="{{ ../formId }}-tab-{{ this.id }}"
+          class="sc-ma-config__tab{{#if this.active}} is-active{{/if}}"
+          data-action="switchTab"
+          data-tab-target="{{ this.id }}"
+          aria-selected="{{#if this.active}}true{{else}}false{{/if}}"
+          aria-controls="{{ ../formId }}-panel-{{ this.id }}"
+          tabindex="{{#if this.active}}0{{else}}-1{{/if}}"
+        >
+          <i class="{{ this.icon }}" aria-hidden="true"></i>
+          <span class="sc-ma-config__tab-label">{{ this.label }}</span>
+          <span class="sc-ma-config__tab-dot" data-tab-dot="{{ this.id }}" hidden></span>
+        </button>
+      {{/each}}
+    </nav>
+
+    <div class="sc-ma-config__content">
+      {{#unless isGM}}
+        <p class="sc-ma-config__notice">
+          <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+          {{ playerNotice }}
+        </p>
+      {{/unless}}
+
+      {{#each sections}}
+        <section
+          id="{{ ../formId }}-panel-{{ this.id }}"
+          class="sc-ma-config__panel"
+          role="tabpanel"
+          aria-labelledby="{{ ../formId }}-tab-{{ this.id }}"
+          data-tab-panel="{{ this.id }}"
+          {{#unless this.active}}hidden{{/unless}}
+        >
+          <header class="sc-ma-config__panel-head">
+            <h2 class="sc-ma-config__panel-title">{{ this.title }}</h2>
+            <p class="sc-ma-config__panel-hint">{{ this.hint }}</p>
+          </header>
+
+          {{#if this.isActivityList}}
+            {{#if this.issues}}
+              <div class="sc-ma-config__issues">
+                <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+                <span class="sc-ma-config__issues-text">
+                  {{#if this.issues.hasWarnings}}<strong>{{ this.issues.warningLabel }}</strong>{{/if}}
+                  {{#if this.issues.hasRejected}}<strong>{{ this.issues.rejectedLabel }}</strong>{{/if}}
+                </span>
+                <button type="button" class="sc-ma-btn sc-ma-btn--sm" data-action="openCatalog">
+                  <i class="fa-solid fa-rectangle-list" aria-hidden="true"></i> {{ this.issues.action }}
+                </button>
+              </div>
+            {{/if}}
+
+            <label class="sc-ma-config__search">
+              <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+              <input
+                type="search"
+                class="sc-ma-input"
+                data-activity-search
+                placeholder="{{ this.searchLabel }}"
+                aria-label="{{ this.searchLabel }}"
+                autocomplete="off"
+              />
+            </label>
+
+            <div class="sc-ma-config__groupby" role="group" aria-label="{{ this.groupByLabel }}">
+              <span class="sc-ma-config__groupby-label">{{ this.groupByLabel }}</span>
+              {{#each this.groupByOptions}}
+                <button
+                  type="button"
+                  class="sc-ma-config__groupby-btn{{#if this.active}} is-active{{/if}}"
+                  data-action="setGrouping"
+                  data-group-by="{{ this.value }}"
+                  aria-pressed="{{#if this.active}}true{{else}}false{{/if}}"
+                >{{ this.label }}</button>
+              {{/each}}
+            </div>
+
+            {{#if this.isEmpty}}
+              <p class="sc-ma-config__empty">{{ this.emptyLabel }}</p>
+            {{/if}}
+            <p class="sc-ma-config__empty" data-activity-no-results hidden>{{ this.noResultsLabel }}</p>
+            {{#if this.hiddenLabel}}
+              <p class="sc-ma-config__hidden-note">{{ this.hiddenLabel }}</p>
+            {{/if}}
+            {{#each this.groups}}
+              <div class="sc-ma-config__group" data-activity-group>
+                <h3 class="sc-ma-config__group-title">
+                  {{ this.categoryLabel }}
+                  <span class="sc-ma-config__group-count">{{ this.enabledCount }}/{{ this.total }}</span>
+                </h3>
+                <div class="sc-ma-config__rows">
+                  {{#each this.rows}}
+                    <label
+                      class="sc-ma-config-row sc-ma-config-row--activity{{#unless this.canToggle}} is-locked{{/unless}}"
+                      data-activity-row
+                      data-search="{{ this.searchText }}"
+                    >
+                      <span class="sc-ma-activity-icon" aria-hidden="true">
+                        {{#if this.iconIsPath}}
+                          <img src="{{ this.icon }}" alt="">
+                        {{else}}
+                          <i class="{{ this.icon }}"></i>
+                        {{/if}}
+                      </span>
+                      <span class="sc-ma-config-row__copy">
+                        <span class="sc-ma-config-row__name">
+                          {{ this.label }}
+                          {{#if this.hasWarnings}}
+                            <span class="sc-ma-config-warn" data-tooltip="{{ this.stateHint }}">
+                              <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>{{ this.warningCount }}
+                            </span>
+                          {{/if}}
+                        </span>
+                        <span class="sc-ma-config-row__hint">{{#if this.hint}}{{ this.hint }}{{else}}{{ this.stateHint }}{{/if}}</span>
+                      </span>
+                      <span class="sc-ma-config-row__control">
+                        {{#if this.canToggle}}
+                          <span class="sc-ma-switch">
+                            <input
+                              type="checkbox"
+                              name="{{ this.type }}"
+                              data-activity-type="{{ this.type }}"
+                              aria-label="{{ this.actionLabel }}"
+                              {{#if this.enabled}}checked{{/if}}
+                              data-default-checked="true"
+                            />
+                            <span class="sc-ma-switch__track" aria-hidden="true"><span class="sc-ma-switch__thumb"></span></span>
+                          </span>
+                        {{else}}
+                          <span class="sc-ma-config-badge" data-tooltip="{{ this.stateHint }}">{{ this.stateLabel }}</span>
+                        {{/if}}
+                      </span>
+                    </label>
+                  {{/each}}
+                </div>
+              </div>
+            {{/each}}
+          {{else}}
+          <div class="sc-ma-config__rows">
+            {{#each this.fields}}
+              <label class="sc-ma-config-row">
+                <span class="sc-ma-config-row__copy">
+                  <span class="sc-ma-config-row__name">{{ this.name }}</span>
+                  <span class="sc-ma-config-row__hint">{{ this.hint }}</span>
+                </span>
+                <span class="sc-ma-config-row__control">
+                  {{#if this.isNumber}}
+                    <input
+                      type="number"
+                      name="{{ this.key }}"
+                      class="sc-ma-input sc-ma-input--number"
+                      value="{{ this.value }}"
+                      min="{{ this.min }}"
+                      max="{{ this.max }}"
+                      step="{{ this.step }}"
+                      data-default-value="{{ this.defaultValue }}"
+                    />
+                  {{/if}}
+                  {{#if this.isCheckbox}}
+                    <span class="sc-ma-check">
+                      <input
+                        type="checkbox"
+                        name="{{ this.key }}"
+                        {{#if this.checked}}checked{{/if}}
+                        data-default-checked="{{ this.defaultChecked }}"
+                      />
+                      <span class="sc-ma-check__box"><i class="fas fa-check" aria-hidden="true"></i></span>
+                    </span>
+                  {{/if}}
+                </span>
+              </label>
+            {{/each}}
+          </div>
+          {{/if}}
+        </section>
+      {{/each}}
+    </div>
+  </div>
+
+  <footer class="sc-ma-config__footer">
+    <span class="sc-ma-config-pill" data-status-pill hidden>
+      <span class="sc-ma-config-pill__dot" aria-hidden="true"></span>
+      <span data-status-pill-label></span>
+    </span>
+    <span class="sc-ma-config__spacer"></span>
+    <button type="button" class="sc-ma-btn sc-ma-btn--ghost" data-action="resetActiveTab">
+      <i class="fas fa-rotate-left" aria-hidden="true"></i> {{ strings.reset }}
+    </button>
+    <button type="button" class="sc-ma-btn" data-action="close">
+      <i class="fas fa-xmark" aria-hidden="true"></i> {{ strings.close }}
+    </button>
+    <button type="button" class="sc-ma-btn sc-ma-btn--primary" data-action="save" data-save-button>
+      <i class="fas fa-floppy-disk" aria-hidden="true"></i> {{ strings.save }}
+    </button>
+  </footer>
+</section>

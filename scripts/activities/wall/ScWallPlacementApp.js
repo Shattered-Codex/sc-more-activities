@@ -25,13 +25,15 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
   };
 
   constructor(activity, options = {}) {
+    const { settlement = null, ...applicationOptions } = options;
     super({
       window: {
         title: Constants.localize("SCMOREACTIVITIES.Activities.ScWall.App.Title", "Wall Placement")
       },
-      ...options
+      ...applicationOptions
     });
     this.activity = activity;
+    this.settlement = settlement;
     this.config = ScWallConfig.fromActivity(activity);
     this.allWalls = [];
     this.placementPoints = [];
@@ -145,6 +147,8 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
   }
 
   async close(options = {}) {
+    // Backing out of the placement must stop a chain waiting on it.
+    this.settlement?.cancelIfPending("wall-canceled");
     // Flagged before the first await so a submission still in flight knows not
     // to re-render a window that is already going away.
     this.isClosing = true;
@@ -377,6 +381,12 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
         walls: this.#wallsForRequest()
       });
       if (result?.ok) {
+        // Settled before the close, so a chain resumes on the operation
+        // itself rather than on the reporting that follows it.
+        this.settlement?.complete({
+          canceled: false,
+          activity: { canceled: false, wallCount: result.count ?? 0, skipped: result.skipped ?? [] }
+        });
         await this.close();
       }
     } finally {

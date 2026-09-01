@@ -59,6 +59,53 @@
     </div>
 
     <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.TargetSize.Label" }}</label>
+      <div class="form-fields">
+        <select name="movement.targetSize.mode">
+          {{#each targetSizeModeOptions as |option|}}
+            <option value="{{ option.value }}" {{#if (eq option.value ../movement.targetSize.mode)}}selected{{/if}}>{{ option.label }}</option>
+          {{/each}}
+        </select>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.TargetSize.Hint" }}</p>
+    </div>
+
+    {{#if targetSizeIsAbsolute}}
+      <div class="form-group sc-ma-size-group">
+        <label>{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.TargetSize.Sizes.Label" }}</label>
+        <div class="form-fields sc-ma-size-choices">
+          {{#each targetSizeOptions as |option|}}
+            <label class="checkbox sc-ma-size-choice">
+              <input type="checkbox" name="movement.targetSize.sizes" value="{{ option.value }}" {{#if option.selected}}checked{{/if}}>
+              {{ option.label }}
+            </label>
+          {{/each}}
+        </div>
+        <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.TargetSize.Sizes.Hint" }}</p>
+      </div>
+    {{/if}}
+
+    {{#if targetSizeIsRelative}}
+      <div class="form-group">
+        <label>{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.TargetSize.Offsets.Label" }}</label>
+        <div class="form-fields sc-ma-size-offsets">
+          <select name="movement.targetSize.minOffset">
+            {{#each targetSizeOffsetOptions as |option|}}
+              <option value="{{ option.value }}" {{#if (eq option.value ../movement.targetSize.minOffset)}}selected{{/if}}>{{ option.label }}</option>
+            {{/each}}
+          </select>
+          <span class="sc-ma-size-offsets-sep">&mdash;</span>
+          <select name="movement.targetSize.maxOffset">
+            {{#each targetSizeOffsetOptions as |option|}}
+              <option value="{{ option.value }}" {{#if (eq option.value ../movement.targetSize.maxOffset)}}selected{{/if}}>{{ option.label }}</option>
+            {{/each}}
+          </select>
+        </div>
+        <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.TargetSize.Offsets.Hint" }}</p>
+      </div>
+    {{/if}}
+
+    <div class="form-group">
       <label>{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.SnapToGrid.Label" }}</label>
       <div class="form-fields">
         <input type="checkbox" name="movement.snapToGrid" {{#if movement.snapToGrid}}checked{{/if}}>

@@ -1,6 +1,7 @@
 import { ActivityAvailability } from "../../availability/ActivityAvailability.js";
 import { ACTIVITY_TYPES } from "../ActivityTypes.js";
 import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
+import { ScCanvasUsageSettlement } from "../canvas/ScCanvasUsageSettlement.js";
 import { ScWallActivityData } from "./ScWallActivityData.js";
 import { ScWallPlacementApp } from "./ScWallPlacementApp.js";
 import { ScWallActivitySheet } from "./ScWallActivitySheet.js";
@@ -27,6 +28,11 @@ export class ScWallActivity extends dnd5e.documents.activity.ActivityMixin(ScWal
       return undefined;
     }
 
+    // Declared before super.use(): dnd5e finalizes the tracked record from its
+    // postUseActivity hook, and a record already finalized can no longer be
+    // held open — the chain would move on while the window is still up.
+    const settlement = ScCanvasUsageSettlement.begin(usage);
+
     const results = await super.use({
       ...usage,
       create: {
@@ -35,6 +41,7 @@ export class ScWallActivity extends dnd5e.documents.activity.ActivityMixin(ScWal
       }
     }, dialog, message);
     if (results === undefined) {
+      settlement?.cancel("usage-canceled");
       return results;
     }
 
@@ -42,10 +49,11 @@ export class ScWallActivity extends dnd5e.documents.activity.ActivityMixin(ScWal
       ui.notifications?.warn?.(game.i18n.localize(
         "SCMOREACTIVITIES.Activities.Canvas.Warning.MissingOrigin"
       ));
+      settlement?.cancel("missing-origin");
       return results;
     }
 
-    new ScWallPlacementApp(this).render(true);
+    new ScWallPlacementApp(this, { settlement }).render(true);
     return results;
   }
 }
