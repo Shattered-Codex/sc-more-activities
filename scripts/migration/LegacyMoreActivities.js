@@ -24,3 +24,21 @@ export const LEGACY_MORE_ACTIVITIES_TARGET_TYPES = Object.freeze({
   advancement: "sc-advancement"
 });
 
+/**
+ * Fields a legacy More Activities teleport stores at the top level of its
+ * activity source. The native dnd5e teleport never stores any of them.
+ */
+export const LEGACY_TELEPORT_SOURCE_KEYS = Object.freeze([
+  "maxTargets",
+  "targetSelf",
+  "onlyTargetSelf",
+  "targetRadius",
+  "teleportDistance",
+  "keepArrangement",
+  "clusterRadius",
+  "manualPlacement",
+  "manualRadius",
+  "autoApply",
+  "appliedEffects"
+]);
+

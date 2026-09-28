@@ -1,3 +1,5 @@
+import { Dnd5eChatAdapter } from "../adapters/dnd5e/Dnd5eChatAdapter.js";
+
 const TRACKING_KEY = "scMoreActivitiesActivityResult";
 const LAST_RESULT_KEY = "scMoreActivitiesLastResult";
 
@@ -19,16 +21,16 @@ export class ScActivityResultTracker {
     Hooks.on("dnd5e.postUseActivity", (activity, usageConfig, results) => {
       ScActivityResultTracker.#onPostUseActivity(activity, usageConfig, results);
     });
-    Hooks.on("dnd5e.preRollAttackV2", (rollConfig) => {
+    Hooks.on("dnd5e.preRollAttack", (rollConfig) => {
       ScActivityResultTracker.#injectLastResultRollData(rollConfig);
     });
-    Hooks.on("dnd5e.preRollDamageV2", (rollConfig) => {
+    Hooks.on("dnd5e.preRollDamage", (rollConfig) => {
       ScActivityResultTracker.#injectLastResultRollData(rollConfig);
     });
-    Hooks.on("dnd5e.rollDamageV2", (rolls, data) => {
+    Hooks.on("dnd5e.rollDamage", (rolls, data) => {
       ScActivityResultTracker.#recordDamageRoll(data?.subject, rolls);
     });
-    Hooks.on("dnd5e.rollAttackV2", (rolls, data) => {
+    Hooks.on("dnd5e.rollAttack", (rolls, data) => {
       ScActivityResultTracker.#recordAttackRoll(data?.subject, rolls);
     });
     Hooks.on("dnd5e.rollSavingThrow", (rolls, data) => {
@@ -399,11 +401,11 @@ export class ScActivityResultTracker {
    * The same-client hook path finalizes first when both apply.
    */
   static #recordSaveMessage(message) {
-    const flag = message?.flags?.dnd5e?.roll ?? message?.getFlag?.("dnd5e", "roll");
-    if (String(flag?.type ?? "") !== "save") {
+    const save = Dnd5eChatAdapter.getSaveContext(message);
+    if (!save.isSave) {
       return;
     }
-    ScActivityResultTracker.#recordSaveRoll(message?.rolls, { ability: flag?.ability });
+    ScActivityResultTracker.#recordSaveRoll(message?.rolls, { ability: save.ability });
   }
 
   static #pendingSaveRecord(ability, rolls) {
@@ -492,7 +494,7 @@ export class ScActivityResultTracker {
    * the chat card — usually by a different actor and activity instance.
    * Waiting on `rollDamage` would stall forever for saves without damage,
    * so the record waits on the saving-throw hook instead. A damage roll from
-   * the card can still finalize the record first (dnd5e.rollDamageV2).
+   * the card can still finalize the record first (dnd5e.rollDamage).
    */
   static #prepareSaveTracking(activity, record) {
     record.awaitsAsyncResult = true;
@@ -710,9 +712,7 @@ export class ScActivityResultTracker {
 
   static #attackMessageTarget(roll) {
     const message = roll?.parent ?? null;
-    const targets = message?.getFlag?.("dnd5e", "targets")
-      ?? message?.flags?.dnd5e?.targets
-      ?? [];
+    const targets = Dnd5eChatAdapter.getTargets(message);
     if (!Array.isArray(targets) || targets.length !== 1) {
       return { supported: false, ac: null };
     }

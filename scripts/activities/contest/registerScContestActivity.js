@@ -27,7 +27,7 @@ export function registerScContestActivity(activitiesApi) {
     },
     tags: ["contest", "roll", "automation"],
     compatibility: {
-      dnd5e: "5.x",
+      dnd5e: ">=5.0.0 <7.0.0",
       conditionalActivities: true
     },
     templates: [

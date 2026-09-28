@@ -39,19 +39,31 @@ function previewEntry({ packId = null, convertible = true, activityId = "act1", 
 
 function makeItem({ uuid, activities }) {
   const stored = { ...activities };
+  const updates = [];
   return {
     uuid,
     name: "Packed Blade",
+    _source: { system: { activities: stored } },
     toObject: () => ({ system: { activities: stored } }),
     update: async(data) => {
-      Object.assign(stored, data["system.activities"]);
-      for (const key of Object.keys(stored)) {
-        if (!(key in data["system.activities"])) {
-          delete stored[key];
+      updates.push(data);
+      if (data["system.activities"]) {
+        Object.assign(stored, data["system.activities"]);
+        for (const key of Object.keys(stored)) {
+          if (!(key in data["system.activities"])) {
+            delete stored[key];
+          }
+        }
+      }
+      for (const [path, source] of Object.entries(data)) {
+        const match = /^system\.activities\.([A-Za-z0-9_-]+)$/.exec(path);
+        if (match) {
+          stored[match[1]] = source;
         }
       }
       return true;
-    }
+    },
+    updates
   };
 }
 
@@ -133,6 +145,45 @@ test("stores a backup honouring the configured retention", async(t) => {
   assert.equal(stored[0].items[0].activities.act1.type, "macro");
   // The oldest backup is dropped by the retention setting.
   assert.deepEqual(stored.map((entry) => entry.id), [report.backupId, "old-1"]);
+});
+
+test("migrates a dnd5e 6 legacy teleport from the fields stashed before cleaning", async(t) => {
+  // dnd5e 6 cleans the source against its native teleport, which prunes the
+  // legacy fields; the preserver copied them into module flags beforehand.
+  const prunedTeleport = {
+    _id: "teleport1",
+    type: "teleport",
+    name: "Legacy Teleport",
+    teleport: { override: false, units: "ft", value: "" },
+    flags: {
+      "sc-more-activities": {
+        legacyTeleportSource: { maxTargets: 3, targetSelf: true, teleportDistance: 90, manualPlacement: true }
+      }
+    }
+  };
+  const item = makeItem({ uuid: "Item.item1", activities: { teleport1: prunedTeleport } });
+  const { settings } = installGlobals(t, { items: new Map([[item.uuid, item]]) });
+
+  const service = new MoreActivitiesMigrationService();
+  const report = await service.migrateMoreActivities({
+    preview: {
+      previewId: "stashed-teleport",
+      entries: [previewEntry({ activityId: "teleport1", legacyType: "teleport" })]
+    }
+  });
+
+  const converted = item._source.system.activities.teleport1;
+  assert.equal(report.updatedItems, 1);
+  assert.equal(converted.type, "sc-teleport");
+  assert.equal(converted.teleport.maxTargets, 3);
+  assert.equal(converted.teleport.teleportDistance, 90);
+  assert.equal(converted.flags["sc-more-activities"].migration.unmapped.manualPlacement, true);
+  assert.equal(converted.flags["sc-more-activities"].legacyTeleportSource, undefined);
+
+  const backup = settings.get(BACKUPS_KEY)[0].items[0].activities.teleport1;
+  assert.equal(backup.teleportDistance, 90);
+  assert.equal(backup.flags["sc-more-activities"].legacyTeleportSource.teleportDistance, 90);
+  assert.deepEqual(Object.keys(item.updates[0]), ["system.activities.teleport1"]);
 });
 
 test("applies an incomplete preview once the caller acknowledges the scope", async(t) => {

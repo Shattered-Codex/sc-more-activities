@@ -1,8 +1,91 @@
 import { Constants } from "../../constants/Constants.js";
 import { Logger } from "../../support/Logger.js";
+import { ACTIVITY_TYPES } from "../ActivityTypes.js";
 import { ScGrantEntryHelpers } from "./ScGrantEntryHelpers.js";
 
+const QUERY_ID = "sc-more-activities.grantItems";
+const QUERY_TIMEOUT = 30000;
+
 export class ScGrantActivityService {
+  static registerQueries() {
+    if (!globalThis.CONFIG?.queries) {
+      return false;
+    }
+    CONFIG.queries[QUERY_ID] = ScGrantActivityService.handleGrantQuery;
+    return true;
+  }
+
+  /**
+   * Creates the granted items on the GM client for a player who cannot write
+   * to the recipient actor (another player's character, an NPC) or to a world
+   * roll table. The GM re-derives everything it can from the stored activity:
+   * the caller must own the activity, only the configured entries are granted,
+   * and a "self" grant always lands on the activity's own actor.
+   *
+   * Foundry v14 passes the authenticated sender as `context.user`; without it
+   * `requestUserId` is only a claim, so a claim of GM rights is refused (a GM
+   * never relays, see `#shouldRelay`).
+   */
+  static async handleGrantQuery(payload = {}, context = {}) {
+    if (!game?.user?.isGM) {
+      return ScGrantActivityService.#failure(
+        "SCMOREACTIVITIES.Activities.ScGrant.Warning.GmRequired",
+        "A GM must grant these items."
+      );
+    }
+
+    const user = context?.user ?? game?.users?.get?.(payload.requestUserId) ?? null;
+    let activity = await ScGrantActivityService.#fromUuid(payload.activityUuid);
+    if (!user || (!context?.user && user.isGM) || String(activity?.type ?? "") !== ACTIVITY_TYPES.GRANT) {
+      return ScGrantActivityService.#invalidRequest();
+    }
+
+    if (!ScGrantActivityService.#canUseActivity(activity, user)) {
+      return ScGrantActivityService.#failure(
+        "SCMOREACTIVITIES.Activities.ScGrant.Warning.ActivityPermission",
+        "You do not have permission to use this activity."
+      );
+    }
+
+    activity = ScGrantActivityService.#withUsageScaling(activity, payload.scaling ?? 0);
+    if (!activity) {
+      return ScGrantActivityService.#invalidRequest();
+    }
+
+    const sourceActor = activity.actor ?? activity.item?.actor ?? null;
+    const recipientActor = await ScGrantActivityService.#requestedRecipient(activity, sourceActor, payload.recipientUuid);
+    const entries = ScGrantEntryHelpers.normalizeEntries(activity.grants ?? []);
+    if (!sourceActor || !recipientActor || !entries.length) {
+      return ScGrantActivityService.#invalidRequest();
+    }
+
+    let checkInfo = null;
+    const check = ScGrantEntryHelpers.normalizeCheck(activity.check);
+    if (ScGrantEntryHelpers.isCheckEnabled(check)) {
+      const dc = await ScGrantActivityService.resolveCheckDc(activity, check);
+      const total = Number(payload.check?.total);
+      if (!Number.isFinite(total) || total < dc) {
+        return ScGrantActivityService.#invalidRequest();
+      }
+      checkInfo = { dc, total };
+    }
+
+    try {
+      const outcome = await ScGrantActivityService.#grantItems(activity, sourceActor, recipientActor, entries, checkInfo);
+      if (!outcome.ok) {
+        return outcome;
+      }
+      return {
+        ...outcome,
+        created: outcome.created.map((document) => document?.uuid ?? null),
+        updated: outcome.updated.map((document) => document?.uuid ?? null)
+      };
+    } catch (error) {
+      Logger.error("Could not execute a relayed sc-grant activity.", error);
+      return { ok: false, message: ScGrantActivityService.#executionFailedMessage(error) };
+    }
+  }
+
   static async execute(activity) {
     const sourceActor = activity?.actor ?? activity?.item?.actor ?? null;
     if (!sourceActor) {
@@ -13,18 +96,11 @@ export class ScGrantActivityService {
       return { canceled: true, reason: "missing-actor" };
     }
 
-    const recipientActor = ScGrantActivityService.#resolveRecipientActor(activity, sourceActor);
-    if (!recipientActor) {
+    const recipient = ScGrantActivityService.#resolveRecipient(activity, sourceActor);
+    if (!recipient) {
       return { canceled: true, reason: "missing-recipient" };
     }
-
-    if (!recipientActor.isOwner) {
-      ui.notifications?.warn?.(Constants.localize(
-        "SCMOREACTIVITIES.Activities.ScGrant.Warning.ActorPermission",
-        "You do not have permission to grant items to this actor."
-      ));
-      return { canceled: true, reason: "recipient-permission" };
-    }
+    const recipientActor = recipient.actor;
 
     const entries = ScGrantEntryHelpers.normalizeEntries(activity?.grants ?? []);
     if (!entries.length) {
@@ -33,6 +109,15 @@ export class ScGrantActivityService {
         "Add at least one granted item before using this activity."
       ));
       return { canceled: true, reason: "missing-items" };
+    }
+
+    const relay = ScGrantActivityService.#shouldRelay(recipientActor, entries);
+    if (relay && !ScGrantActivityService.#canRelay()) {
+      ui.notifications?.warn?.(Constants.localize(
+        "SCMOREACTIVITIES.Activities.ScGrant.Warning.NoActiveGm",
+        "An active GM is required to grant items to this actor."
+      ));
+      return { canceled: true, reason: "no-active-gm" };
     }
 
     try {
@@ -66,46 +151,26 @@ export class ScGrantActivityService {
         };
       }
 
-      const rollData = activity?.getRollData?.() ?? sourceActor?.getRollData?.() ?? {};
-      const { sources, lines, rolls } = await ScGrantActivityService.#resolveSources(entries, rollData);
-      const createData = [];
-      const quantityUpdates = [];
-      let totalGranted = 0;
+      const outcome = relay
+        ? await ScGrantActivityService.#requestGmGrant(activity, recipient, checkInfo)
+        : await ScGrantActivityService.#grantItems(activity, sourceActor, recipientActor, entries, checkInfo);
 
-      for (const source of sources) {
-        const existingStack = ScGrantActivityService.#findExistingStack(recipientActor, source.item, activity);
-        const documents = ScGrantActivityService.#createDocumentsForEntry(source, activity, existingStack);
-        createData.push(...documents);
-        if (existingStack && ScGrantActivityService.#supportsQuantity(existingStack.toObject())) {
-          quantityUpdates.push({
-            _id: existingStack.id,
-            "system.quantity": (Number(existingStack.system?.quantity) || 0) + source.quantity
-          });
+      if (!outcome.ok) {
+        if (outcome.reason === "no-create-data") {
+          ui.notifications?.warn?.(Constants.localize(
+            "SCMOREACTIVITIES.Activities.ScGrant.Warning.NoResolvedItems",
+            "No valid items could be resolved for this grant activity."
+          ));
+        } else if (outcome.message) {
+          ui.notifications?.warn?.(outcome.message);
         }
-        totalGranted += source.quantity;
+        return { canceled: true, reason: outcome.reason ?? "gm-request-failed" };
       }
 
-      if (!createData.length && !quantityUpdates.length) {
-        ui.notifications?.warn?.(Constants.localize(
-          "SCMOREACTIVITIES.Activities.ScGrant.Warning.NoResolvedItems",
-          "No valid items could be resolved for this grant activity."
-        ));
-        return { canceled: true, reason: "no-create-data" };
-      }
-
-      const updated = quantityUpdates.length
-        ? await recipientActor.updateEmbeddedDocuments("Item", quantityUpdates)
-        : [];
-
-      const created = createData.length
-        ? await recipientActor.createEmbeddedDocuments("Item", createData)
-        : [];
-
-      await ScGrantActivityService.#createChatCard(activity, recipientActor, lines, rolls, checkInfo);
       ui.notifications?.info?.(Constants.format(
         "SCMOREACTIVITIES.Activities.ScGrant.Info.GrantedItems",
-        { count: totalGranted, actor: recipientActor.name ?? "" },
-        `Granted ${totalGranted} item(s).`
+        { count: outcome.totalGranted, actor: recipientActor.name ?? "" },
+        `Granted ${outcome.totalGranted} item(s).`
       ));
 
       return {
@@ -113,24 +178,193 @@ export class ScGrantActivityService {
         checkPassed: true,
         check: checkInfo,
         actor: recipientActor,
-        updated,
-        created
+        updated: outcome.updated,
+        created: outcome.created
       };
     } catch (error) {
       Logger.error("Could not execute sc-grant activity.", error);
-      ui.notifications?.error?.(Constants.format(
-        "SCMOREACTIVITIES.Activities.ScGrant.Error.ExecutionFailed",
-        { error: error?.message ?? String(error) },
-        `Could not grant items: ${error?.message ?? String(error)}`
-      ));
+      ui.notifications?.error?.(ScGrantActivityService.#executionFailedMessage(error));
       return { canceled: true, error };
     }
   }
 
-  static #resolveRecipientActor(activity, sourceActor) {
+  /**
+   * Resolves, stacks, and creates the granted items, then posts the chat
+   * card. Runs on whichever client may write to the recipient: the user's own
+   * when they own it, the GM's otherwise.
+   */
+  static async #grantItems(activity, sourceActor, recipientActor, entries, checkInfo) {
+    const rollData = activity?.getRollData?.() ?? sourceActor?.getRollData?.() ?? {};
+    const { sources, lines, rolls } = await ScGrantActivityService.#resolveSources(entries, rollData);
+    const createData = [];
+    const quantityUpdates = [];
+    let totalGranted = 0;
+
+    for (const source of sources) {
+      const existingStack = ScGrantActivityService.#findExistingStack(recipientActor, source.item, activity);
+      const documents = ScGrantActivityService.#createDocumentsForEntry(source, activity, existingStack);
+      createData.push(...documents);
+      if (existingStack && ScGrantActivityService.#supportsQuantity(existingStack.toObject())) {
+        quantityUpdates.push({
+          _id: existingStack.id,
+          "system.quantity": (Number(existingStack.system?.quantity) || 0) + source.quantity
+        });
+      }
+      totalGranted += source.quantity;
+    }
+
+    if (!createData.length && !quantityUpdates.length) {
+      return { ok: false, reason: "no-create-data" };
+    }
+
+    const updated = quantityUpdates.length
+      ? await recipientActor.updateEmbeddedDocuments("Item", quantityUpdates)
+      : [];
+
+    const created = createData.length
+      ? await recipientActor.createEmbeddedDocuments("Item", createData)
+      : [];
+
+    await ScGrantActivityService.#createChatCard(activity, recipientActor, lines, rolls, checkInfo);
+    return { ok: true, totalGranted, updated: updated ?? [], created: created ?? [] };
+  }
+
+  /**
+   * Players hand the write to the GM when they cannot make it themselves:
+   * the recipient belongs to someone else, or a roll table draw has to mark
+   * world table results as drawn. With no GM online, a player who owns the
+   * recipient still grants locally, as before.
+   */
+  static #shouldRelay(recipientActor, entries) {
+    if (game?.user?.isGM) {
+      return false;
+    }
+    if (!recipientActor?.isOwner) {
+      return true;
+    }
+    const drawsTables = entries.some((entry) => entry.type === ScGrantEntryHelpers.SOURCE_TYPES.TABLE);
+    return drawsTables && ScGrantActivityService.#canRelay();
+  }
+
+  static #canRelay() {
+    const gm = ScGrantActivityService.#activeGmUser();
+    return Boolean(gm && typeof gm.query === "function" && globalThis.CONFIG?.queries?.[QUERY_ID]);
+  }
+
+  static async #requestGmGrant(activity, recipient, checkInfo) {
+    const gm = ScGrantActivityService.#activeGmUser();
+    try {
+      const result = await gm.query(QUERY_ID, {
+        activityUuid: activity?.uuid ?? null,
+        recipientUuid: recipient.token?.uuid ?? recipient.actor?.uuid ?? null,
+        requestUserId: game?.user?.id ?? null,
+        scaling: activity?.item?.flags?.dnd5e?.scaling ?? 0,
+        check: checkInfo
+      }, { timeout: QUERY_TIMEOUT });
+      return {
+        ok: result?.ok === true,
+        reason: result?.reason,
+        message: result?.message,
+        totalGranted: Number(result?.totalGranted) || 0,
+        created: Array.isArray(result?.created) ? result.created : [],
+        updated: Array.isArray(result?.updated) ? result.updated : []
+      };
+    } catch (error) {
+      Logger.error("Could not request a GM grant.", error);
+      return {
+        ok: false,
+        message: Constants.format(
+          "SCMOREACTIVITIES.Activities.ScGrant.Warning.GmRequestFailed",
+          { error: error?.message ?? String(error) },
+          `Could not ask the GM to grant these items: ${error?.message ?? String(error)}`
+        )
+      };
+    }
+  }
+
+  /** Rebuild the usage clone without accepting caller-supplied formulas or roll data. */
+  static #withUsageScaling(activity, scaling) {
+    if (!Number.isSafeInteger(scaling) || scaling < 0) {
+      return null;
+    }
+    if (scaling === (activity.item?.flags?.dnd5e?.scaling ?? 0)) {
+      return activity;
+    }
+
+    // Item5e.clone prepares the embedded activities and final attributes with
+    // this flag, just as the system does when configuring an upcast usage.
+    // The persisted item must retain its base level and configured formulas.
+    const item = activity.item.clone({ "flags.dnd5e.scaling": scaling }, { keepId: true });
+    return item.system.activities.get(activity.id) ?? null;
+  }
+
+  static async #requestedRecipient(activity, sourceActor, recipientUuid) {
+    const mode = String(activity?.recipient ?? "self").trim().toLowerCase();
+    if (mode !== "target") {
+      return sourceActor;
+    }
+    // Targets are always sent as token UUIDs, so a relayed grant can only reach
+    // an actor that is actually placed on a scene.
+    const document = await ScGrantActivityService.#fromUuid(recipientUuid);
+    const isToken = document?.documentName === "Token" || document?.constructor?.documentName === "Token";
+    return isToken ? document.actor ?? null : null;
+  }
+
+  static #canUseActivity(activity, user) {
+    if (user?.isGM) {
+      return true;
+    }
+    const actor = activity?.actor ?? activity?.item?.actor ?? null;
+    const item = activity?.item ?? null;
+    return Boolean(
+      actor?.testUserPermission?.(user, "OWNER")
+      || item?.testUserPermission?.(user, "OWNER")
+    );
+  }
+
+  static #activeGmUser() {
+    const activeGm = game?.users?.activeGM;
+    if (activeGm?.active && activeGm?.isGM) {
+      return activeGm;
+    }
+    return game?.users?.find?.((user) => user?.active && user?.isGM) ?? null;
+  }
+
+  static async #fromUuid(uuid) {
+    if (!uuid || typeof globalThis.fromUuid !== "function") {
+      return null;
+    }
+    try {
+      return await globalThis.fromUuid(uuid);
+    } catch (error) {
+      Logger.warn("Could not resolve sc-grant UUID.", error);
+      return null;
+    }
+  }
+
+  static #invalidRequest() {
+    return ScGrantActivityService.#failure(
+      "SCMOREACTIVITIES.Activities.ScGrant.Warning.InvalidRequest",
+      "The grant request is no longer valid."
+    );
+  }
+
+  static #failure(key, fallback) {
+    return { ok: false, message: Constants.localize(key, fallback) };
+  }
+
+  static #executionFailedMessage(error) {
+    return Constants.format(
+      "SCMOREACTIVITIES.Activities.ScGrant.Error.ExecutionFailed",
+      { error: error?.message ?? String(error) },
+      `Could not grant items: ${error?.message ?? String(error)}`
+    );
+  }
+
+  static #resolveRecipient(activity, sourceActor) {
     const recipient = String(activity?.recipient ?? "self").trim().toLowerCase();
     if (recipient !== "target") {
-      return sourceActor;
+      return { actor: sourceActor, token: null };
     }
 
     const targets = Array.from(game?.user?.targets ?? []);
@@ -151,7 +385,7 @@ export class ScGrantActivityService {
       return null;
     }
 
-    return targetActor;
+    return { actor: targetActor, token: targets[0]?.document ?? null };
   }
 
   static async #performCheck(activity, actor, check) {

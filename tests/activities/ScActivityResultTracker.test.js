@@ -97,6 +97,16 @@ test("captures single-target attack hits from tracked attack rolls", async() => 
   });
 });
 
+test("uses dnd5e 6 system targets when an attack roll has no direct target", () => {
+  const roll = makeRoll({ total: 18, targets: [] });
+  roll.parent = { system: { targets: [{ ac: 15 }] } };
+
+  const snapshot = ScActivityResultTracker.buildRollSnapshot("attack", [roll]);
+  assert.equal(snapshot.attack.hit, true);
+  assert.equal(snapshot.attack.miss, false);
+  assert.equal(snapshot.attack.target, 15);
+});
+
 test("treats critical hits and fumbles as final attack outcomes without a numeric target", async() => {
   const criticalUsage = ScActivityResultTracker.withTrackedUsage({}, makeActivity("attack"));
   const criticalActivity = {
@@ -206,7 +216,7 @@ test("injects the previous result into tracked rolls as formula-safe @scLast dat
     subject: activity,
     rolls: [{ data: { abilities: { str: 3 } } }, { data: {} }]
   };
-  Hooks.callAll("dnd5e.preRollDamageV2", rollConfig);
+  Hooks.callAll("dnd5e.preRollDamage", rollConfig);
 
   assert.equal(rollConfig.rolls[0].data.abilities.str, 3);
   assert.equal(rollConfig.rolls[0].data.scLast.roll.sum, 14);
@@ -225,7 +235,7 @@ test("leaves untracked rolls and usages without a previous result untouched", as
     subject: makeActivity("damage"),
     rolls: [{ data: {} }]
   };
-  Hooks.callAll("dnd5e.preRollDamageV2", orphanConfig);
+  Hooks.callAll("dnd5e.preRollDamage", orphanConfig);
   assert.equal(orphanConfig.rolls[0].data.scLast, undefined);
 
   const activity = makeActivity("attack");
@@ -235,7 +245,7 @@ test("leaves untracked rolls and usages without a previous result untouched", as
     subject: activity,
     rolls: [{ data: {} }]
   };
-  Hooks.callAll("dnd5e.preRollAttackV2", rollConfig);
+  Hooks.callAll("dnd5e.preRollAttack", rollConfig);
   assert.equal(rollConfig.rolls[0].data.scLast, undefined);
 
   Hooks.callAll("dnd5e.postUseActivity", activity, usage, makeUseResults());
@@ -327,6 +337,58 @@ test("captures saving throws rolled on another client through the chat message f
   assert.equal(result.save.ability, "dex");
 });
 
+test("captures dnd5e 6 saving throws from the chat message fallback", async() => {
+  const activity = {
+    ...makeActivity("save"),
+    save: { ability: new Set(["dex"]), dc: { value: 14 } }
+  };
+  const usage = ScActivityResultTracker.withTrackedUsage({}, activity);
+
+  Hooks.callAll("dnd5e.preUseActivity", activity, usage);
+  Hooks.callAll("dnd5e.postUseActivity", activity, usage, makeUseResults());
+
+  Hooks.callAll("createChatMessage", {
+    type: "save",
+    system: { ability: "dex" },
+    rolls: [makeRoll({ total: 17, target: 14, targets: [] })]
+  });
+
+  const result = await ScActivityResultTracker.resolveUsageResult(activity, usage, makeUseResults());
+  assert.equal(result.kind, "save");
+  assert.equal(result.save.success, true);
+  assert.equal(result.save.dc, 14);
+  assert.equal(result.save.ability, "dex");
+});
+
+test("ignores dnd5e 6 death saves in the chat message fallback", async() => {
+  const activity = {
+    ...makeActivity("save"),
+    save: { ability: new Set(["dex"]), dc: { value: 10 } }
+  };
+  const usage = ScActivityResultTracker.withTrackedUsage({}, activity);
+
+  Hooks.callAll("dnd5e.preUseActivity", activity, usage);
+  Hooks.callAll("dnd5e.postUseActivity", activity, usage, makeUseResults());
+
+  // dnd5e 6 records death saves as save messages without an ability, always
+  // against DC 10, so only the message subtype tells them apart.
+  Hooks.callAll("createChatMessage", {
+    type: "save",
+    system: { type: "death" },
+    rolls: [makeRoll({ total: 4, target: 10, targets: [] })]
+  });
+  Hooks.callAll("createChatMessage", {
+    type: "save",
+    system: { ability: "dex" },
+    rolls: [makeRoll({ total: 17, target: 10, targets: [] })]
+  });
+
+  const result = await ScActivityResultTracker.resolveUsageResult(activity, usage, makeUseResults());
+  assert.equal(result.kind, "save");
+  assert.equal(result.save.success, true);
+  assert.equal(result.save.total, 17);
+});
+
 test("finalizes chat-card damage rolls even when the usage has no previous result", async() => {
   const activity = makeActivity("damage");
   const usage = ScActivityResultTracker.withTrackedUsage({}, activity);
@@ -343,7 +405,7 @@ test("finalizes chat-card damage rolls even when the usage has no previous resul
   // Chat-card buttons resolve a fresh activity instance with the same ids.
   const cardActivity = makeActivity("damage");
   Hooks.callAll(
-    "dnd5e.rollDamageV2",
+    "dnd5e.rollDamage",
     [{ total: 9, formula: "2d6 + 2", dice: [] }],
     { subject: cardActivity }
   );
@@ -368,7 +430,7 @@ test("finalizes chat-card attack rolls through the official attack hook", async(
 
   const cardActivity = makeActivity("attack");
   Hooks.callAll(
-    "dnd5e.rollAttackV2",
+    "dnd5e.rollAttack",
     [makeRoll({ total: 18, target: 15, targets: [] })],
     { subject: cardActivity, ammoUpdate: null }
   );

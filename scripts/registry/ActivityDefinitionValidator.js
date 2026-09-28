@@ -11,6 +11,7 @@ const FALLBACK_NATIVE_TYPES = Object.freeze([
   "order",
   "save",
   "summon",
+  "teleport",
   "transform",
   "utility"
 ]);

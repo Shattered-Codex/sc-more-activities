@@ -53,7 +53,14 @@ function legacyMacroActivity(name = "Legacy Macro") {
   };
 }
 
-function installGlobals(t, { items = [], actors = [], packs = [] } = {}) {
+function installGlobals(t, { items = [], actors = [], packs = [], config = null } = {}) {
+  if (config) {
+    globalThis.CONFIG = config;
+    t.after(() => {
+      delete globalThis.CONFIG;
+    });
+  }
+
   const silenced = {
     info: console.info,
     debug: console.debug,
@@ -105,6 +112,84 @@ test("finds legacy activities inside world compendium item packs", async(t) => {
   assert.equal(report.entries[0].activities[0].legacyType, "macro");
   assert.equal(report.entries[0].activities[0].targetType, "sc-macro");
   assert.equal(report.activitiesByType.macro, 1);
+});
+
+/** dnd5e 6 registers a native activity under the legacy `teleport` type. */
+function nativeTeleportConfig() {
+  return { DND5E: { activityTypes: { teleport: {} } } };
+}
+
+test("detects a dnd5e 6 legacy teleport from the fields stashed before cleaning", async(t) => {
+  const item = makeWorldItem({ id: "legacy-teleport", name: "Legacy Teleport" });
+  // Foundry pruned the legacy fields against the native teleport schema; the
+  // preserver kept a copy in module flags first.
+  item._source = {
+    system: {
+      activities: {
+        teleport1: {
+          _id: "teleport1",
+          type: "teleport",
+          name: "Legacy Teleport",
+          teleport: { override: false, units: "ft", value: "" },
+          flags: {
+            "sc-more-activities": { legacyTeleportSource: { teleportDistance: 90, manualPlacement: true } }
+          }
+        }
+      }
+    }
+  };
+  installGlobals(t, { items: [item], config: nativeTeleportConfig() });
+
+  const report = await new MoreActivitiesMigrationAnalyzer().analyze({
+    previewId: "legacy-teleport",
+    includeCompendiums: false
+  });
+
+  assert.equal(report.entries.length, 1);
+  assert.equal(report.entries[0].activities[0].legacyType, "teleport");
+  assert.equal(report.entries[0].activities[0].targetType, "sc-teleport");
+  assert.equal(report.entries[0].activities[0].lossy, true);
+});
+
+test("ignores native dnd5e 6 teleport activities", async(t) => {
+  const item = makeWorldItem({
+    id: "misty-step",
+    name: "Misty Step",
+    activities: {
+      native1: {
+        _id: "native1",
+        type: "teleport",
+        name: "Misty Step",
+        teleport: { override: true, units: "ft", value: "30" }
+      }
+    }
+  });
+  installGlobals(t, { items: [item], config: nativeTeleportConfig() });
+
+  const report = await new MoreActivitiesMigrationAnalyzer().analyze({
+    previewId: "native-teleport",
+    includeCompendiums: false
+  });
+
+  assert.equal(report.entries.length, 0);
+  assert.equal(report.activitiesByType.teleport, 0);
+});
+
+test("detects legacy teleports by type when dnd5e has no native teleport", async(t) => {
+  const item = makeWorldItem({
+    id: "legacy-teleport-53",
+    name: "Legacy Teleport",
+    activities: { teleport1: { _id: "teleport1", type: "teleport", name: "Legacy Teleport" } }
+  });
+  installGlobals(t, { items: [item] });
+
+  const report = await new MoreActivitiesMigrationAnalyzer().analyze({
+    previewId: "legacy-teleport-53",
+    includeCompendiums: false
+  });
+
+  assert.equal(report.entries.length, 1);
+  assert.equal(report.entries[0].activities[0].targetType, "sc-teleport");
 });
 
 test("finds legacy activities on actors stored inside compendium actor packs", async(t) => {

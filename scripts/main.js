@@ -10,12 +10,14 @@ import { ActivityCreateDialogTabs } from "./integrations/dnd5e/ActivityCreateDia
 import { ScCanvasActivityService } from "./activities/canvas/ScCanvasActivityService.js";
 import { ScSaveRequestCard } from "./activities/canvas/ScSaveRequestCard.js";
 import { ScContestActivityService } from "./activities/contest/ScContestActivityService.js";
+import { ScGrantActivityService } from "./activities/grant/ScGrantActivityService.js";
 import { ScPortalService } from "./activities/portal/ScPortalService.js";
 import { ModuleSettingsRegistrar } from "./settings/ModuleSettingsRegistrar.js";
 import { MoreActivitiesMigrationService } from "./migration/MoreActivitiesMigrationService.js";
 import { Logger } from "./support/Logger.js";
 import { ScActivityResultTracker } from "./activities/ScActivityResultTracker.js";
 import { ScConditionalChainCardCustomizer } from "./activities/conditional-chain/ScConditionalChainCardCustomizer.js";
+import { Dnd5eLegacyTeleportPreserver } from "./adapters/dnd5e/Dnd5eLegacyTeleportPreserver.js";
 
 const registry = new ActivityRegistry();
 const registrationApi = new RegistrationApi({ registry });
@@ -32,9 +34,14 @@ Hooks.once("init", () => {
     return;
   }
 
+  // Foundry constructs world and compendium documents after init, so this is
+  // the last point where legacy teleport fields can be kept from cleaning.
+  Dnd5eLegacyTeleportPreserver.install();
+
   ScActivityResultTracker.registerHooks();
   ScConditionalChainCardCustomizer.registerHook();
   ScContestActivityService.registerQueries();
+  ScGrantActivityService.registerQueries();
   ScCanvasActivityService.registerQueries();
   ScPortalService.registerQueries();
   ScPortalService.registerHooks();

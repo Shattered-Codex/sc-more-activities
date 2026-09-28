@@ -27,7 +27,7 @@ export function registerScSoundActivity(activitiesApi) {
     },
     tags: ["audio", "utility"],
     compatibility: {
-      dnd5e: "5.x",
+      dnd5e: ">=5.0.0 <7.0.0",
       conditionalActivities: true
     },
     templates: ["modules/sc-more-activities/templates/activity-parts/sc-sound-effect.hbs"],

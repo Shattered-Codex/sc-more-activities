@@ -317,11 +317,7 @@ export class ScContestActivityService {
 
     const roll = new Roll(formula, actor?.getRollData?.() ?? {});
     if (typeof roll.evaluate === "function") {
-      try {
-        await roll.evaluate({ async: true });
-      } catch (error) {
-        await roll.evaluate();
-      }
+      await roll.evaluate();
     }
     return roll;
   }
@@ -494,7 +490,8 @@ export class ScContestActivityService {
       return `1d20 + @skills.${config.skill}.total`;
     }
     if (config.rollType === CONTEST_ROLL_TYPES.SAVING_THROW) {
-      return `1d20 + @abilities.${config.ability}.save`;
+      // `save` is the roll configuration; its prepared total is `save.value`.
+      return `1d20 + @abilities.${config.ability}.save.value`;
     }
     return `1d20 + @abilities.${config.ability}.mod`;
   }
@@ -537,7 +534,6 @@ export class ScContestActivityService {
     await ChatMessage.create({
       speaker,
       content,
-      type: CONST.CHAT_MESSAGE_TYPES?.OTHER ?? undefined,
       flags: {
         "sc-more-activities": {
           activityType: "sc-contest",
