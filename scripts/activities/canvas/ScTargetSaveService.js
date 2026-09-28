@@ -1,4 +1,5 @@
 import { Constants } from "../../constants/Constants.js";
+import { Dnd5eChatAdapter } from "../../adapters/dnd5e/Dnd5eChatAdapter.js";
 import { Logger } from "../../support/Logger.js";
 
 export class ScTargetSaveService {
@@ -113,11 +114,11 @@ export class ScTargetSaveService {
         continue;
       }
 
-      const flag = message?.flags?.dnd5e?.roll;
-      if (String(flag?.type ?? "") !== "save") {
+      const save = Dnd5eChatAdapter.getSaveContext(message);
+      if (!save.isSave) {
         continue;
       }
-      const rolledAbility = String(flag?.ability ?? "").trim();
+      const rolledAbility = save.ability;
       if (expectedAbility && rolledAbility && rolledAbility !== expectedAbility) {
         continue;
       }
@@ -136,7 +137,7 @@ export class ScTargetSaveService {
         continue;
       }
 
-      const success = flag?.forceSuccess === true
+      const success = save.forceSuccess
         ? true
         : ScTargetSaveService.#rollSucceeded(roll, expectedDc);
       if (success === null) {

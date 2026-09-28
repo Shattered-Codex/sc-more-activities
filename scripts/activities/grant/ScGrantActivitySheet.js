@@ -186,7 +186,7 @@ export class ScGrantActivitySheet extends dnd5e.applications.activity.ActivitySh
         return;
       }
       event.preventDefault();
-      const data = TextEditor.getDragEventData(event);
+      const data = foundry.applications.ux.TextEditor.implementation.getDragEventData(event);
       const uuid = String(data?.uuid ?? "").trim();
       if (!uuid) {
         return;
@@ -203,7 +203,7 @@ export class ScGrantActivitySheet extends dnd5e.applications.activity.ActivitySh
     input.addEventListener("drop", async(event) => {
       event.preventDefault();
       event.stopPropagation();
-      const data = TextEditor.getDragEventData(event);
+      const data = foundry.applications.ux.TextEditor.implementation.getDragEventData(event);
       const uuid = String(data?.uuid ?? "").trim();
       if (!uuid) {
         return;

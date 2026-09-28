@@ -42,10 +42,12 @@ export class ScMacroActivityService {
   }
 
   static async #executeInlineMacro(activity, usageContext) {
-    if (!game?.user?.isGM) {
+    // Same gate Foundry puts on script macros: players hold it by default,
+    // and a GM can revoke it per role. Only a GM can author the code itself.
+    if (!game?.user?.isGM && game?.user?.can?.("MACRO_SCRIPT") !== true) {
       ui.notifications?.warn?.(Constants.localize(
-        "SCMOREACTIVITIES.Activities.ScMacro.Warning.InlineRequiresGm",
-        "Only a GM can execute inline macro code."
+        "SCMOREACTIVITIES.Activities.ScMacro.Warning.InlinePermission",
+        "You do not have permission to execute script macros."
       ));
       return { executed: false };
     }

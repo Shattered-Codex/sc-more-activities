@@ -5,6 +5,7 @@ import { MoreActivitiesMigrationAnalyzer } from "./MoreActivitiesMigrationAnalyz
 import { MoreActivitiesMigrationBackupService } from "./MoreActivitiesMigrationBackupService.js";
 import { MoreActivitiesMigrationConverter } from "./MoreActivitiesMigrationConverter.js";
 import { MoreActivitiesMigrationPackScanner } from "./MoreActivitiesMigrationPackScanner.js";
+import { Dnd5eDataAdapter } from "../adapters/dnd5e/Dnd5eDataAdapter.js";
 
 export class MoreActivitiesMigrationService {
   #analyzer;
@@ -141,7 +142,9 @@ export class MoreActivitiesMigrationService {
       return;
     }
 
-    const activityMap = MoreActivitiesMigrationService.#clone(item.toObject()?.system?.activities ?? {});
+    const rawActivities = Dnd5eDataAdapter.getRawActivities(item);
+    const activityMap = Dnd5eDataAdapter.getRawActivityMap(item);
+    const convertedActivities = new Map();
     let changed = false;
     const itemReport = {
       itemUuid: item.uuid,
@@ -191,6 +194,7 @@ export class MoreActivitiesMigrationService {
       }
 
       activityMap[activityEntry.activityId] = conversion.convertedSource;
+      convertedActivities.set(activityEntry.activityId, conversion.convertedSource);
       changed = true;
       report.convertedActivities += 1;
       itemReport.convertedActivities.push({
@@ -208,9 +212,14 @@ export class MoreActivitiesMigrationService {
     }
 
     try {
-      await item.update({ "system.activities": activityMap });
+      const incrementalUpdates = [...convertedActivities.entries()]
+        .map(([activityId, source]) => Dnd5eDataAdapter.activityUpdate(activityId, source));
+      const canUpdateIndividually = incrementalUpdates.every(Boolean);
+      await item.update(canUpdateIndividually
+        ? Object.assign({}, ...incrementalUpdates)
+        : Dnd5eDataAdapter.activitiesUpdate(Dnd5eDataAdapter.replaceActivities(rawActivities, convertedActivities)));
       const refreshed = await fromUuid(item.uuid).catch(() => null);
-      const refreshedActivities = refreshed?.toObject?.()?.system?.activities ?? {};
+      const refreshedActivities = Dnd5eDataAdapter.getRawActivityMap(refreshed);
       const verifyCount = Object.keys(refreshedActivities).length;
       const expectedCount = Object.keys(activityMap).length;
       if (verifyCount !== expectedCount) {
@@ -305,7 +314,7 @@ export class MoreActivitiesMigrationService {
     }
 
     try {
-      await item.update({ "system.activities": MoreActivitiesMigrationService.#clone(entry.activities ?? {}) });
+      await item.update(Dnd5eDataAdapter.activitiesUpdate(entry.activities));
       report.restoredItems += 1;
       report.items.push({
         itemUuid: item.uuid,
@@ -335,8 +344,9 @@ export class MoreActivitiesMigrationService {
   async exportMoreActivitiesMigrationReport(report = {}) {
     const payload = JSON.stringify(report, null, 2);
     const filename = `sc-more-activities-migration-${report?.id ?? "report"}.json`;
-    if (typeof globalThis.saveDataToFile === "function") {
-      globalThis.saveDataToFile(payload, "application/json", filename);
+    const saveDataToFile = globalThis.foundry?.utils?.saveDataToFile;
+    if (typeof saveDataToFile === "function") {
+      saveDataToFile(payload, "application/json", filename);
       return filename;
     }
 
@@ -443,12 +453,5 @@ export class MoreActivitiesMigrationService {
         "Only a GM can preview, apply, or restore more-activities migrations."
       ));
     }
-  }
-
-  static #clone(value) {
-    if (value === undefined || value === null) {
-      return value;
-    }
-    return JSON.parse(JSON.stringify(value));
   }
 }

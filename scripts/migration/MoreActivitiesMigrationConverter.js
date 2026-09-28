@@ -2,6 +2,7 @@ import { Constants } from "../constants/Constants.js";
 import { ACTIVITY_TYPES } from "../activities/ActivityTypes.js";
 import { FLOW_CONDITION_TYPES, FLOW_END } from "../activities/conditional-chain/ScConditionalChainFlow.js";
 import { LEGACY_MORE_ACTIVITIES_TARGET_TYPES } from "./LegacyMoreActivities.js";
+import { Dnd5eLegacyTeleportPreserver } from "../adapters/dnd5e/Dnd5eLegacyTeleportPreserver.js";
 
 const COMMON_ACTIVITY_KEYS = Object.freeze([
   "_id",
@@ -920,6 +921,10 @@ export class MoreActivitiesMigrationConverter {
     const existingModuleFlags = baseFlags[Constants.MODULE_ID] && typeof baseFlags[Constants.MODULE_ID] === "object"
       ? MoreActivitiesMigrationConverter.#clone(baseFlags[Constants.MODULE_ID])
       : {};
+
+    // The legacy teleport stash only exists to survive dnd5e 6 cleaning until
+    // this conversion; the converted activity must not carry it forward.
+    delete existingModuleFlags[Dnd5eLegacyTeleportPreserver.STASH_FLAG];
 
     existingModuleFlags.migration = {
       sourceModule: "more-activities",

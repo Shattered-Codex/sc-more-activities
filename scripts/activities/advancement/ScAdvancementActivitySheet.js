@@ -105,7 +105,7 @@ export class ScAdvancementActivitySheet extends dnd5e.applications.activity.Acti
 
     input.addEventListener("drop", async(event) => {
       event.preventDefault();
-      const data = TextEditor.getDragEventData(event);
+      const data = foundry.applications.ux.TextEditor.implementation.getDragEventData(event);
       const uuid = String(data?.uuid ?? "").trim();
       if (!uuid) {
         return;
@@ -159,7 +159,8 @@ export class ScAdvancementActivitySheet extends dnd5e.applications.activity.Acti
         return advancements.map((advancement) => ({
           advancementId: advancement.id,
           level,
-          title: advancement.title || advancement.constructor?.metadata?.label || advancement.type,
+          // dnd5e 6 renamed `title` to `name` and warns when `title` is read.
+          title: (advancement.name ?? advancement.title) || advancement.constructor?.metadata?.label || advancement.type,
           type: advancement.type,
           selected: selectedKeys.has(`${advancement.id}:${level}`)
         }));

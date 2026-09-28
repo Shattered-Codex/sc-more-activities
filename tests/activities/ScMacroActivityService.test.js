@@ -50,3 +50,22 @@ test("distinguishes a macro with no return value", async() => {
   assert.equal(result.executed, true);
   assert.equal(result.value, undefined);
 });
+
+test("runs inline code for a player allowed to use script macros", async() => {
+  const previousUser = globalThis.game.user;
+  const warnings = [];
+  globalThis.ui.notifications.warn = (message) => warnings.push(message);
+  try {
+    const activity = { execution: { mode: "inline" }, inline: { code: "return 7;" } };
+
+    globalThis.game.user = { isGM: false, targets: new Set(), can: (permission) => permission === "MACRO_SCRIPT" };
+    assert.deepEqual(await ScMacroActivityService.execute(activity), { executed: true, value: 7 });
+
+    globalThis.game.user = { isGM: false, targets: new Set(), can: () => false };
+    assert.deepEqual(await ScMacroActivityService.execute(activity), { executed: false });
+    assert.equal(warnings.length, 1);
+  } finally {
+    globalThis.game.user = previousUser;
+    globalThis.ui.notifications.warn = () => {};
+  }
+});

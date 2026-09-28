@@ -1,5 +1,5 @@
 <section class="tab activity-{{ tab.id }} {{ tab.cssClass }}" data-tab="{{ tab.id }}" data-group="{{ tab.group }}">
-  {{#if appliedEffects}}{{> "systems/dnd5e/templates/activity/parts/activity-effects.hbs" }}{{/if}}
+  {{> "systems/dnd5e/templates/activity/parts/activity-effects.hbs" }}
 
   {{#if issues.length}}
     <div class="sc-ma-flow-issues">

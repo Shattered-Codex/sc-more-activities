@@ -1,6 +1,7 @@
 import { Constants } from "../constants/Constants.js";
 import { SETTINGS_KEYS } from "../constants/SettingsKeys.js";
 import { Logger } from "../support/Logger.js";
+import { Dnd5eDataAdapter } from "../adapters/dnd5e/Dnd5eDataAdapter.js";
 
 export class MoreActivitiesMigrationBackupService {
   static async createBackup(preview = {}) {
@@ -27,7 +28,7 @@ export class MoreActivitiesMigrationBackupService {
         source: entry.source ?? (item.actor ? "actor" : "world"),
         packId: entry.packId ?? item.pack ?? null,
         packLabel: entry.packLabel ?? null,
-        activities: MoreActivitiesMigrationBackupService.#clone(item.toObject()?.system?.activities ?? {})
+        activities: Dnd5eDataAdapter.getRawActivities(item)
       });
     }
 
@@ -68,4 +69,3 @@ export class MoreActivitiesMigrationBackupService {
     return JSON.parse(JSON.stringify(value));
   }
 }
-

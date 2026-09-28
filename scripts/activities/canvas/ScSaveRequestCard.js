@@ -1,4 +1,5 @@
 import { Constants } from "../../constants/Constants.js";
+import { Dnd5eChatAdapter } from "../../adapters/dnd5e/Dnd5eChatAdapter.js";
 import { Logger } from "../../support/Logger.js";
 import { ACTIVITY_TYPES } from "../ActivityTypes.js";
 import { ScCanvasActivityService } from "./ScCanvasActivityService.js";
@@ -31,13 +32,13 @@ export class ScSaveRequestCard {
     // card visible in the chat log. The update hook covers rolls flipped after
     // the fact, such as Legendary Resistance forcing a success.
     Hooks.on("createChatMessage", (message) => {
-      if (String(message?.flags?.dnd5e?.roll?.type ?? "") !== "save") {
+      if (!Dnd5eChatAdapter.getSaveContext(message).isSave) {
         return;
       }
       ScSaveRequestCard.#refreshVisibleCards();
     });
     Hooks.on("updateChatMessage", (message) => {
-      if (String(message?.flags?.dnd5e?.roll?.type ?? "") !== "save") {
+      if (!Dnd5eChatAdapter.getSaveContext(message).isSave) {
         return;
       }
       ScSaveRequestCard.#refreshVisibleCards();

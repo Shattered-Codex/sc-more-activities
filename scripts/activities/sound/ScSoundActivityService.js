@@ -13,14 +13,8 @@ export class ScSoundActivityService {
     }
 
     const volume = ScSoundActivityService.#clampVolume(activity.audio?.volume);
-    const audience = activity?.playback?.audience ?? "self";
-    const broadcast = Boolean(audience === "everyone" && game?.user?.isGM);
-    if (audience === "everyone" && !game?.user?.isGM) {
-      ui.notifications?.warn?.(Constants.localize(
-        "SCMOREACTIVITIES.Activities.ScSound.Warning.BroadcastRequiresGm",
-        "Only a GM can play this sound for everyone. Playing locally instead."
-      ));
-    }
+    // Foundry relays `playAudio` from any user, so players broadcast too.
+    const broadcast = (activity?.playback?.audience ?? "self") === "everyone";
 
     try {
       await foundry.audio.AudioHelper.play({ src, volume, loop: false }, broadcast);

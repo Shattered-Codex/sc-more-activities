@@ -4,6 +4,8 @@ import { ModuleSettings } from "../settings/ModuleSettings.js";
 import { LEGACY_MORE_ACTIVITIES_TYPES } from "./LegacyMoreActivities.js";
 import { MoreActivitiesMigrationConverter } from "./MoreActivitiesMigrationConverter.js";
 import { MoreActivitiesMigrationPackScanner } from "./MoreActivitiesMigrationPackScanner.js";
+import { Dnd5eDataAdapter } from "../adapters/dnd5e/Dnd5eDataAdapter.js";
+import { Dnd5eLegacyTeleportPreserver } from "../adapters/dnd5e/Dnd5eLegacyTeleportPreserver.js";
 
 const UI_YIELD_INTERVAL = 150;
 
@@ -306,6 +308,10 @@ export class MoreActivitiesMigrationAnalyzer {
       if (!LEGACY_MORE_ACTIVITIES_TYPES.includes(legacyType)) {
         continue;
       }
+      // dnd5e 6 ships a native teleport under the same type name.
+      if (legacyType === "teleport" && !Dnd5eLegacyTeleportPreserver.isLegacySource(activitySource)) {
+        continue;
+      }
 
       const context = await this.#buildContext(activitySource, item, previewId);
       const preview = MoreActivitiesMigrationConverter.preview(activitySource, context);
@@ -455,13 +461,6 @@ export class MoreActivitiesMigrationAnalyzer {
   }
 
   static #activityMap(item) {
-    const activities = item?.toObject?.()?.system?.activities ?? item?.system?.activities ?? {};
-    if (Array.isArray(activities)) {
-      return Object.fromEntries(activities.map((activity) => {
-        const id = String(activity?._id ?? activity?.id ?? foundry.utils.randomID());
-        return [id, activity];
-      }));
-    }
-    return activities && typeof activities === "object" ? activities : {};
+    return Dnd5eDataAdapter.getRawActivityMap(item);
   }
 }

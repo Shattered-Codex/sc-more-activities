@@ -67,6 +67,44 @@ test("a successful roll marks the target as succeeded", () => {
   assert.deepEqual(results.failed, []);
 });
 
+test("reads dnd5e 6 save metadata from the message system data", () => {
+  const results = ScTargetSaveService.collectSaveResults(request, [{
+    timestamp: 100,
+    type: "save",
+    system: { ability: "dex", resisted: true },
+    speaker: { token: "t1", actor: "a1" },
+    rolls: [{ total: 3, isSuccess: false, options: { target: 14 } }]
+  }]);
+
+  assert.deepEqual(results.succeeded.map((entry) => entry.id), ["t1"]);
+  assert.deepEqual(results.failed, []);
+});
+
+test("dnd5e 6 death saves are not saving throws", () => {
+  const results = ScTargetSaveService.collectSaveResults(request, [{
+    timestamp: 100,
+    type: "save",
+    system: { type: "death" },
+    speaker: { token: "t1", actor: "a1" },
+    rolls: [{ total: 3, isSuccess: false }]
+  }]);
+
+  assert.deepEqual(results.failed, []);
+  assert.equal(results.pending.length, 2);
+});
+
+test("dnd5e 6 concentration saves still count as saving throws", () => {
+  const results = ScTargetSaveService.collectSaveResults({ ...request, ability: "con" }, [{
+    timestamp: 100,
+    type: "save",
+    system: { ability: "con", type: "concentration" },
+    speaker: { token: "t1", actor: "a1" },
+    rolls: [{ total: 3, isSuccess: false, options: { target: 14 } }]
+  }]);
+
+  assert.deepEqual(results.failed.map((entry) => entry.id), ["t1"]);
+});
+
 test("success falls back to comparing the total against the DC", () => {
   const results = ScTargetSaveService.collectSaveResults(request, [
     saveMessage({ tokenId: "t1", total: 14, target: null }),

@@ -74,7 +74,7 @@ which requires attribution to the original authors. See the
 ## Main Features
 
 - Supports **Foundry VTT v13 and v14**
-- Supports **`dnd5e` 5.x**
+- Supports **`dnd5e` 5.x and 6.0.x**
 - Uses a module-owned registry instead of ad hoc activity injection
 - Flushes accepted registrations into `dnd5e` during module initialization
 - Exposes registration diagnostics so GMs can see what loaded, what failed, and why
@@ -88,8 +88,10 @@ which requires attribution to the original authors. See the
 
 ## Requirements
 
-- **Foundry VTT:** v13 or v14
-- **System:** `dnd5e`
+- **Foundry VTT / System:** a supported pair:
+
+  - Foundry v13 or v14 with `dnd5e` 5.x
+  - Foundry v14.367+ with `dnd5e` 6.0.x
 - **Recommended:** `libWrapper`
 
 The module exits early outside `dnd5e` worlds.
@@ -913,7 +915,7 @@ Hooks.on("sc-more-activities.registerActivities", (activities) => {
     },
     tags: ["sockets", "slot", "inventory"],
     compatibility: {
-      dnd5e: "5.x",
+      dnd5e: ">=5.0.0 <7.0.0",
       scMoreActivities: {
         moduleId: "sc-more-activities",
         required: true
