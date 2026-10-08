@@ -1163,6 +1163,14 @@ already passed GM-side validation when this hook runs. The payload also exposes 
 target scene, and requesting user for context. The hook name is available from
 `game.modules.get("sc-more-activities")?.api?.hooks?.PREPARE_WALL_DOCUMENTS` after API publication.
 
+When the activity's **Appearance** settings ask for a visible line or a wall image, the style is stored
+on each wall as `flags["sc-more-activities"].visual` (`group`, `index`, `line`, `tile`) before this hook
+runs. The visuals are Drawings and Tiles flagged
+`{ source: "sc-wall-companion", group, wallIds, activityUuid }`, and they are always rebuilt from the
+walls of their group that still exist: creating, moving or deleting part of a wall, or undoing that
+deletion, redraws them to match. Pasted copies of those walls move to a group of their own. Manual edits to those Drawings and Tiles are replaced on the next
+redraw.
+
 The registry is collected during `init`, then locked before normal play. Late registrations are rejected with a structured failure result instead of silently patching `dnd5e`.
 
 Real example:

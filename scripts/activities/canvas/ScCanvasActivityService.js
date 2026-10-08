@@ -2,6 +2,7 @@ import { Constants } from "../../constants/Constants.js";
 import { HOOKS } from "../../constants/Hooks.js";
 import { Logger } from "../../support/Logger.js";
 import { ModuleSettings } from "../../settings/ModuleSettings.js";
+import { ScWallCompanions } from "../wall/ScWallCompanions.js";
 import { ScWallConfig } from "../wall/ScWallConfig.js";
 import { ScRangeShape } from "./ScRangeShape.js";
 import { ScTokenSize } from "./ScTokenSize.js";
@@ -884,6 +885,8 @@ export class ScCanvasActivityService {
       return operation;
     }
 
+    // The createWall hook in ScWallCompanions draws the visuals from these flags.
+    ScWallCompanions.decorate(operation.walls, ScWallConfig.fromActivity(activity), scene);
     Hooks.callAll(HOOKS.PREPARE_WALL_DOCUMENTS, {
       activity,
       scene,

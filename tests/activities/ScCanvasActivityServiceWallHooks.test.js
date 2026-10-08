@@ -164,3 +164,22 @@ test("wall placement accepts a diagonal corner only for square range", async(t) 
   assert.equal(square.ok, true);
   assert.equal(fixture.created.length, 1);
 });
+
+test("placed wall creation stores the configured visuals on the walls before the hook", async(t) => {
+  const fixture = installWallGlobals(t);
+  Object.assign(fixture.activity.wall, { lineVisibility: "gm", lineColor: "#123456", tileImage: "stone.webp" });
+
+  const result = await ScCanvasActivityService.executeWallPlacement(fixture.activity, {
+    originTokenId: fixture.origin.id,
+    walls: [{ points: [{ x: 150, y: 150 }, { x: 350, y: 150 }] }]
+  });
+
+  assert.equal(result.ok, true);
+  // The Drawing and Tile come from the createWall hook, not from this operation.
+  assert.deepEqual(fixture.created.map((entry) => entry.documentName), ["Wall"]);
+  const visual = fixture.hookCalls[0].payload.walls[0].flags["sc-more-activities"].visual;
+  assert.equal(visual.index, 0);
+  assert.equal(typeof visual.group, "string");
+  assert.deepEqual(visual.line, { color: "#123456", hidden: true, width: 6 });
+  assert.deepEqual(visual.tile, { src: "stone.webp", ring: false, thickness: 100, extension: 0 });
+});

@@ -25,6 +25,11 @@ export class ScWallActivityData extends dnd5e.dataModels.activity.BaseActivityDa
           initial: "both",
           choices: ["both", "towards", "away", "any"]
         }),
+        snapMode: new fields.StringField({
+          required: false,
+          initial: "center",
+          choices: ["center", "grid", "free"]
+        }),
         panelSize: new fields.StringField({
           required: false,
           initial: "5"
@@ -61,6 +66,31 @@ export class ScWallActivityData extends dnd5e.dataModels.activity.BaseActivityDa
         allowPlayerRequests: new fields.BooleanField({
           required: false,
           initial: false
+        }),
+        lineVisibility: new fields.StringField({
+          required: false,
+          initial: "none",
+          choices: ["none", "all", "gm"]
+        }),
+        lineColor: new fields.StringField({
+          required: false,
+          initial: "#7fd4ff"
+        }),
+        lineWidth: new fields.StringField({
+          required: false,
+          initial: "6"
+        }),
+        tileImage: new fields.StringField({
+          required: false,
+          initial: ""
+        }),
+        tileThickness: new fields.StringField({
+          required: false,
+          initial: "5"
+        }),
+        tileExtension: new fields.StringField({
+          required: false,
+          initial: "0"
         })
       })
     };

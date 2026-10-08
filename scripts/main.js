@@ -12,6 +12,7 @@ import { ScSaveRequestCard } from "./activities/canvas/ScSaveRequestCard.js";
 import { ScContestActivityService } from "./activities/contest/ScContestActivityService.js";
 import { ScGrantActivityService } from "./activities/grant/ScGrantActivityService.js";
 import { ScPortalService } from "./activities/portal/ScPortalService.js";
+import { ScWallCompanions } from "./activities/wall/ScWallCompanions.js";
 import { ModuleSettingsRegistrar } from "./settings/ModuleSettingsRegistrar.js";
 import { MoreActivitiesMigrationService } from "./migration/MoreActivitiesMigrationService.js";
 import { Logger } from "./support/Logger.js";
@@ -45,6 +46,7 @@ Hooks.once("init", () => {
   ScCanvasActivityService.registerQueries();
   ScPortalService.registerQueries();
   ScPortalService.registerHooks();
+  ScWallCompanions.registerHooks();
   ScSaveRequestCard.registerHooks();
   registry.beginCollection();
   publicApi = ApiPublisher.publish(PublicApiFactory.create({

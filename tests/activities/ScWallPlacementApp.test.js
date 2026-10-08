@@ -293,3 +293,60 @@ test("warns instead of swallowing a placement click that maps to no position", a
   // Placement stays armed so the next click can still land.
   assert.equal(app.isPlacing, true);
 });
+
+async function placeSnappedPoint(t, snapMode, { gridless = false } = {}) {
+  const { stageHandlers } = installPlacementGlobals(t);
+  globalThis.canvas.grid.getCenterPoint = () => ({ x: 50, y: 50 });
+  globalThis.canvas.grid.isGridless = gridless;
+  globalThis.canvas.grid.getSnappedPoint = (_point, { mode }) => (mode === 0xF0 ? { x: 100, y: 0 } : { x: -1, y: -1 });
+
+  const wall = { ...WALL_CONFIG };
+  if (snapMode !== undefined) {
+    wall.snapMode = snapMode;
+  }
+  const app = new ScWallPlacementApp({ wall });
+  await app._onRender({}, {});
+  await app.buttonHandlers.get(".sc-ma-wall-place:click")();
+  await stageHandlers.get("mouseup")(stageClick({ x: 83.6, y: 41.2 }));
+  return app.placementPoints[0];
+}
+
+test("keeps snapping wall points to grid centers when the activity has no snap mode", async(t) => {
+  // Activities saved before the option existed must keep placing points exactly as before.
+  assert.deepEqual(await placeSnappedPoint(t, undefined), { x: 50, y: 50 });
+});
+
+test("snaps wall points only to grid vertices in grid mode", async(t) => {
+  assert.deepEqual(await placeSnappedPoint(t, "grid"), { x: 100, y: 0 });
+});
+
+test("places wall points freely in grid mode on a gridless scene", async(t) => {
+  assert.deepEqual(await placeSnappedPoint(t, "grid", { gridless: true }), { x: 84, y: 41 });
+});
+
+test("places wall points where the user clicks in free mode", async(t) => {
+  assert.deepEqual(await placeSnappedPoint(t, "free"), { x: 84, y: 41 });
+});
+
+test("minimizes the placement window while placing and restores it when placing stops", async(t) => {
+  const { stageHandlers, viewHandlers } = installPlacementGlobals(t);
+  const app = new ScWallPlacementApp({ wall: { ...WALL_CONFIG } });
+  app.minimized = false;
+  app.minimize = async() => {
+    app.minimized = true;
+  };
+  app.maximize = async() => {
+    app.minimized = false;
+  };
+  await app._onRender({}, {});
+
+  await app.buttonHandlers.get(".sc-ma-wall-place:click")();
+  assert.equal(app.minimized, true);
+
+  await stageHandlers.get("mouseup")(stageClick({ x: 0, y: 0 }));
+  assert.equal(app.minimized, true);
+
+  await viewHandlers.get("contextmenu")({ preventDefault() {}, stopPropagation() {} });
+  assert.equal(app.isPlacing, false);
+  assert.equal(app.minimized, false);
+});
