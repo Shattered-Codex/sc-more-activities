@@ -1,5 +1,6 @@
 import { Constants } from "../../constants/Constants.js";
 import { ModuleSettings } from "../../settings/ModuleSettings.js";
+import { Logger } from "../../support/Logger.js";
 import { ScDocumentWindowMinimizer } from "../../applications/ScDocumentWindowMinimizer.js";
 import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
 import { ScRangeShape } from "../canvas/ScRangeShape.js";
@@ -187,7 +188,31 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
     canvas?.app?.view?.addEventListener?.("contextmenu", this.canvasContextMenuHandler);
     this.isPlacing = true;
     this.#ensurePreviewGraphics();
-    this.render();
+    await this.render();
+    this.#collapseWindow();
+  }
+
+  /**
+   * The window sits over the very canvas the user is about to click, so it
+   * gets out of the way while placing and comes back once placing stops,
+   * which is when its buttons matter again.
+   */
+  #collapseWindow() {
+    if (!this.isPlacing || this.isClosing || this.minimized) {
+      return;
+    }
+    Promise.resolve(this.minimize?.()).catch((error) => {
+      Logger.debug("Could not minimize the wall placement window.", error);
+    });
+  }
+
+  #expandWindow() {
+    if (this.isClosing || !this.minimized) {
+      return;
+    }
+    Promise.resolve(this.maximize?.()).catch((error) => {
+      Logger.debug("Could not restore the wall placement window.", error);
+    });
   }
 
   async #stopPlacement() {
@@ -217,6 +242,7 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
     this.hoverPoint = null;
     this.#clearInteractivePreview();
     this.isPlacing = false;
+    this.#expandWindow();
   }
 
   #onCanvasPointerDown(event) {
@@ -535,7 +561,37 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
   #eventPoint(event) {
     const originalEvent = event?.data?.originalEvent ?? event;
     const rawPosition = canvas?.canvasCoordinatesFromClient?.(originalEvent);
+    const snapMode = this.#config().snapMode;
+    if (snapMode === "grid") {
+      return ScWallPlacementApp.#gridPoint(rawPosition);
+    }
+    if (snapMode === "free") {
+      return ScWallPlacementApp.#freePoint(rawPosition);
+    }
     return ScCanvasActivityService.snapCenterPoint(rawPosition);
+  }
+
+  static #freePoint(point) {
+    const freePoint = {
+      x: Math.round(Number(point?.x)),
+      y: Math.round(Number(point?.y))
+    };
+    return Number.isFinite(freePoint.x) && Number.isFinite(freePoint.y) ? freePoint : null;
+  }
+
+  static #gridPoint(point) {
+    const freePoint = ScWallPlacementApp.#freePoint(point);
+    if (!freePoint) {
+      return null;
+    }
+
+    // Only grid vertices, so the wall runs along the grid lines. A gridless
+    // scene has nothing to snap to and places points freely.
+    if (canvas?.grid?.isGridless || typeof canvas?.grid?.getSnappedPoint !== "function") {
+      return freePoint;
+    }
+    const mode = globalThis.CONST?.GRID_SNAPPING_MODES?.VERTEX ?? 0xF0;
+    return ScWallPlacementApp.#freePoint(canvas.grid.getSnappedPoint(freePoint, { mode }));
   }
 
   #calculateLength(points, wallType) {

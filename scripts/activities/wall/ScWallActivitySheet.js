@@ -19,6 +19,7 @@ export class ScWallActivitySheet extends dnd5e.applications.activity.ActivityShe
       maxWalls: this.activity?.wall?.maxWalls ?? "1",
       wallType: this.activity?.wall?.wallType ?? "continuous",
       facing: this.activity?.wall?.facing ?? "both",
+      snapMode: this.activity?.wall?.snapMode ?? "center",
       panelSize: this.activity?.wall?.panelSize ?? "5",
       panelSpacing: this.activity?.wall?.panelSpacing ?? "0",
       maxPanels: this.activity?.wall?.maxPanels ?? "",
@@ -28,10 +29,18 @@ export class ScWallActivitySheet extends dnd5e.applications.activity.ActivityShe
       blocksMovement: this.activity?.wall?.blocksMovement !== false,
       blocksSight: this.activity?.wall?.blocksSight !== false,
       blocksSound: Boolean(this.activity?.wall?.blocksSound),
-      allowPlayerRequests: Boolean(this.activity?.wall?.allowPlayerRequests)
+      allowPlayerRequests: Boolean(this.activity?.wall?.allowPlayerRequests),
+      lineVisibility: this.activity?.wall?.lineVisibility ?? "none",
+      lineColor: this.activity?.wall?.lineColor ?? "#7fd4ff",
+      lineWidth: this.activity?.wall?.lineWidth ?? "6",
+      tileImage: this.activity?.wall?.tileImage ?? "",
+      tileThickness: this.activity?.wall?.tileThickness ?? "5",
+      tileExtension: this.activity?.wall?.tileExtension ?? "0"
     };
     context.wallTypeOptions = ScWallActivitySheet.#wallTypeOptions();
     context.facingOptions = ScWallActivitySheet.#facingOptions();
+    context.snapModeOptions = ScWallActivitySheet.#snapModeOptions();
+    context.lineVisibilityOptions = ScWallActivitySheet.#lineVisibilityOptions();
     context.rangeShapeOptions = ScRangeShape.options();
     return context;
   }
@@ -84,6 +93,40 @@ export class ScWallActivitySheet extends dnd5e.applications.activity.ActivityShe
       {
         value: "any",
         label: game.i18n.localize("SCMOREACTIVITIES.Activities.ScWall.Fields.Facing.Choices.Any")
+      }
+    ];
+  }
+
+  static #snapModeOptions() {
+    return [
+      {
+        value: "center",
+        label: game.i18n.localize("SCMOREACTIVITIES.Activities.ScWall.Fields.SnapMode.Choices.Center")
+      },
+      {
+        value: "grid",
+        label: game.i18n.localize("SCMOREACTIVITIES.Activities.ScWall.Fields.SnapMode.Choices.Grid")
+      },
+      {
+        value: "free",
+        label: game.i18n.localize("SCMOREACTIVITIES.Activities.ScWall.Fields.SnapMode.Choices.Free")
+      }
+    ];
+  }
+
+  static #lineVisibilityOptions() {
+    return [
+      {
+        value: "none",
+        label: game.i18n.localize("SCMOREACTIVITIES.Activities.ScWall.Fields.LineVisibility.Choices.None")
+      },
+      {
+        value: "all",
+        label: game.i18n.localize("SCMOREACTIVITIES.Activities.ScWall.Fields.LineVisibility.Choices.All")
+      },
+      {
+        value: "gm",
+        label: game.i18n.localize("SCMOREACTIVITIES.Activities.ScWall.Fields.LineVisibility.Choices.Gm")
       }
     ];
   }
