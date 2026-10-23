@@ -17,6 +17,7 @@ globalThis.foundry = {
 
 const { ScIdentifyActivityService } = await import("../../scripts/activities/identify/ScIdentifyActivityService.js");
 const { ScIdentifyPickerApp } = await import("../../scripts/activities/identify/ScIdentifyPickerApp.js");
+const { ScChatRelay } = await import("../../scripts/support/ScChatRelay.js");
 const { ScIdentifyRelay } = await import("../../scripts/activities/identify/ScIdentifyRelay.js");
 
 const FLAG_SCOPE = "sc-more-activities";
@@ -176,7 +177,8 @@ function setup({
   };
   installHooks();
   const messages = installChatMessages();
-  ScIdentifyRelay.registerHooks();
+  ScChatRelay.registerHooks();
+  ScIdentifyRelay.registerHandler();
 
   const rolls = [];
   const actor = makeActor("hero", { ownedBy: [player.id], rollTotal, rolls });
@@ -235,14 +237,15 @@ async function postRequest(request, author = player) {
   try {
     return await ChatMessage.create({
       content: "",
-      flags: { [FLAG_SCOPE]: { identifyRequest: { status: "pending", ...request } } }
+      flags: { [FLAG_SCOPE]: { relay: { kind: "identify", status: "pending", data: request } } }
     });
   } finally {
     game.user = player;
   }
 }
 
-const statusOf = (message) => message.flags[FLAG_SCOPE].identifyRequest.status;
+const relayOf = (message) => message.flags[FLAG_SCOPE].relay;
+const statusOf = (message) => relayOf(message).status;
 const item = (actor, id) => actor.items.find((entry) => entry.id === id);
 const identifiedIds = (actor) => actor.items.filter((entry) => entry.system.identified).map((entry) => entry.id);
 const pickerNames = () => picker.calls[0].candidates.map((candidate) => candidate.actor.id);
@@ -394,7 +397,7 @@ test("the request message is the chat card the GM updates with the outcome", asy
   assert.equal(ChatMessage.created.length, 1);
   assert.equal(message.author, player);
   assert.equal(statusOf(message), "identified");
-  assert.equal(message.flags[FLAG_SCOPE].identifyRequest.originUuid, "Scene.s1.Token.hero");
+  assert.equal(relayOf(message).data.originUuid, "Scene.s1.Token.hero");
   assert.match(message.content, /@UUID\[Actor\.ally\.Item\.ring\]/);
 });
 
@@ -405,12 +408,12 @@ test("an answer the player writes into their own request is not taken as the GM'
   Hooks.on("createChatMessage", async(message) => {
     game.user = player;
     await message.update({
-      [`flags.${FLAG_SCOPE}.identifyRequest`]: { status: "identified", check: { dc: 16, total: 999 } }
+      [`flags.${FLAG_SCOPE}.relay`]: { kind: "identify", status: "identified", answer: { check: { dc: 16, total: 999 } } }
     });
   });
-  const timeout = ScIdentifyRelay.TIMEOUT_MS;
-  ScIdentifyRelay.TIMEOUT_MS = 20;
-  t.after(() => { ScIdentifyRelay.TIMEOUT_MS = timeout; });
+  const timeout = ScChatRelay.TIMEOUT_MS;
+  ScChatRelay.TIMEOUT_MS = 20;
+  t.after(() => { ScChatRelay.TIMEOUT_MS = timeout; });
 
   const result = await ScIdentifyActivityService.execute(activity);
 
@@ -510,7 +513,7 @@ test("choose identifies a nearby ally's item through the GM", async() => {
   const result = await ScIdentifyActivityService.execute(activity);
 
   assert.equal(result.identified, true);
-  assert.equal(ChatMessage.created[0].flags[FLAG_SCOPE].identifyRequest.recipientUuid, "Scene.s1.Token.ally");
+  assert.equal(relayOf(ChatMessage.created[0]).data.recipientUuid, "Scene.s1.Token.ally");
   assert.deepEqual(identifiedIds(ally), ["ring", "sword"]);
 });
 
@@ -526,7 +529,7 @@ test("the GM ignores a check total written into the request and rolls its own", 
   });
 
   assert.equal(statusOf(message), "failed");
-  assert.deepEqual(message.flags[FLAG_SCOPE].identifyRequest.check, { dc: 16, total: 3 });
+  assert.deepEqual(relayOf(message).answer.check, { dc: 16, total: 3 });
   assert.equal(rolls[0].by, gm.id);
   assert.deepEqual(identifiedIds(ally), ["sword"]);
 });

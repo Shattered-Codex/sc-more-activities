@@ -9,6 +9,7 @@ export const ACTIVITY_TYPES = Object.freeze({
   MACRO: "sc-macro",
   MOVEMENT: "sc-movement",
   PORTAL: "sc-portal",
+  RECALL: "sc-recall",
   SOUND: "sc-sound",
   TELEPORT: "sc-teleport",
   WALL: "sc-wall"

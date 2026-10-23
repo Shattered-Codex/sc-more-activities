@@ -1,140 +1,59 @@
-import { Constants } from "../../constants/Constants.js";
-import { Logger } from "../../support/Logger.js";
 import { ACTIVITY_TYPES } from "../ActivityTypes.js";
+import { ScChatRelay } from "../../support/ScChatRelay.js";
 import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
 import { ScIdentifyActivityService } from "./ScIdentifyActivityService.js";
+import { Logger } from "../../support/Logger.js";
 
-const FLAG = "identifyRequest";
+const KIND = "identify";
 
 /**
  * Identifies an item on an actor the user cannot write to (another player's
- * character, an NPC) by asking the active GM.
+ * character, an NPC) by asking the active GM through `ScChatRelay`.
  *
- * The request is a chat message rather than a user query: the server only
- * lets a player create a message as themselves, so its author is the
- * authenticated sender on Foundry v13 too, where a query handler is not told
- * who sent it. The same message is the card everyone sees, first as pending,
- * then updated by the GM with the outcome.
- *
- * The GM trusts nothing but the author and the stored activity: it re-derives
- * the item's DC and the range, and rolls the check itself, since a total sent
- * by the player could be anything. The player, in turn, only accepts an answer
- * the server reports as written by a GM, since the request's author can edit
- * its flags as well.
+ * The GM trusts nothing but the request's author and the stored activity: it
+ * re-derives the item's DC and the range, and rolls the check itself, since a
+ * total sent by the player could be anything.
  */
 export class ScIdentifyRelay {
-  static registerHooks() {
-    Hooks.on("createChatMessage", ScIdentifyRelay.#onCreateMessage);
+  static registerHandler() {
+    ScChatRelay.registerHandler(KIND, ScIdentifyRelay.#handle);
   }
-
-  static isAvailable() {
-    return Boolean(ScIdentifyRelay.#activeGm());
-  }
-
-  static TIMEOUT_MS = 30000;
 
   /**
-   * Posts the request and waits for the GM's answer: the request flag with its
-   * final `status` ("identified", "failed", or "refused") and `check`, or
-   * `null` when no answer arrives in time.
+   * Posts the request and waits for the GM's answer: `{ status, check }` with
+   * status "identified", "failed", or "refused", or `null` when no answer
+   * arrives in time.
    */
   static async request({ activity, identifier, candidate, origin, item }) {
-    const request = {
-      status: "pending",
-      activityUuid: activity?.uuid ?? null,
-      recipientUuid: ScIdentifyRelay.#tokenUuid(candidate.token) ?? candidate.actor?.uuid ?? null,
-      originUuid: ScIdentifyRelay.#tokenUuid(origin),
-      itemId: item.id
-    };
-
-    // The id is chosen here so the answer can be awaited before the request
-    // exists: no answer can slip in unobserved, and none has to be read back
-    // from the message without knowing who wrote it.
-    const messageId = foundry.utils.randomID();
-    const answer = ScIdentifyRelay.#awaitAnswer(messageId);
-    try {
-      await ChatMessage.create({
-        _id: messageId,
-        speaker: ChatMessage.getSpeaker({ actor: identifier }),
-        content: ScIdentifyActivityService.chatCardContent({
-          status: "pending",
-          identifier,
-          owner: candidate.actor,
-          item
-        }),
-        flags: { [Constants.MODULE_ID]: { [FLAG]: request } }
-      }, { keepId: true });
-    } catch (error) {
-      Logger.error("Could not post the sc-identify request.", error);
-      answer.cancel();
-    }
-    return answer.promise;
-  }
-
-  /**
-   * Resolves with the first answer a GM writes to message `messageId`. The
-   * player authors the request and may edit its flags too, so an update only
-   * counts when the server reports a GM as the user who made it.
-   */
-  static #awaitAnswer(messageId) {
-    let cancel = null;
-    const promise = new Promise((resolve) => {
-      let hookId = null;
-      let timer = null;
-      const finish = (answer) => {
-        Hooks.off("updateChatMessage", hookId);
-        clearTimeout(timer);
-        resolve(answer);
-      };
-      cancel = () => finish(null);
-
-      hookId = Hooks.on("updateChatMessage", (message, _changes, _options, userId) => {
-        if (message?.id !== messageId || game?.users?.get?.(userId)?.isGM !== true) {
-          return;
-        }
-        const request = ScIdentifyRelay.#requestOf(message);
-        if (request && request.status !== "pending") {
-          finish(request);
-        }
-      });
-      timer = setTimeout(() => finish(null), ScIdentifyRelay.TIMEOUT_MS);
+    const answer = await ScChatRelay.request(KIND, {
+      speaker: ChatMessage.getSpeaker({ actor: identifier }),
+      content: ScIdentifyActivityService.chatCardContent({
+        status: "pending",
+        identifier,
+        owner: candidate.actor,
+        item
+      }),
+      data: {
+        activityUuid: activity?.uuid ?? null,
+        recipientUuid: ScIdentifyRelay.#tokenUuid(candidate.token) ?? candidate.actor?.uuid ?? null,
+        originUuid: ScIdentifyRelay.#tokenUuid(origin),
+        itemId: item.id
+      }
     });
-    return { promise, cancel };
+    return answer ? { status: answer.status, check: answer.answer?.check ?? null } : null;
   }
 
-  static async #onCreateMessage(message) {
-    const request = ScIdentifyRelay.#requestOf(message);
-    if (request?.status !== "pending" || ScIdentifyRelay.#activeGm()?.id !== game?.user?.id) {
-      return;
-    }
-
-    let outcome = null;
-    try {
-      outcome = await ScIdentifyRelay.#process(message, request);
-    } catch (error) {
-      Logger.error("Could not execute a relayed sc-identify request.", error);
-      outcome = { status: "refused" };
-    }
-
-    try {
-      await message.update({
-        content: ScIdentifyActivityService.chatCardContent(outcome),
-        [`flags.${Constants.MODULE_ID}.${FLAG}`]: { ...request, status: outcome.status, check: outcome.check ?? null }
-      });
-    } catch (error) {
-      Logger.error("Could not answer the sc-identify request.", error);
-    }
+  static async #handle({ user, data }) {
+    const outcome = await ScIdentifyRelay.#process(user, data);
+    return {
+      status: outcome.status,
+      content: ScIdentifyActivityService.chatCardContent(outcome),
+      answer: { check: outcome.check ?? null }
+    };
   }
 
-  static async #process(message, request) {
-    // Set by the server to the user who created the message. A GM never
-    // relays, so a GM-authored request is not one this flow produced.
-    const user = message.author;
+  static async #process(user, request) {
     const refused = { status: "refused" };
-    if (!user || user.isGM) {
-      return refused;
-    }
-
     const activity = await ScIdentifyRelay.#fromUuid(request.activityUuid);
     if (String(activity?.type ?? "") !== ACTIVITY_TYPES.IDENTIFY || !ScIdentifyRelay.#canUseActivity(activity, user)) {
       return refused;
@@ -161,8 +80,18 @@ export class ScIdentifyRelay {
       }
     }
 
+    // Read before identifying: once identified, the item shows its true name.
+    const formerName = item.name ?? "";
     await item.update({ "system.identified": true });
-    return { status: "identified", identifier, owner, item, check };
+    return {
+      status: "identified",
+      identifier,
+      owner,
+      item,
+      check,
+      formerName,
+      checkName: ScIdentifyActivityService.checkName(activity.check)
+    };
   }
 
   /**
@@ -212,18 +141,6 @@ export class ScIdentifyRelay {
       actor?.testUserPermission?.(user, "OWNER")
       || item?.testUserPermission?.(user, "OWNER")
     );
-  }
-
-  static #requestOf(message) {
-    return message?.flags?.[Constants.MODULE_ID]?.[FLAG] ?? null;
-  }
-
-  static #activeGm() {
-    const activeGm = game?.users?.activeGM;
-    if (activeGm?.active && activeGm?.isGM) {
-      return activeGm;
-    }
-    return game?.users?.find?.((user) => user?.active && user?.isGM) ?? null;
   }
 
   static #isToken(document) {

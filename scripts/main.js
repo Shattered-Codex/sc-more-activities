@@ -11,7 +11,13 @@ import { ScCanvasActivityService } from "./activities/canvas/ScCanvasActivitySer
 import { ScSaveRequestCard } from "./activities/canvas/ScSaveRequestCard.js";
 import { ScContestActivityService } from "./activities/contest/ScContestActivityService.js";
 import { ScGrantActivityService } from "./activities/grant/ScGrantActivityService.js";
+import { ScChatRelay } from "./support/ScChatRelay.js";
+import { ScIdentifyCard } from "./activities/identify/ScIdentifyCard.js";
 import { ScIdentifyRelay } from "./activities/identify/ScIdentifyRelay.js";
+import { ScRecallArrivalCamera } from "./activities/recall/ScRecallArrivalCamera.js";
+import { ScRecallPointHud } from "./activities/recall/ScRecallPointHud.js";
+import { ScRecallPortal } from "./activities/recall/ScRecallPortal.js";
+import { ScRecallTravel } from "./activities/recall/ScRecallTravel.js";
 import { ScPortalService } from "./activities/portal/ScPortalService.js";
 import { ScWallCompanions } from "./activities/wall/ScWallCompanions.js";
 import { ModuleSettingsRegistrar } from "./settings/ModuleSettingsRegistrar.js";
@@ -44,7 +50,13 @@ Hooks.once("init", () => {
   ScConditionalChainCardCustomizer.registerHook();
   ScContestActivityService.registerQueries();
   ScGrantActivityService.registerQueries();
-  ScIdentifyRelay.registerHooks();
+  ScChatRelay.registerHooks();
+  ScIdentifyRelay.registerHandler();
+  ScIdentifyCard.registerHooks();
+  ScRecallTravel.registerHandler();
+  ScRecallPointHud.registerHooks();
+  ScRecallPortal.registerHooks();
+  ScRecallArrivalCamera.registerHooks();
   ScCanvasActivityService.registerQueries();
   ScPortalService.registerQueries();
   ScPortalService.registerHooks();

@@ -1,7 +1,9 @@
 import { Constants } from "../../constants/Constants.js";
 import { Logger } from "../../support/Logger.js";
 import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
+import { ScIdentifyCard } from "./ScIdentifyCard.js";
 import { ScIdentifyPickerApp } from "./ScIdentifyPickerApp.js";
+import { ScChatRelay } from "../../support/ScChatRelay.js";
 import { ScIdentifyRelay } from "./ScIdentifyRelay.js";
 
 const LANG = "SCMOREACTIVITIES.Activities.ScIdentify";
@@ -29,7 +31,7 @@ export class ScIdentifyActivityService {
 
     // Another player's actor can only be written by the GM, so without one
     // online those creatures are dropped before anything is shown.
-    const reachable = ScIdentifyRelay.isAvailable()
+    const reachable = ScChatRelay.isAvailable()
       ? candidates
       : candidates.filter((candidate) => !ScIdentifyActivityService.#needsRelay(candidate.actor));
     if (!reachable.length) {
@@ -119,43 +121,18 @@ export class ScIdentifyActivityService {
     return Number.isFinite(Number(rolls?.total)) ? rolls : null;
   }
 
-  /**
-   * The chat card for an identification: `status` is "pending" (waiting on the
-   * GM), "identified", "failed", or "refused". Until the item is identified it
-   * only shows the name the viewer already sees.
-   */
-  static chatCardContent({ status, identifier = null, owner = null, item = null } = {}) {
-    const escape = ScIdentifyActivityService.#escape;
-    const actor = identifier?.name ?? "";
-    const ownerName = owner?.name ?? "";
-    const forOther = Boolean(owner && identifier && owner !== identifier && owner.uuid !== identifier.uuid);
-    let header = "";
-    let body = "";
+  /** The chat card for an identification; see `ScIdentifyCard.content`. */
+  static chatCardContent(outcome = {}) {
+    return ScIdentifyCard.content(outcome);
+  }
 
-    if (status === "pending") {
-      header = Constants.format(
-        `${LANG}.Card.Pending`,
-        { actor, owner: ownerName },
-        `${actor} is trying to identify an item of ${ownerName}…`
-      );
-      body = escape(item?.name ?? "");
-    } else if (status === "identified") {
-      header = forOther
-        ? Constants.format(`${LANG}.Card.IdentifiedFor`, { actor, owner: ownerName }, `${actor} identified an item of ${ownerName}:`)
-        : Constants.format(`${LANG}.Card.Identified`, { actor }, `${actor} identified:`);
-      body = `@UUID[${item?.uuid}]{${escape(item?.name ?? "")}}`;
-    } else if (status === "failed") {
-      header = Constants.format(
-        `${LANG}.Card.Failed`,
-        { actor, item: item?.name ?? "" },
-        `${actor} could not identify ${item?.name ?? "the item"}.`
-      );
-    } else {
-      header = Constants.localize(`${LANG}.Card.Refused`, "The identify request was refused.");
-    }
-
-    return `<div class="sc-ma-identify-card"><p class="sc-ma-identify-card-header">${escape(header)}</p>`
-      + `${body ? `<p>${body}</p>` : ""}</div>`;
+  /** The configured check's skill or ability, such as "Arcana", for cards and labels. */
+  static checkName(check) {
+    const abilities = globalThis.CONFIG?.DND5E?.abilities ?? {};
+    const skills = globalThis.CONFIG?.DND5E?.skills ?? {};
+    const ability = String(check?.ability ?? "").trim();
+    const skill = String(check?.skill ?? "").trim();
+    return skill ? (skills[skill]?.label ?? skill) : (abilities[ability]?.label ?? ability);
   }
 
   static async #identifyLocally(activity, identifier, owner, item) {
@@ -173,11 +150,21 @@ export class ScIdentifyActivityService {
       }
     }
 
+    // Read before identifying: once identified, the item shows its true name.
+    const formerName = item.name ?? "";
     await item.update({ "system.identified": true });
     try {
       await ChatMessage.create({
         speaker: ChatMessage.getSpeaker({ actor: identifier }),
-        content: ScIdentifyActivityService.chatCardContent({ status: "identified", identifier, owner, item })
+        content: ScIdentifyActivityService.chatCardContent({
+          status: "identified",
+          identifier,
+          owner,
+          item,
+          formerName,
+          check,
+          checkName: ScIdentifyActivityService.checkName(activity?.check)
+        })
       });
     } catch (error) {
       Logger.warn("Could not create sc-identify chat card.", error);

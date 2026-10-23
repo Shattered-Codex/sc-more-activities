@@ -1,0 +1,51 @@
+<div class="sc-ma-recall-body">
+  <header class="sc-ma-recall-destination {{#unless canTravel}}is-missing{{/unless}}">
+    <i class="sc-ma-recall-icon {{#if canTravel}}sc-ma-recall-icon--destination{{else}}sc-ma-recall-icon--cancel{{/if}}" inert></i>
+    <div>
+      <span class="sc-ma-recall-meta">{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Picker.Destination" }}</span>
+      <strong>{{ destination }}</strong>
+      {{#if question}}<span class="sc-ma-recall-question">{{ question }}</span>{{/if}}
+    </div>
+  </header>
+
+  {{#if bindables.length}}
+  <section class="sc-ma-recall-section">
+    <h4 class="sc-ma-recall-heading">{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Picker.BindSection" }}</h4>
+    {{#if home}}<p class="sc-ma-recall-meta">{{ home }}</p>{{/if}}
+    <div class="sc-ma-recall-list">
+      {{#each bindables}}
+      <div class="sc-ma-recall-row">
+        <img src="{{ img }}" alt="">
+        <span class="sc-ma-recall-row-details">
+          <span class="sc-ma-recall-row-name">{{ name }}</span>
+          <span class="sc-ma-recall-meta">{{ distance }}</span>
+        </span>
+        {{#if isHome}}
+        <span class="sc-ma-recall-badge"><i class="sc-ma-recall-icon sc-ma-recall-icon--home" inert></i> {{ localize "SCMOREACTIVITIES.Activities.ScRecall.Picker.IsHome" }}</span>
+        {{else}}
+        <button type="button" data-action="bind" data-index="{{ index }}">
+          <i class="sc-ma-recall-icon sc-ma-recall-icon--bind" inert></i> {{ localize "SCMOREACTIVITIES.Activities.ScRecall.Picker.Bind" }}
+        </button>
+        {{/if}}
+      </div>
+      {{/each}}
+    </div>
+  </section>
+  {{/if}}
+
+  {{#if companions.length}}
+  <section class="sc-ma-recall-section">
+    <h4 class="sc-ma-recall-heading">{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Picker.Companions" }}</h4>
+    <div class="sc-ma-recall-companions">
+      {{#each companions}}
+      <button type="button" class="sc-ma-recall-companion {{#if selected}}active{{/if}}" data-action="toggleCompanion"
+              data-index="{{ index }}" aria-pressed="{{#if selected}}true{{else}}false{{/if}}">
+        <img src="{{ img }}" alt="">
+        <span class="sc-ma-recall-row-name">{{ name }}</span>
+        <span class="sc-ma-recall-meta">{{ distance }}</span>
+      </button>
+      {{/each}}
+    </div>
+  </section>
+  {{/if}}
+</div>

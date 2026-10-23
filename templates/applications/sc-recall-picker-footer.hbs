@@ -1,0 +1,15 @@
+<footer class="form-footer">
+  <button type="submit" class="sc-ma-recall-confirm" {{#unless canTravel}}disabled{{/unless}}>
+    {{#if portal}}
+    <i class="sc-ma-recall-icon sc-ma-recall-icon--portal" inert></i>
+    {{ localize "SCMOREACTIVITIES.Activities.ScRecall.Picker.OpenPortal" }}
+    {{else}}
+    <i class="sc-ma-recall-icon sc-ma-recall-icon--travel" inert></i>
+    {{ localize "SCMOREACTIVITIES.Activities.ScRecall.Picker.Travel" }}
+    {{/if}}
+  </button>
+  <button type="button" data-action="cancel">
+    <i class="sc-ma-recall-icon sc-ma-recall-icon--cancel" inert></i>
+    {{ localize "SCMOREACTIVITIES.Activities.ScRecall.Picker.Cancel" }}
+  </button>
+</footer>
