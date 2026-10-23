@@ -11,6 +11,7 @@ import { ScCanvasActivityService } from "./activities/canvas/ScCanvasActivitySer
 import { ScSaveRequestCard } from "./activities/canvas/ScSaveRequestCard.js";
 import { ScContestActivityService } from "./activities/contest/ScContestActivityService.js";
 import { ScGrantActivityService } from "./activities/grant/ScGrantActivityService.js";
+import { ScIdentifyRelay } from "./activities/identify/ScIdentifyRelay.js";
 import { ScPortalService } from "./activities/portal/ScPortalService.js";
 import { ScWallCompanions } from "./activities/wall/ScWallCompanions.js";
 import { ModuleSettingsRegistrar } from "./settings/ModuleSettingsRegistrar.js";
@@ -43,6 +44,7 @@ Hooks.once("init", () => {
   ScConditionalChainCardCustomizer.registerHook();
   ScContestActivityService.registerQueries();
   ScGrantActivityService.registerQueries();
+  ScIdentifyRelay.registerHooks();
   ScCanvasActivityService.registerQueries();
   ScPortalService.registerQueries();
   ScPortalService.registerHooks();

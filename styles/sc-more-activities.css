@@ -611,6 +611,236 @@
   opacity: 0.8;
 }
 
+/* SC Identify item picker */
+.sc-ma-identify-picker .window-content {
+  gap: var(--sc-ma-space-3, 0.75rem);
+}
+
+.sc-ma-identify-picker .sc-ma-identify-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sc-ma-space-3, 0.75rem);
+  min-width: 0;
+}
+
+.sc-ma-identify-picker .sc-ma-identify-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sc-ma-space-2, 0.5rem);
+}
+
+.sc-ma-identify-picker .sc-ma-identify-heading {
+  border: none;
+  color: var(--sc-ma-text-dim, #aba494);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.sc-ma-identify-picker .sc-ma-identify-meta {
+  color: var(--sc-ma-text-dim, #aba494);
+  font-size: 0.8rem;
+}
+
+.sc-ma-identify-picker .sc-ma-identify-owner {
+  align-items: center;
+  background: var(--sc-ma-bg-panel, #161923);
+  border: 1px solid var(--sc-ma-border, #3f4457);
+  border-radius: 8px;
+  display: grid;
+  gap: var(--sc-ma-space-3, 0.75rem);
+  grid-template-columns: 40px minmax(0, 1fr);
+  padding: var(--sc-ma-space-2, 0.5rem) var(--sc-ma-space-3, 0.75rem);
+}
+
+.sc-ma-identify-picker .sc-ma-identify-owner img,
+.sc-ma-identify-picker .sc-ma-identify-creature img {
+  border: none;
+  border-radius: 50%;
+  height: 40px;
+  object-fit: cover;
+  width: 40px;
+}
+
+.sc-ma-identify-picker .sc-ma-identify-owner strong {
+  color: var(--sc-ma-text-strong, #f0ecde);
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.sc-ma-identify-picker .sc-ma-identify-creatures {
+  display: grid;
+  gap: var(--sc-ma-space-2, 0.5rem);
+  grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+}
+
+.sc-ma-identify-picker .sc-ma-identify-creature {
+  align-items: center;
+  background: var(--sc-ma-bg-card-soft, #1a1c28);
+  border: 1px solid var(--sc-ma-border-soft, #323749);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  height: auto;
+  line-height: 1.2;
+  padding: var(--sc-ma-space-2, 0.5rem) 0.25rem;
+}
+
+.sc-ma-identify-picker .sc-ma-identify-creature-name {
+  color: var(--sc-ma-text, #ddd8cd);
+  font-size: 0.85rem;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-ma-identify-picker .sc-ma-identify-creature.active,
+.sc-ma-identify-picker .sc-ma-identify-item:has(input:checked) {
+  background: color-mix(in srgb, var(--sc-ma-accent, #39f08c) 10%, var(--sc-ma-bg-card-soft, #1a1c28) 90%);
+  border-color: var(--sc-ma-accent-soft, #24b86a);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--sc-ma-accent, #39f08c) 35%, transparent 65%);
+}
+
+/* SC Item Rarity Colors paints styled rows with its own background and no
+   shadow, so the selection is drawn with an outline it does not touch. */
+.sc-ma-identify-picker .sc-ma-identify-item:has(input:checked) {
+  outline: 2px solid var(--sc-ma-accent, #39f08c);
+  outline-offset: -1px;
+}
+
+.sc-ma-identify-picker .sc-ma-identify-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 18rem;
+  overflow-y: auto;
+  padding: 1px;
+  scrollbar-gutter: stable;
+}
+
+.sc-ma-identify-picker .sc-ma-identify-item {
+  align-items: center;
+  background: var(--sc-ma-bg-card-soft, #1a1c28);
+  border: 1px solid var(--sc-ma-border-soft, #323749);
+  border-radius: 8px;
+  cursor: pointer;
+  display: grid;
+  gap: var(--sc-ma-space-2, 0.5rem);
+  grid-template-columns: 36px minmax(0, 1fr) auto auto;
+  /* SC Item Rarity Colors animates effects that reach past the icon; clipped
+     here, they no longer resize the list and make its scrollbar flicker. */
+  overflow: hidden;
+  padding: 0.35rem 0.6rem 0.35rem 0.35rem;
+}
+
+.sc-ma-identify-picker .sc-ma-identify-item:hover {
+  border-color: var(--sc-ma-border, #3f4457);
+}
+
+.sc-ma-identify-picker .sc-ma-identify-item input {
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  width: 1px;
+}
+
+.sc-ma-identify-picker .sc-ma-identify-item:has(input:focus-visible) {
+  outline: 1px solid var(--sc-ma-accent, #39f08c);
+}
+
+/* Positioned so SC Item Rarity Colors can place its image cover and icon
+   effects beside the image. */
+.sc-ma-identify-picker .sc-ma-identify-item-icon {
+  display: flex;
+  height: 36px;
+  position: relative;
+  width: 36px;
+}
+
+.sc-ma-identify-picker .sc-ma-identify-item-icon > img {
+  border: 1px solid var(--sc-ma-border-soft, #323749);
+  border-radius: 6px;
+  height: 36px;
+  width: 36px;
+}
+
+.sc-ma-identify-picker .sc-ma-identify-item-details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sc-ma-identify-picker .sc-ma-identify-item-name {
+  color: var(--sc-ma-text-strong, #f0ecde);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-ma-identify-picker .sc-ma-identify-qty {
+  color: var(--sc-ma-text-dim, #aba494);
+  font-size: 0.85rem;
+}
+
+.sc-ma-identify-picker .sc-ma-identify-mark {
+  color: var(--sc-ma-accent, #39f08c);
+  visibility: hidden;
+}
+
+.sc-ma-identify-picker .sc-ma-identify-item:has(input:checked) .sc-ma-identify-mark {
+  visibility: visible;
+}
+
+.sc-ma-identify-picker .sc-ma-placement-summary span {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.4rem;
+}
+
+.sc-ma-identify-picker .form-footer {
+  display: flex;
+  gap: var(--sc-ma-space-2, 0.5rem);
+}
+
+.sc-ma-identify-picker .form-footer button {
+  flex: 1;
+}
+
+.sc-ma-identify-picker .sc-ma-identify-confirm {
+  border-color: var(--sc-ma-accent-soft, #24b86a);
+}
+
+.sc-ma-identify-picker .sc-ma-identify-confirm i {
+  color: var(--sc-ma-accent, #39f08c);
+}
+
+.sc-more-activities .sc-ma-identify-rarity-grid {
+  display: grid;
+  gap: var(--sc-ma-space-2, 0.5rem) var(--sc-ma-space-3, 0.75rem);
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+}
+
+.sc-more-activities .sc-ma-identify-rarity {
+  align-items: center;
+  display: grid;
+  gap: var(--sc-ma-space-2, 0.5rem);
+  grid-template-columns: minmax(0, 1fr) 4rem;
+}
+
+.sc-more-activities .sc-ma-identify-rarity span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-ma-identify-card-header {
+  font-weight: 600;
+}
+
 .sc-ma-advancement-source {
   align-items: center;
   background: color-mix(in srgb, var(--sc-ma-bg-card-soft) 88%, black 12%);

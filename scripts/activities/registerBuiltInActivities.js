@@ -4,6 +4,7 @@ import { registerScConditionalChainActivity } from "./conditional-chain/register
 import { registerScContestActivity } from "./contest/registerScContestActivity.js";
 import { registerScGrantActivity } from "./grant/registerScGrantActivity.js";
 import { registerScHookActivity } from "./hook/registerScHookActivity.js";
+import { registerScIdentifyActivity } from "./identify/registerScIdentifyActivity.js";
 import { registerScMacroActivity } from "./macro/registerScMacroActivity.js";
 import { registerScMovementActivity } from "./movement/registerScMovementActivity.js";
 import { registerScPortalActivity } from "./portal/registerScPortalActivity.js";
@@ -21,6 +22,7 @@ export function registerBuiltInActivities(activitiesApi) {
     registerScConditionalChainActivity(activitiesApi),
     registerScContestActivity(activitiesApi),
     registerScGrantActivity(activitiesApi),
+    registerScIdentifyActivity(activitiesApi),
     registerScTeleportActivity(activitiesApi),
     registerScMovementActivity(activitiesApi),
     registerScPortalActivity(activitiesApi),

@@ -54,6 +54,7 @@ The goal is to preserve the value of richer activity workflows while shaping the
 - `sc-conditional-chain`: route between activities from the same item with conditions, rolls, and manual choices
 - `sc-contest`: resolve a contested roll workflow between participants
 - `sc-grant`: grant item-related rewards or support item flows
+- `sc-identify`: pick an unidentified item from your inventory, a targeted token's, or a creature's within range, and identify it, optionally behind a check whose DC comes from the item's rarity (including custom rarities from SC Item Rarity Colors) or a custom formula; with SC Item Rarity Colors active, the item picker shows each item in that module's style, including its Unidentified style and hidden image
 - `sc-advancement`: drive item-linked advancement or progression flows
 - `sc-teleport`: move tokens through a guided teleport workflow
 - `sc-movement`: push or pull tokens, with an optional direction choice at use time and preview support
@@ -65,6 +66,8 @@ The goal is to preserve the value of richer activity workflows while shaping the
 Some bundled activity icons are sourced from [game-icons.net](https://game-icons.net/),
 currently using artwork by Delapouite and Lorc.
 The portal activity uses [Magic Portal by Lorc](https://game-icons.net/1x1/lorc/magic-portal.html),
+recolored to match the module palette.
+The identify activity uses [Crystal Ball by Lorc](https://game-icons.net/1x1/lorc/crystal-ball.html),
 recolored to match the module palette.
 Game-icons.net states that its icons are provided under the
 [Creative Commons Attribution 3.0 license](https://creativecommons.org/licenses/by/3.0/),
@@ -362,6 +365,7 @@ Which activities produce detailed results:
 - `attack` — attack outcome + attack roll details (**the attack roll only**, not the card damage)
 - `damage`, `heal`, `save` — roll totals and individual dice (the flow waits for the roll to happen)
 - `sc-grant` — gating check outcome and created/updated document counts
+- `sc-identify` — whether the chosen item was identified, plus the check DC and total
 - `sc-contest` — winner, tie, and per-participant totals
 - `sc-macro` — the explicit macro return at `value` or `macro.value`, plus `macro.returned`
 - other types — general information only (source activity, chat message, effect/template counts)
@@ -425,6 +429,16 @@ ignored:
 | Grant check DC / total | `activity.check.dc` / `activity.check.total` | DC and total of the gating check |
 | Documents created / updated | `activity.createdCount` / `activity.updatedCount` | How many documents the grant created / updated |
 | Target actor UUID | `activity.actorUuid` | The actor that received the grant |
+| Activity canceled / cancel reason | `activity.canceled` / `activity.reason` | Whether and why the activity was canceled |
+
+**Identify** — `sc-identify` activities:
+
+| Label | Path | Meaning |
+| --- | --- | --- |
+| Item identified | `activity.identified` | `true` when the chosen item was identified (also `success`) |
+| Identify check DC / total | `activity.check.dc` / `activity.check.total` | DC (from the item's rarity or the custom formula) and the check total (also `target` / `total`) |
+| Item UUID | `activity.itemUuid` | The item the user chose |
+| Actor UUID | `activity.actorUuid` | The actor whose item was chosen (yourself, the target, or the chosen creature) |
 | Activity canceled / cancel reason | `activity.canceled` / `activity.reason` | Whether and why the activity was canceled |
 
 **Contest** — `sc-contest` activities:
