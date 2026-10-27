@@ -46,6 +46,8 @@
   "SCMOREACTIVITIES.Settings.DiscordLink.Label": "Discord",
   "SCMOREACTIVITIES.Settings.DiscordLink.Hint": "Entre no servidor Discord da Shattered Codex.",
   "SCMOREACTIVITIES.Settings.CommunityLinks.Aria": "Links da comunidade",
+  "SCMOREACTIVITIES.Settings.CommunityLinks.NotePatreon": "Está gostando deste módulo? Considere apoiar no Patreon para ter acesso a muitos outros módulos, e dê uma olhada na wiki.",
+  "SCMOREACTIVITIES.Settings.CommunityLinks.NoteDiscord": "Tem uma sugestão ou encontrou um bug? Me conte no canal do Discord.",
   "SCMOREACTIVITIES.Settings.ActivityCatalogMenu.Name": "Catálogo de atividades",
   "SCMOREACTIVITIES.Settings.ActivityCatalogMenu.Label": "Abrir catálogo",
   "SCMOREACTIVITIES.Settings.ActivityCatalogMenu.Hint": "Abre o catálogo de atividades registradas e diagnósticos.",

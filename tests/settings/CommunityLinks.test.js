@@ -61,3 +61,18 @@ test("injecting without a settings root is a no-op", () => {
   assert.equal(CommunityLinks.inject(undefined), null);
   assert.equal(CommunityLinks.inject({}), null);
 });
+
+test("a two-line note follows the strip: Patreon and the wiki, then Discord for feedback", () => {
+  // The mocked i18n echoes keys back, which reads as untranslated: the English text shows.
+  const [patreon, discord] = CommunityLinks.noteLines();
+  assert.match(patreon, /^Enjoying this module\?.*Patreon.*wiki\.$/);
+  assert.match(discord, /^Have a suggestion or found a bug\?.*Discord channel\.$/);
+
+  const i18n = game.i18n;
+  game.i18n = { localize: (key) => `translated:${key.split(".").at(-1)}` };
+  try {
+    assert.deepEqual(CommunityLinks.noteLines(), ["translated:NotePatreon", "translated:NoteDiscord"]);
+  } finally {
+    game.i18n = i18n;
+  }
+});
