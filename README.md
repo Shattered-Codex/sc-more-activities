@@ -48,6 +48,7 @@ The goal is to preserve the value of richer activity workflows while shaping the
 ## Included Activity Types
 
 - `sc-sound`: play audio from an activity
+- `sc-journal`: open a journal entry, or one of its pages, for whoever uses the activity, even without permission to see it
 - `sc-macro`: run a world macro or GM-controlled inline code
 - `sc-hook`: fire a hook or module callback for developer workflows
 - `sc-chain`: trigger other activities from the same item in sequence
@@ -69,6 +70,8 @@ currently using artwork by Delapouite, Lorc, and sbed.
 The portal activity uses [Magic Portal by Lorc](https://game-icons.net/1x1/lorc/magic-portal.html),
 recolored to match the module palette.
 The identify activity uses [Crystal Ball by Lorc](https://game-icons.net/1x1/lorc/crystal-ball.html),
+recolored to match the module palette.
+The open journal activity uses [Book Cover by Delapouite](https://game-icons.net/1x1/delapouite/book-cover.html),
 recolored to match the module palette.
 The recall activity uses [House](https://game-icons.net/1x1/delapouite/house.html),
 [House Keys](https://game-icons.net/1x1/delapouite/house-keys.html), and
@@ -721,6 +724,20 @@ has loaded. A GM's camera only follows the trips that GM took. Without an active
 
 Moving to another scene replaces each token with a new one, as core does: a token in combat leaves that
 combat, and players must be able to view the destination scene.
+
+## SC Open Journal Guide
+
+`sc-journal` opens a journal entry for whoever uses the activity: a letter found on a body, the map in a
+scroll case, a book that reads itself aloud. Set the journal by dropping a journal entry or one of its pages
+on the activity's Journal field, or by pasting its UUID (a page UUID sets the page too). Choose a page to
+open the journal at that page, or leave it on the whole journal. Dropping a journal entry or page on an
+item sheet's Activities tab creates the activity for it, named after what was dropped.
+
+The journal opens as an observer whatever the user's permission, the way core's Show to Players does when
+forced: every client already holds the world's journals, and the sheet grants a temporary Observer level
+that ends when it closes. Nothing is saved and no GM is needed. When the whole journal opens, pages the GM
+set to None on their own stay hidden, as they do for a forced show. Anyone who can edit the activity can
+point it at any journal whose UUID they know, so keep secret journals out of activities players can edit.
 
 ## Migration From `more-activities`
 

@@ -14,6 +14,7 @@ import { ScGrantActivityService } from "./activities/grant/ScGrantActivityServic
 import { ScChatRelay } from "./support/ScChatRelay.js";
 import { ScIdentifyCard } from "./activities/identify/ScIdentifyCard.js";
 import { ScIdentifyRelay } from "./activities/identify/ScIdentifyRelay.js";
+import { ScJournalItemDrop } from "./activities/journal/ScJournalItemDrop.js";
 import { ScRecallArrivalCamera } from "./activities/recall/ScRecallArrivalCamera.js";
 import { ScRecallPointHud } from "./activities/recall/ScRecallPointHud.js";
 import { ScRecallPortal } from "./activities/recall/ScRecallPortal.js";
@@ -55,6 +56,7 @@ Hooks.once("init", () => {
   ScChatRelay.registerHooks();
   ScIdentifyRelay.registerHandler();
   ScIdentifyCard.registerHooks();
+  ScJournalItemDrop.registerHooks();
   ScRecallTravel.registerHandler();
   ScRecallPointHud.registerHooks();
   ScRecallPortal.registerHooks();

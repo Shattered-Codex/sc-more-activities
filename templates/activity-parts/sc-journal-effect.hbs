@@ -1,0 +1,75 @@
+<section class="tab activity-{{ tab.id }} {{ tab.cssClass }}" data-tab="{{ tab.id }}" data-group="{{ tab.group }}">
+  {{> "systems/dnd5e/templates/activity/parts/activity-effects.hbs" }}
+
+  <fieldset class="sc-ma-journal" data-sc-journal-drop>
+    <legend>{{ localize "SCMOREACTIVITIES.Activities.ScJournal.Sections.Configuration" }}</legend>
+
+    {{#if journal.entry}}
+    <div class="sc-ma-journal-card" data-tooltip="{{ journal.uuid }}">
+      <input type="hidden" name="journal.uuid" value="{{ journal.uuid }}">
+      <span class="sc-ma-journal-card-icon"><i class="fa-solid fa-book-open" inert></i></span>
+      <div class="sc-ma-journal-card-meta">
+        <span class="sc-ma-journal-card-name">{{ journal.name }}</span>
+        <span class="sc-ma-journal-card-detail">{{ journal.source }} &middot; {{ journal.pages }}</span>
+      </div>
+      <div class="sc-ma-journal-card-actions">
+        <button type="button" class="unbutton control-button" data-action="scJournalPreview"
+                data-tooltip aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScJournal.Actions.Preview" }}">
+          <i class="fa-solid fa-eye" inert></i>
+        </button>
+        {{#if journal.editable}}
+        <button type="button" class="unbutton control-button" data-action="scJournalClear"
+                data-tooltip aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScJournal.Actions.Clear" }}">
+          <i class="fa-solid fa-xmark" inert></i>
+        </button>
+        {{/if}}
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScJournal.Fields.Page.Label" }}</label>
+      <div class="form-fields">
+        <select name="journal.pageId" {{#unless journal.editable}}disabled{{/unless}}>
+          {{ selectOptions pageOptions selected=journal.pageId valueAttr="value" labelAttr="label" }}
+        </select>
+      </div>
+      {{#if journal.pageMissing}}
+      <p class="hint sc-ma-journal-warning">
+        <i class="fa-solid fa-triangle-exclamation" inert></i>
+        {{ localize "SCMOREACTIVITIES.Activities.ScJournal.Fields.Page.Missing" }}
+      </p>
+      {{else}}
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScJournal.Fields.Page.Hint" }}</p>
+      {{/if}}
+    </div>
+
+    {{else if journal.uuid}}
+    <div class="sc-ma-journal-card is-missing" data-tooltip="{{ journal.uuid }}">
+      <input type="hidden" name="journal.uuid" value="{{ journal.uuid }}">
+      <span class="sc-ma-journal-card-icon"><i class="fa-solid fa-triangle-exclamation" inert></i></span>
+      <div class="sc-ma-journal-card-meta">
+        <span class="sc-ma-journal-card-name">{{ localize "SCMOREACTIVITIES.Activities.ScJournal.Fields.Journal.NotFound" }}</span>
+        <span class="sc-ma-journal-card-detail">{{ journal.uuid }}</span>
+      </div>
+      {{#if journal.editable}}
+      <div class="sc-ma-journal-card-actions">
+        <button type="button" class="unbutton control-button" data-action="scJournalClear"
+                data-tooltip aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScJournal.Actions.Clear" }}">
+          <i class="fa-solid fa-xmark" inert></i>
+        </button>
+      </div>
+      {{/if}}
+    </div>
+
+    {{else}}
+    <label class="sc-ma-journal-drop">
+      <i class="fa-solid fa-book-open" inert></i>
+      <span class="sc-ma-journal-drop-title">{{ localize "SCMOREACTIVITIES.Activities.ScJournal.Fields.Journal.Drop" }}</span>
+      <input type="text" name="journal.uuid" value="" {{#unless journal.editable}}disabled{{/unless}}
+             placeholder="{{ localize "SCMOREACTIVITIES.Activities.ScJournal.Fields.Journal.Placeholder" }}">
+    </label>
+    {{/if}}
+
+    <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScJournal.Fields.Journal.Hint" }}</p>
+  </fieldset>
+</section>

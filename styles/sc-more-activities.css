@@ -1443,6 +1443,119 @@
   width: 100%;
 }
 
+/* Mixed from currentColor, so the journal effect follows dnd5e's light and dark sheets. */
+.sc-more-activities.sc-ma-activity--journal {
+  --sc-ma-journal-accent: #c9a26b;
+  --sc-ma-journal-line: color-mix(in srgb, currentColor 22%, transparent);
+  --sc-ma-journal-wash: color-mix(in srgb, currentColor 5%, transparent);
+}
+
+.sc-more-activities.sc-ma-activity--journal .sc-ma-journal {
+  border-radius: 8px;
+  transition: outline-color 120ms ease;
+  outline: 2px dashed transparent;
+  outline-offset: 2px;
+}
+
+.sc-more-activities.sc-ma-activity--journal .sc-ma-journal.is-dragover {
+  outline-color: var(--sc-ma-journal-accent);
+}
+
+.sc-more-activities.sc-ma-activity--journal .sc-ma-journal-drop {
+  align-items: center;
+  background: var(--sc-ma-journal-wash);
+  border: 1px dashed color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.9rem 1rem;
+  text-align: center;
+}
+
+.sc-more-activities.sc-ma-activity--journal .sc-ma-journal.is-dragover .sc-ma-journal-drop {
+  background: color-mix(in srgb, var(--sc-ma-journal-accent) 12%, transparent);
+  border-color: var(--sc-ma-journal-accent);
+}
+
+.sc-more-activities.sc-ma-activity--journal .sc-ma-journal-drop > i {
+  color: var(--sc-ma-journal-accent);
+  font-size: 1.6rem;
+}
+
+.sc-more-activities.sc-ma-activity--journal .sc-ma-journal-drop-title {
+  font-weight: 600;
+}
+
+.sc-more-activities.sc-ma-activity--journal .sc-ma-journal-drop input {
+  max-width: 22rem;
+  text-align: center;
+  width: 100%;
+}
+
+.sc-more-activities.sc-ma-activity--journal .sc-ma-journal-card {
+  align-items: center;
+  background: var(--sc-ma-journal-wash);
+  border: 1px solid var(--sc-ma-journal-line);
+  border-left: 3px solid var(--sc-ma-journal-accent);
+  border-radius: 8px;
+  display: flex;
+  gap: 0.65rem;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 0.6rem;
+}
+
+.sc-more-activities.sc-ma-activity--journal .sc-ma-journal-card.is-missing {
+  border-left-color: var(--sc-ma-danger);
+}
+
+.sc-more-activities.sc-ma-activity--journal .sc-ma-journal-card-icon {
+  align-items: center;
+  background: color-mix(in srgb, var(--sc-ma-journal-accent) 18%, transparent);
+  border-radius: 6px;
+  color: var(--sc-ma-journal-accent);
+  display: flex;
+  flex: 0 0 2.25rem;
+  height: 2.25rem;
+  justify-content: center;
+}
+
+.sc-more-activities.sc-ma-activity--journal .sc-ma-journal-card.is-missing .sc-ma-journal-card-icon {
+  background: color-mix(in srgb, var(--sc-ma-danger) 18%, transparent);
+  color: var(--sc-ma-danger);
+}
+
+.sc-more-activities.sc-ma-activity--journal .sc-ma-journal-card-meta {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sc-more-activities.sc-ma-activity--journal .sc-ma-journal-card-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-more-activities.sc-ma-activity--journal .sc-ma-journal-card-detail {
+  font-size: 0.78rem;
+  opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-more-activities.sc-ma-activity--journal .sc-ma-journal-card-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.25rem;
+}
+
+.sc-more-activities.sc-ma-activity--journal .sc-ma-journal-warning {
+  color: var(--sc-ma-accent-warm);
+}
+
 .sc-more-activities .sc-ma-chain-picker .form-fields {
   align-items: center;
   display: flex;

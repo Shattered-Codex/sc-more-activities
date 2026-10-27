@@ -6,6 +6,7 @@ export const ACTIVITY_TYPES = Object.freeze({
   GRANT: "sc-grant",
   HOOK: "sc-hook",
   IDENTIFY: "sc-identify",
+  JOURNAL: "sc-journal",
   MACRO: "sc-macro",
   MOVEMENT: "sc-movement",
   PORTAL: "sc-portal",
