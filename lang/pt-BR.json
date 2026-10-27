@@ -857,6 +857,7 @@
   "SCMOREACTIVITIES.Activities.ScRecall.Warning.NoRegion": "Escolha uma região de destino para esta atividade.",
   "SCMOREACTIVITIES.Activities.ScRecall.Warning.NoHome": "{actor} ainda não tem um lar. Use isto perto de um ponto de regresso para definir um.",
   "SCMOREACTIVITIES.Activities.ScRecall.Warning.HomeLost": "O lar de {actor} não existe mais.",
+  "SCMOREACTIVITIES.Activities.ScRecall.Warning.BindOutOfReach": "Esse ponto de regresso não está mais ao alcance.",
   "SCMOREACTIVITIES.Activities.ScRecall.Warning.NoActiveGm": "É necessário um GM ativo para viajar para outra cena ou com tokens de outros jogadores.",
   "SCMOREACTIVITIES.Activities.ScRecall.Warning.GmTimeout": "O GM não respondeu ao pedido de regresso a tempo.",
   "SCMOREACTIVITIES.Activities.ScRecall.Warning.Blocked": "Não havia espaço no destino.",

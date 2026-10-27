@@ -1,6 +1,7 @@
 import { Constants } from "../../constants/Constants.js";
 import { Logger } from "../../support/Logger.js";
 import { ACTIVITY_TYPES } from "../ActivityTypes.js";
+import { ScDeferredItemDestroy } from "../ScDeferredItemDestroy.js";
 import { ScChatRelay } from "../../support/ScChatRelay.js";
 import { ScRecallArrivalCamera } from "./ScRecallArrivalCamera.js";
 import { ScRecallPlacement } from "./ScRecallPlacement.js";
@@ -23,6 +24,9 @@ const MAX_TRAVELLERS = 50;
  * when the activity says so), and a home is a token that may be one.
  */
 export class ScRecallTravel {
+  /** Tail of the travel queue (see `queue`). */
+  static #queue = Promise.resolve();
+
   static registerHandler() {
     ScChatRelay.registerHandler(KIND, ScRecallTravel.#handle);
   }
@@ -78,11 +82,30 @@ export class ScRecallTravel {
   }
 
   /**
-   * Validates the request and travels. `data` is `{ activityUuid, travellerUuids }`,
-   * the user's own token first. Returns `{ status, ... }` where status is
-   * "travelled", "blocked" (nobody fit at the destination), or "refused".
+   * Runs `task` after every travel queued before it, failed or not. A token
+   * sent two ways at once would otherwise pass both checks before either
+   * moved it, and be copied to both destinations. Each travel looks its
+   * tokens up again once its turn comes, so the later one finds them gone or
+   * moved. One queue rather than one per token, because a travel takes its
+   * companions along; portal crossings wait in it too.
    */
-  static async execute(user, data = {}) {
+  static queue(task) {
+    const current = ScRecallTravel.#queue.then(task);
+    ScRecallTravel.#queue = current.catch(() => {});
+    return current;
+  }
+
+  /**
+   * Validates the request and travels, in its turn (see `queue`). `data` is
+   * `{ activityUuid, travellerUuids }`, the user's own token first. Returns
+   * `{ status, ... }` where status is "travelled", "blocked" (nobody fit at
+   * the destination), or "refused".
+   */
+  static execute(user, data = {}) {
+    return ScRecallTravel.queue(() => ScRecallTravel.#execute(user, data));
+  }
+
+  static async #execute(user, data) {
     const refused = { status: "refused" };
     const activity = await ScRecallTravel.#fromUuid(data.activityUuid);
     if (String(activity?.type ?? "") !== ACTIVITY_TYPES.RECALL || !ScRecallTravel.canUseActivity(activity, user)) {
@@ -96,6 +119,8 @@ export class ScRecallTravel {
       return refused;
     }
 
+    // The scroll is spent and the request checked: it must not ride along on an unlinked token.
+    await ScDeferredItemDestroy.discardSpent(activity);
     const [main] = travellers;
     const originScene = main.parent;
     const arrivals = destination.kind === "region"

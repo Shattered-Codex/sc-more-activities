@@ -18,6 +18,7 @@ const { ScRecallService } = await import("../../scripts/activities/recall/ScReca
 const { ScRecallPortal } = await import("../../scripts/activities/recall/ScRecallPortal.js");
 const { ScRecallPickerApp } = await import("../../scripts/activities/recall/ScRecallPickerApp.js");
 const { ScRecallPortalPlacement } = await import("../../scripts/activities/recall/ScRecallPortalPlacement.js");
+const { ScRecallTravel } = await import("../../scripts/activities/recall/ScRecallTravel.js");
 
 /** Where the user clicks to open the near side; `null` cancels. Defaults to the hero's own square. */
 const placement = { calls: [], point: { x: 550, y: 550 } };
@@ -250,7 +251,8 @@ function setup({ mode = "region", portal = {}, allyFilter = "friendly", user = p
       TokenDocument: {
         implementation: {
           async create(data, { parent }) {
-            const created = addToken(parent, data._id, data.actor, 0, 0, { disposition: data.disposition, flags: data.flags });
+            const id = data._id ?? `token-${++nextId}`;
+            const created = addToken(parent, id, data.actor, 0, 0, { disposition: data.disposition, flags: data.flags });
             created.x = data.x;
             created.y = data.y;
             return created;
@@ -607,3 +609,157 @@ test("crossings in opposite directions share one queue, so neither loses the oth
   assert.deepEqual(results.map((result) => result.status), ["crossed", "crossed"]);
   assert.equal(sides(world.field).length + sides(world.town).length, 0, "both uses were counted, so the portal closed");
 });
+
+test("portals opened at the same moment to the same region do not stack", async() => {
+  const world = setup({ user: gm, portal: { placementRange: "0" } });
+
+  await Promise.all([
+    ScRecallPortal.open(world.activity, world.hero, world.heroToken, "Plaza", { x: 550, y: 550 }),
+    ScRecallPortal.open(world.activity, world.hero, world.heroToken, "Plaza", { x: 850, y: 550 })
+  ]);
+
+  const [a, b] = sides(world.town).map(portalOf);
+  assert.ok(a && b, "both portals opened");
+  assert.ok(Math.abs(a.center.x - b.center.x) >= 100 || Math.abs(a.center.y - b.center.y) >= 100);
+});
+
+test("the opener still closes the portal on return after taking a new id at the destination", async() => {
+  const world = setup();
+  // An unrelated token on the destination scene already holds the hero's id.
+  addToken(world.town, "hero", makeActor("statue", { type: "npc" }), 25, 25);
+  const { entry, exit } = await openPortal(world);
+  await ScRecallPortal.cross({ regionUuid: entry.uuid, tokenUuid: world.heroToken.uuid });
+  const traveller = world.town.tokens.contents.find((token) => token.actor === world.hero);
+  assert.notEqual(traveller.id, "hero", "the hero arrived under a new id");
+  assert.equal(portalOf(exit).openerTokenUuid, traveller.uuid);
+
+  const back = await ScRecallPortal.cross({ regionUuid: exit.uuid, tokenUuid: traveller.uuid });
+
+  assert.equal(back.status, "crossed");
+  assert.equal(sides(world.field).length + sides(world.town).length, 0);
+});
+
+test("the statue holding the opener's old id cannot close the portal", async() => {
+  const world = setup({ portal: { closeOnReturn: true } });
+  const statue = addToken(world.town, "hero", makeActor("statue", { owners: [player.id] }), 11, 12);
+  const { entry, exit } = await openPortal(world);
+  await ScRecallPortal.cross({ regionUuid: entry.uuid, tokenUuid: world.heroToken.uuid });
+
+  await ScRecallPortal.cross({ regionUuid: exit.uuid, tokenUuid: statue.uuid });
+
+  assert.equal(sides(world.field).length + sides(world.town).length, 2);
+});
+
+test("a token on the destination scene sharing the opener's id cannot close the portal before the opener crosses", async() => {
+  const world = setup();
+  const statue = addToken(world.town, "hero", makeActor("statue", { owners: [player.id] }), 11, 12);
+  const { exit } = await openPortal(world);
+
+  const back = await ScRecallPortal.cross({ regionUuid: exit.uuid, tokenUuid: statue.uuid });
+
+  assert.equal(back.status, "crossed");
+  assert.equal(world.heroToken.parent, world.field, "the opener never left");
+  assert.equal(sides(world.field).length + sides(world.town).length, 2);
+});
+
+test("the same token sent through two portals at once crosses only one of them", async() => {
+  const world = setup({ portal: { placementRange: "0" } });
+  const first = await openPortal(world);
+  placement.point = { x: 650, y: 550 };
+  await ScRecallService.execute(world.activity);
+  const second = sides(world.field).find((entry) => entry !== first.entry);
+
+  const results = await Promise.all([
+    ScRecallPortal.cross({ regionUuid: first.entry.uuid, tokenUuid: world.heroToken.uuid }),
+    ScRecallPortal.cross({ regionUuid: second.uuid, tokenUuid: world.heroToken.uuid })
+  ]);
+
+  assert.deepEqual(results.map((result) => result.status).sort(), ["crossed", "refused"]);
+  assert.equal(results.find((result) => result.status === "refused").reason, "moved");
+  const heroes = [world.field, world.town].flatMap((scene) => scene.tokens.contents.filter((token) => token.actor === world.hero));
+  assert.equal(heroes.length, 1, "one hero, not a copy on each side");
+});
+
+test("after a round trip that changed the traveller's id, a stranger holding its old id cannot come back", async() => {
+  const world = setup({ portal: { roundTrip: true, closeOnReturn: false } });
+  const { entry, exit } = await openPortal(world);
+  assert.equal((await ScRecallPortal.cross({ regionUuid: entry.uuid, tokenUuid: world.heroToken.uuid })).status, "crossed");
+  // While the hero is away, something else takes its id at home, so it comes back under a new one.
+  addToken(world.field, "hero", makeActor("statue", { type: "npc" }), 25, 25);
+  const away = world.town.tokens.get("hero");
+  assert.equal((await ScRecallPortal.cross({ regionUuid: exit.uuid, tokenUuid: away.uuid })).status, "crossed");
+  const home = world.field.tokens.contents.find((token) => token.actor === world.hero);
+  assert.notEqual(home.id, "hero");
+
+  // A stranger now standing at the far side under the hero's old id never went through.
+  const stranger = addToken(world.town, "hero", makeActor("stranger", { owners: [player.id] }), 12, 11);
+  const sneak = await ScRecallPortal.cross({ regionUuid: exit.uuid, tokenUuid: stranger.uuid });
+
+  assert.deepEqual(sneak, { status: "refused", reason: "used" });
+  assert.deepEqual(portalOf(entry).crossings, [{ tokenUuid: home.uuid, actorId: "hero", out: true, back: true }],
+    "one record, following the hero to where it landed");
+});
+
+test("a token holding a traveller's uuid with another actor does not inherit its crossing", async() => {
+  const world = setup({ portal: { roundTrip: true, closeOnReturn: false } });
+  const { entry, exit } = await openPortal(world);
+  await ScRecallPortal.cross({ regionUuid: entry.uuid, tokenUuid: world.heroToken.uuid });
+  // The hero leaves the far side some other way, and an unrelated token comes to hold its uuid.
+  removeToken(world.town.tokens.get("hero"));
+  const impostor = addToken(world.town, "hero", makeActor("impostor", { owners: [player.id] }), 12, 11);
+
+  const sneak = await ScRecallPortal.cross({ regionUuid: exit.uuid, tokenUuid: impostor.uuid });
+
+  assert.deepEqual(sneak, { status: "refused", reason: "used" });
+});
+
+test("a token recalled and sent through a portal at once goes only one way", async() => {
+  const world = setup({ mode: "home" });
+  const { entry } = await openPortal(world);
+  const data = { activityUuid: world.activity.uuid, travellerUuids: [world.heroToken.uuid] };
+
+  const [travel, crossing] = await Promise.all([
+    ScRecallTravel.execute(gm, data),
+    ScRecallPortal.cross({ regionUuid: entry.uuid, tokenUuid: world.heroToken.uuid })
+  ]);
+
+  assert.deepEqual([travel.status, crossing.status].sort(), ["refused", "travelled"]);
+  const heroes = [world.field, world.town].flatMap((scene) => scene.tokens.contents.filter((token) => token.actor === world.hero));
+  assert.equal(heroes.length, 1, "one hero, not a copy on each side");
+});
+
+/** Evaluates sums with `@scaling`, as a Roll on the item's roll data would. */
+class ScalingRoll {
+  constructor(formula, data) { this.formula = formula; this.data = data; }
+  evaluateSync() {
+    this.total = String(this.formula).split("+")
+      .reduce((sum, part) => sum + (part.trim() === "@scaling" ? Number(this.data?.scaling ?? 0) : Number(part)), 0);
+  }
+}
+
+/** The activity as dnd5e hands it to a use scaled by `scaling`: on a clone of its item carrying the flag. */
+function scaledUse(activity, scaling) {
+  activity.item.clone = (changes) => {
+    const level = changes["flags.dnd5e.scaling"];
+    const item = { ...activity.item, flags: { dnd5e: { scaling: level } }, getRollData: () => ({ scaling: level }) };
+    const scaled = { ...activity, item };
+    item.system = { activities: { get: () => scaled } };
+    return item;
+  };
+  return activity.item.clone({ "flags.dnd5e.scaling": scaling }).system.activities.get(activity.id);
+}
+
+for (const user of [player, gm]) {
+  test(`a portal opened by a scaled use keeps its scaled uses and duration (${user.isGM ? "GM" : "player"})`, async(t) => {
+    globalThis.Roll = ScalingRoll;
+    t.after(() => { delete globalThis.Roll; });
+    const world = setup({ user, portal: { maxUses: "1 + @scaling", durationRounds: "10 + @scaling" } });
+
+    const result = await ScRecallService.execute(scaledUse(world.activity, 2));
+
+    assert.equal(result.action, "portal");
+    const [entry] = sides(world.field);
+    assert.equal(portalOf(entry).usesLeft, 3, "1 + 2, not the stored activity's 1");
+    assert.equal(portalOf(entry).expiresAtWorldTime, 12 * 6);
+  });
+}

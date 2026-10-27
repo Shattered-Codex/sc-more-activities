@@ -522,3 +522,95 @@ test("a GM stays on the scene when their own token could not travel, even if a c
   assert.equal(world.heroToken.parent, world.field);
   assert.equal(world.town.viewed, 0, "the GM's view did not leave with the companion");
 });
+
+test("the GM deletes a spent scroll before the token travels, so an unlinked token cannot carry it across", async() => {
+  const world = setup();
+  const items = new Map([["scroll", { id: "scroll", flags: { [MODULE]: { spentByUse: true } } }]]);
+  world.hero.items = items;
+  world.hero.deleteEmbeddedDocuments = async (_type, ids) => ids.forEach((id) => items.delete(id));
+  world.activity.item = { ...world.activity.item, id: "scroll", actor: world.hero };
+  const teleport = world.townRegion.teleportToken;
+  const carried = [];
+  world.townRegion.teleportToken = async (token) => {
+    carried.push(items.has("scroll"));
+    return teleport(token);
+  };
+
+  const result = await ScRecallService.execute(world.activity);
+
+  assert.equal(result.travelled, 1);
+  assert.deepEqual(carried, [false]);
+});
+
+test("two recalls of the same token at once move it only once: the later finds it gone", async() => {
+  const world = setup({ mode: "home" });
+  world.hero.flags[MODULE] = { recallHome: { tokenUuid: world.innkeeperToken.uuid, name: "innkeeper", sceneName: "town" } };
+  const data = { activityUuid: world.activity.uuid, travellerUuids: [world.heroToken.uuid] };
+
+  const results = await Promise.all([ScRecallTravel.execute(gm, data), ScRecallTravel.execute(gm, data)]);
+
+  assert.deepEqual(results.map((result) => result.status), ["travelled", "refused"]);
+  const heroes = [world.field, world.town].flatMap((scene) => scene.tokens.contents.filter((token) => token.actor === world.hero));
+  assert.equal(heroes.length, 1, "one hero, not a copy for each recall");
+});
+
+test("a recall that fails does not hold up the next one", async() => {
+  const world = setup({ mode: "home" });
+  world.hero.flags[MODULE] = { recallHome: { tokenUuid: world.innkeeperToken.uuid, name: "innkeeper", sceneName: "town" } };
+  const data = { activityUuid: world.activity.uuid, travellerUuids: [world.heroToken.uuid] };
+  const resolve = globalThis.fromUuid;
+  globalThis.fromUuid = async () => { throw new Error("lookup failed"); };
+  const failed = await ScRecallTravel.execute(gm, data);
+  globalThis.fromUuid = resolve;
+
+  assert.equal(failed.status, "refused");
+  assert.equal((await ScRecallTravel.execute(gm, data)).status, "travelled");
+});
+
+test("binding checks the recall point again once chosen: one that walked out of range is not bound", async() => {
+  const world = setup({ mode: "home", homeSource: "any", gmActive: false });
+  picker.answer = (options) => {
+    const { token } = options.bindables.find((entry) => entry.token.name === "barkeep");
+    world.barkeep.x = 2000;
+    return { action: "bind", token };
+  };
+
+  const result = await ScRecallService.execute(world.activity);
+
+  assert.deepEqual(result, { canceled: true, reason: "bind-out-of-reach" });
+  assert.equal(world.hero.flags[MODULE]?.recallHome, undefined);
+  assert.ok(notices.some(([level]) => level === "warn"));
+});
+
+test("binding refuses a recall point removed, or no longer one, while the window was open", async() => {
+  for (const change of [
+    (world) => removeToken(world.barkeep),
+    (world) => { world.barkeep.actor.hasPlayerOwner = true; }
+  ]) {
+    const world = setup({ mode: "home", homeSource: "any", gmActive: false });
+    picker.answer = (options) => {
+      const { token } = options.bindables.find((entry) => entry.token.name === "barkeep");
+      change(world);
+      return { action: "bind", token };
+    };
+
+    const result = await ScRecallService.execute(world.activity);
+
+    assert.equal(result.reason, "bind-out-of-reach");
+    assert.equal(world.hero.flags[MODULE]?.recallHome, undefined);
+  }
+});
+
+test("binding refuses once the user's own token has left the scene", async() => {
+  const world = setup({ mode: "home", homeSource: "any", gmActive: false });
+  picker.answer = (options) => {
+    const { token } = options.bindables.find((entry) => entry.token.name === "barkeep");
+    removeToken(world.heroToken);
+    return { action: "bind", token };
+  };
+
+  const result = await ScRecallService.execute(world.activity);
+
+  assert.equal(result.reason, "bind-out-of-reach");
+  assert.equal(world.hero.flags[MODULE]?.recallHome, undefined);
+});

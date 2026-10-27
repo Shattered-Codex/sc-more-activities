@@ -25,9 +25,10 @@ const player = { id: "player-1", isGM: false, active: true };
 const gm = { id: "gm-1", isGM: true, active: true };
 
 /** Picks `itemId` from the candidate named `actorId` (the first one by default). */
-const picker = { calls: [], actorId: null, itemId: null };
+const picker = { calls: [], actorId: null, itemId: null, whileOpen: null };
 ScIdentifyPickerApp.wait = async (options) => {
   picker.calls.push(options);
+  picker.whileOpen?.();
   if (!picker.itemId) {
     return null;
   }
@@ -169,6 +170,7 @@ function setup({
   picker.calls.length = 0;
   picker.itemId = itemId;
   picker.actorId = actorId;
+  picker.whileOpen = null;
   // Other test files replace `foundry` in the shared process.
   let nextId = 0;
   globalThis.foundry = {
@@ -607,6 +609,99 @@ test("the GM only accepts placed tokens as targets", async() => {
     recipientUuid: ally.uuid,
     originUuid: "Scene.s1.Token.hero",
     itemId: "rope"
+  });
+
+  assert.equal(statusOf(message), "refused");
+  assert.deepEqual(identifiedIds(ally), ["sword"]);
+});
+
+test("a creature that walks out of range while the picker is open is not identified", async() => {
+  const { ally, activity, allyToken } = setup({ recipient: "choose", actorId: "ally" });
+  game.user = gm;
+  picker.whileOpen = () => { allyToken.x = 1000; };
+
+  try {
+    const result = await ScIdentifyActivityService.execute(activity);
+
+    assert.equal(result.reason, "out-of-range");
+    assert.deepEqual(identifiedIds(ally), ["sword"]);
+    assert.ok(notices.some(([level]) => level === "warn"));
+  } finally {
+    game.user = player;
+  }
+});
+
+test("a creature removed from the scene while the picker is open is not identified", async() => {
+  const { ally, activity, allyToken } = setup({ recipient: "choose", actorId: "ally" });
+  game.user = gm;
+  picker.whileOpen = () => { canvas.scene.tokens.delete(allyToken.id); };
+
+  try {
+    const result = await ScIdentifyActivityService.execute(activity);
+
+    assert.equal(result.reason, "out-of-range");
+    assert.deepEqual(identifiedIds(ally), ["sword"]);
+  } finally {
+    game.user = player;
+  }
+});
+
+test("a creature that stays in range is identified on confirmation", async() => {
+  const { ally, activity, allyToken } = setup({ recipient: "choose", actorId: "ally" });
+  game.user = gm;
+  picker.whileOpen = () => { allyToken.x = 300; };
+
+  try {
+    const result = await ScIdentifyActivityService.execute(activity);
+
+    assert.equal(result.identified, true);
+    assert.deepEqual(identifiedIds(ally), ["ring", "sword"]);
+  } finally {
+    game.user = player;
+  }
+});
+
+/** Adds `@scaling` to a sum, as dnd5e's simplifyBonus would. */
+const sumWithScaling = (formula, data) => String(formula).split("+")
+  .reduce((sum, part) => sum + (part.trim() === "@scaling" ? Number(data?.scaling ?? 0) : Number(part)), 0);
+
+/** The activity as dnd5e hands it to a use scaled by `scaling`: on a clone of its item carrying the flag. */
+function scaledUse(activity, scaling) {
+  activity.item.clone = (changes) => {
+    const level = changes["flags.dnd5e.scaling"];
+    const item = { ...activity.item, flags: { dnd5e: { scaling: level } } };
+    const scaled = { ...activity, item, getRollData: () => ({ scaling: level }) };
+    item.system = { activities: { get: () => scaled } };
+    return item;
+  };
+  return activity.item.clone({ "flags.dnd5e.scaling": scaling }).system.activities.get(activity.id);
+}
+
+test("a DC formula that scales with the use keeps that scaling when the GM rolls the check", async(t) => {
+  const { ally, activity } = setup({ recipient: "target", rollTotal: 13 });
+  activity.identify.dcMode = "formula";
+  activity.identify.dcFormula = "10 + @scaling";
+  const previous = globalThis.dnd5e;
+  globalThis.dnd5e = { ...previous, utils: { ...previous?.utils, simplifyBonus: sumWithScaling } };
+  t.after(() => { globalThis.dnd5e = previous; });
+
+  const result = await ScIdentifyActivityService.execute(scaledUse(activity, 3));
+
+  assert.deepEqual(result.check, { dc: 13, total: 13 }, "the DC of the scaled use, not the stored 10");
+  assert.equal(result.identified, true);
+  assert.deepEqual(identifiedIds(ally), ["ring", "sword"]);
+});
+
+test("the GM refuses a scaling that is not a count", async() => {
+  const { ally, activity } = setup({ recipient: "target", check: { ability: "", skill: "" } });
+  scaledUse(activity, 0);
+
+  const message = await postRequest({
+    activityUuid: activity.uuid,
+    recipientUuid: "Scene.s1.Token.ally",
+    originUuid: "Scene.s1.Token.hero",
+    itemId: "ring",
+    scaling: -1
   });
 
   assert.equal(statusOf(message), "refused");

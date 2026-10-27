@@ -1,4 +1,5 @@
 import { ACTIVITY_TYPES } from "../ActivityTypes.js";
+import { ScUsageScaling } from "../ScUsageScaling.js";
 import { ScChatRelay } from "../../support/ScChatRelay.js";
 import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
 import { ScIdentifyActivityService } from "./ScIdentifyActivityService.js";
@@ -37,7 +38,8 @@ export class ScIdentifyRelay {
         activityUuid: activity?.uuid ?? null,
         recipientUuid: ScIdentifyRelay.#tokenUuid(candidate.token) ?? candidate.actor?.uuid ?? null,
         originUuid: ScIdentifyRelay.#tokenUuid(origin),
-        itemId: item.id
+        itemId: item.id,
+        scaling: ScUsageScaling.of(activity)
       }
     });
     return answer ? { status: answer.status, check: answer.answer?.check ?? null } : null;
@@ -54,8 +56,13 @@ export class ScIdentifyRelay {
 
   static async #process(user, request) {
     const refused = { status: "refused" };
-    const activity = await ScIdentifyRelay.#fromUuid(request.activityUuid);
-    if (String(activity?.type ?? "") !== ACTIVITY_TYPES.IDENTIFY || !ScIdentifyRelay.#canUseActivity(activity, user)) {
+    const stored = await ScIdentifyRelay.#fromUuid(request.activityUuid);
+    if (String(stored?.type ?? "") !== ACTIVITY_TYPES.IDENTIFY || !ScIdentifyRelay.#canUseActivity(stored, user)) {
+      return refused;
+    }
+    // A DC formula may scale with the use, as it did on the user's client.
+    const activity = ScUsageScaling.apply(stored, request.scaling ?? 0);
+    if (!activity) {
       return refused;
     }
 

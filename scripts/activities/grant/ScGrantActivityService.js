@@ -1,6 +1,7 @@
 import { Constants } from "../../constants/Constants.js";
 import { Logger } from "../../support/Logger.js";
 import { ACTIVITY_TYPES } from "../ActivityTypes.js";
+import { ScUsageScaling } from "../ScUsageScaling.js";
 import { ScGrantEntryHelpers } from "./ScGrantEntryHelpers.js";
 
 const QUERY_ID = "sc-more-activities.grantItems";
@@ -47,7 +48,7 @@ export class ScGrantActivityService {
       );
     }
 
-    activity = ScGrantActivityService.#withUsageScaling(activity, payload.scaling ?? 0);
+    activity = ScUsageScaling.apply(activity, payload.scaling ?? 0);
     if (!activity) {
       return ScGrantActivityService.#invalidRequest();
     }
@@ -258,7 +259,7 @@ export class ScGrantActivityService {
         activityUuid: activity?.uuid ?? null,
         recipientUuid: recipient.token?.uuid ?? recipient.actor?.uuid ?? null,
         requestUserId: game?.user?.id ?? null,
-        scaling: activity?.item?.flags?.dnd5e?.scaling ?? 0,
+        scaling: ScUsageScaling.of(activity),
         check: checkInfo
       }, { timeout: QUERY_TIMEOUT });
       return {
@@ -280,22 +281,6 @@ export class ScGrantActivityService {
         )
       };
     }
-  }
-
-  /** Rebuild the usage clone without accepting caller-supplied formulas or roll data. */
-  static #withUsageScaling(activity, scaling) {
-    if (!Number.isSafeInteger(scaling) || scaling < 0) {
-      return null;
-    }
-    if (scaling === (activity.item?.flags?.dnd5e?.scaling ?? 0)) {
-      return activity;
-    }
-
-    // Item5e.clone prepares the embedded activities and final attributes with
-    // this flag, just as the system does when configuring an upcast usage.
-    // The persisted item must retain its base level and configured formulas.
-    const item = activity.item.clone({ "flags.dnd5e.scaling": scaling }, { keepId: true });
-    return item.system.activities.get(activity.id) ?? null;
   }
 
   static async #requestedRecipient(activity, sourceActor, recipientUuid) {

@@ -108,3 +108,16 @@ test("returns null for a traveller with no free square in reach", (t) => {
 
   assert.deepEqual(ScRecallPlacement.findSpots(scene, innkeeper, [traveller("hero")]), [null]);
 });
+
+test("an anchor closed in on every side gets no spot, not even past the corners where its walls meet", () => {
+  // Four walls along the edges of the innkeeper's square, meeting at its corners.
+  const walls = [
+    [500, 500, 600, 500],
+    [600, 500, 600, 600],
+    [600, 600, 500, 600],
+    [500, 600, 500, 500]
+  ].map((c) => ({ c, move: 20, door: 0, ds: 0 }));
+  const { scene, innkeeper } = makeScene({ walls });
+
+  assert.deepEqual(ScRecallPlacement.findSpots(scene, innkeeper, [traveller("hero")]), [null]);
+});

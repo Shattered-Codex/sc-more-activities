@@ -857,6 +857,7 @@
   "SCMOREACTIVITIES.Activities.ScRecall.Warning.NoRegion": "Choose a destination region for this activity.",
   "SCMOREACTIVITIES.Activities.ScRecall.Warning.NoHome": "{actor} has no home yet. Use this next to a recall point to set one.",
   "SCMOREACTIVITIES.Activities.ScRecall.Warning.HomeLost": "{actor}'s home no longer exists.",
+  "SCMOREACTIVITIES.Activities.ScRecall.Warning.BindOutOfReach": "That recall point is no longer within reach.",
   "SCMOREACTIVITIES.Activities.ScRecall.Warning.NoActiveGm": "An active GM is required to travel to another scene or with other players' tokens.",
   "SCMOREACTIVITIES.Activities.ScRecall.Warning.GmTimeout": "The GM did not answer the recall request in time.",
   "SCMOREACTIVITIES.Activities.ScRecall.Warning.Blocked": "There was no room at the destination.",

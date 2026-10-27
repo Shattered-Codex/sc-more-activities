@@ -24,6 +24,7 @@ import { ModuleSettingsRegistrar } from "./settings/ModuleSettingsRegistrar.js";
 import { MoreActivitiesMigrationService } from "./migration/MoreActivitiesMigrationService.js";
 import { Logger } from "./support/Logger.js";
 import { ScActivityResultTracker } from "./activities/ScActivityResultTracker.js";
+import { ScDeferredItemDestroy } from "./activities/ScDeferredItemDestroy.js";
 import { ScConditionalChainCardCustomizer } from "./activities/conditional-chain/ScConditionalChainCardCustomizer.js";
 import { Dnd5eLegacyTeleportPreserver } from "./adapters/dnd5e/Dnd5eLegacyTeleportPreserver.js";
 
@@ -47,6 +48,7 @@ Hooks.once("init", () => {
   Dnd5eLegacyTeleportPreserver.install();
 
   ScActivityResultTracker.registerHooks();
+  ScDeferredItemDestroy.registerHooks();
   ScConditionalChainCardCustomizer.registerHook();
   ScContestActivityService.registerQueries();
   ScGrantActivityService.registerQueries();

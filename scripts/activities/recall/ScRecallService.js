@@ -55,7 +55,7 @@ export class ScRecallService {
     }
 
     if (choice.action === "bind") {
-      return ScRecallService.#bind(actor, choice.token);
+      return ScRecallService.#bindChosen(activity, actor, origin, choice.token);
     }
     if (destination.error) {
       ScRecallService.#warnDestination(destination.error, actor);
@@ -151,6 +151,29 @@ export class ScRecallService {
       .filter((token) => token !== origin && token.actor && ScCanvasActivityService.canPerceiveToken(token))
       .map((token) => ({ token, distance: ScRecallRange.between(origin, token, rangeShape) }))
       .sort((left, right) => left.distance - right.distance);
+  }
+
+  /**
+   * The window stays open as long as the user likes, so the choice is checked
+   * again against the scene as it is now: both tokens still on it, the point
+   * still in range, and still one that may be a home.
+   */
+  static async #bindChosen(activity, actor, origin, token) {
+    const uuid = (token?.document ?? token)?.uuid;
+    const point = ScRecallService.#isOnScene(origin) && uuid
+      ? ScRecallService.#bindables(activity, actor, origin).find((entry) => entry.token.document?.uuid === uuid)
+      : null;
+    if (!point) {
+      ScRecallService.#warn("Warning.BindOutOfReach", "That recall point is no longer within reach.");
+      return { canceled: true, reason: "bind-out-of-reach" };
+    }
+    return ScRecallService.#bind(actor, point.token);
+  }
+
+  static #isOnScene(token) {
+    const document = token?.document ?? token;
+    const scene = globalThis.canvas?.scene;
+    return Boolean(scene) && document?.parent === scene && scene.tokens?.get?.(document.id) === document;
   }
 
   /** Binding only writes to the user's own character, so it never needs the GM. */

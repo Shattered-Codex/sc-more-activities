@@ -48,6 +48,11 @@ export class ScIdentifyActivityService {
     }
 
     const { candidate, item } = choice;
+    // The picker can stay open a while, so a creature that walked away meanwhile is out of reach.
+    if (!ScIdentifyActivityService.#stillInRange(activity, resolved.origin, candidate)) {
+      ScIdentifyActivityService.#warnOutOfRange(activity, candidate.token);
+      return { canceled: true, reason: "out-of-range", actor: candidate.actor, item };
+    }
     try {
       return ScIdentifyActivityService.#needsRelay(candidate.actor)
         ? await ScIdentifyActivityService.#identifyThroughGm(activity, sourceActor, candidate, resolved.origin, item)
@@ -262,15 +267,38 @@ export class ScIdentifyActivityService {
 
     const distance = ScCanvasActivityService.rangeDistanceBetweenTokens(origin, token, activity.identify?.rangeShape);
     if (distance > range) {
-      const units = globalThis.canvas?.scene?.grid?.units || "ft";
-      ui.notifications?.warn?.(Constants.format(
-        `${LANG}.Warning.TargetOutOfRange`,
-        { name: token.name ?? token.actor.name ?? "", range, units },
-        `${token.name ?? token.actor.name ?? "The target"} is out of range (${range} ${units}).`
-      ));
+      ScIdentifyActivityService.#warnOutOfRange(activity, token);
       return null;
     }
     return { origin, candidates: [{ actor: token.actor, token, isSelf, distance }] };
+  }
+
+  /** Whether another creature's token is still on the scene and within range of the user's. */
+  static #stillInRange(activity, origin, candidate) {
+    const range = ScIdentifyActivityService.rangeOf(activity);
+    if (range <= 0 || candidate.isSelf || !origin || !candidate.token) {
+      return true;
+    }
+    if (!ScIdentifyActivityService.#isPlaced(origin) || !ScIdentifyActivityService.#isPlaced(candidate.token)) {
+      return false;
+    }
+    return ScCanvasActivityService.rangeDistanceBetweenTokens(origin, candidate.token, activity.identify?.rangeShape) <= range;
+  }
+
+  static #isPlaced(token) {
+    const document = token?.document ?? token;
+    return document?.parent === globalThis.canvas?.scene && document.parent?.tokens?.get?.(document.id) === document;
+  }
+
+  static #warnOutOfRange(activity, token) {
+    const range = ScIdentifyActivityService.rangeOf(activity);
+    const units = globalThis.canvas?.scene?.grid?.units || "ft";
+    const name = token?.name ?? token?.actor?.name ?? "";
+    ui.notifications?.warn?.(Constants.format(
+      `${LANG}.Warning.TargetOutOfRange`,
+      { name, range, units },
+      `${name || "The target"} is out of range (${range} ${units}).`
+    ));
   }
 
   static #notifyNothingToIdentify(activity, candidates) {

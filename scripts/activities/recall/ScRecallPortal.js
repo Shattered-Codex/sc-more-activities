@@ -2,6 +2,7 @@ import { Constants } from "../../constants/Constants.js";
 import { Logger } from "../../support/Logger.js";
 import { ScChatRelay } from "../../support/ScChatRelay.js";
 import { ACTIVITY_TYPES } from "../ActivityTypes.js";
+import { ScUsageScaling } from "../ScUsageScaling.js";
 import { ScCanvasFormula } from "../canvas/ScCanvasFormula.js";
 import { ScRangeShape } from "../canvas/ScRangeShape.js";
 import { ScPortalGeometry } from "../portal/ScPortalGeometry.js";
@@ -35,7 +36,10 @@ const FREE_SPOT_REACH = 6;
  * never see each other's regions.
  */
 export class ScRecallPortal {
-  /** Tail of the crossing queue for each portal, so crossings never race on uses or squares. */
+  /**
+   * Tail of each queue: one per portal, so crossings never race on uses or
+   * squares, and one for openings, so new sides never race on free spots.
+   */
   static #queues = new Map();
 
   /** Portals being torn down, so deleting one side does not recurse through the other. */
@@ -69,9 +73,14 @@ export class ScRecallPortal {
    * did not answer.
    */
   static async open(activity, actor, origin, destinationLabel, entry = null) {
-    const data = { activityUuid: activity.uuid, originUuid: origin.document?.uuid ?? origin.uuid, entry };
+    const data = {
+      activityUuid: activity.uuid,
+      originUuid: origin.document?.uuid ?? origin.uuid,
+      entry,
+      scaling: ScUsageScaling.of(activity)
+    };
     if (game?.user?.isGM) {
-      const outcome = await ScRecallPortal.#executeOpen(game.user, data);
+      const outcome = await ScRecallPortal.#queueOpen(game.user, data);
       if (outcome.status !== "refused") {
         await ScRecallPortal.#postCard(actor, ScRecallPortal.#openCard(outcome));
       }
@@ -90,7 +99,7 @@ export class ScRecallPortal {
   }
 
   static async #handleOpen({ user, data }) {
-    const outcome = await ScRecallPortal.#executeOpen(user, data);
+    const outcome = await ScRecallPortal.#queueOpen(user, data);
     return {
       status: outcome.status,
       content: ScRecallPortal.#openCard(outcome),
@@ -98,12 +107,27 @@ export class ScRecallPortal {
     };
   }
 
+  /**
+   * One opening at a time: the free spot for a side is read before the side
+   * is written, so two openings together would both pick the same spot. A
+   * single queue rather than one per scene, because which scenes an opening
+   * writes to is only known once its destination is resolved.
+   */
+  static #queueOpen(user, data) {
+    return ScRecallPortal.#enqueue(OPEN, () => ScRecallPortal.#executeOpen(user, data));
+  }
+
   static async #executeOpen(user, data = {}) {
     const refused = { status: "refused" };
-    const activity = await ScRecallPortal.#fromUuid(data.activityUuid);
-    if (String(activity?.type ?? "") !== ACTIVITY_TYPES.RECALL
-      || activity.recall?.delivery !== "portal"
-      || !ScRecallTravel.canUseActivity(activity, user)) {
+    const stored = await ScRecallPortal.#fromUuid(data.activityUuid);
+    if (String(stored?.type ?? "") !== ACTIVITY_TYPES.RECALL
+      || stored.recall?.delivery !== "portal"
+      || !ScRecallTravel.canUseActivity(stored, user)) {
+      return refused;
+    }
+    // Range, duration and uses may scale with the use, as they did in the user's window.
+    const activity = ScUsageScaling.apply(stored, data.scaling ?? 0);
+    if (!activity) {
       return refused;
     }
 
@@ -154,15 +178,16 @@ export class ScRecallPortal {
       oneWay: config.oneWay,
       roundTrip: config.roundTrip,
       closeOnReturn: config.closeOnReturn,
-      // Who opened it: their token keeps its id when it changes scene, and a
-      // linked actor is the same actor wherever its token stands.
-      openerTokenId: origin.id ?? null,
+      // Who opened it: their token by uuid, since another scene may hold a
+      // token with the same id (each crossing of theirs records where they
+      // landed), and a linked actor is the same actor wherever it stands.
+      openerTokenUuid: origin.uuid ?? null,
       openerActorId: origin.actorLink ? (origin.actorId ?? origin.actor?.id ?? null) : null,
       usesLeft: config.maxUses === "" ? null : config.maxUses,
       ...ScRecallPortal.#expiryFor(config.durationRounds),
       alliesOnly: activity.recall?.allyFilter !== "any",
       disposition: origin.disposition ?? null,
-      crossings: {},
+      crossings: [],
       activityUuid: activity.uuid ?? null,
       createdBy: user?.id ?? null
     };
@@ -250,12 +275,23 @@ export class ScRecallPortal {
    * otherwise both read the same uses left and land on the same square. The
    * queue is keyed by the portal, not the side, because both sides share one
    * count: two crossings in opposite directions must wait for each other too.
+   *
+   * Inside it, the crossing waits in the travel queue: the same token sent
+   * through two portals, or through a portal and a recall, at once would
+   * otherwise be copied to both destinations. The crossing looks the token up
+   * again once its turn comes, so the later one finds it gone or moved away.
+   * The travel queue never waits on a portal's, so the two cannot deadlock.
    */
   static async #queueCross(user, data) {
     const region = await ScRecallPortal.#fromUuid(data?.regionUuid);
     const key = ScRecallPortal.#describe(region)?.portalId ?? String(data?.regionUuid ?? "");
+    return ScRecallPortal.#enqueue(key, () => ScRecallTravel.queue(() => ScRecallPortal.#executeCross(user, data)));
+  }
+
+  /** Runs `task` after every earlier task queued under `key`, failed or not. */
+  static #enqueue(key, task) {
     const previous = ScRecallPortal.#queues.get(key) ?? Promise.resolve();
-    const current = previous.then(() => ScRecallPortal.#executeCross(user, data));
+    const current = previous.then(task);
     const tail = current.catch(() => {});
     ScRecallPortal.#queues.set(key, tail);
     tail.then(() => {
@@ -302,7 +338,8 @@ export class ScRecallPortal {
     }
 
     const direction = portal.side === "entry" ? "out" : "back";
-    const record = portal.crossings?.[token.id] ?? {};
+    const crossings = Array.isArray(portal.crossings) ? portal.crossings : [];
+    const record = crossings.find((entry) => ScRecallPortal.#isTraveller(entry, token)) ?? {};
     if (portal.roundTrip && (record[direction] || (direction === "back" && !record.out))) {
       return refuse("used");
     }
@@ -315,20 +352,37 @@ export class ScRecallPortal {
       return refuse("occupied");
     }
 
+    // Asked before the move: a token arriving where its id is taken comes out with a new one.
+    const isOpener = ScRecallPortal.#isOpener(portal, token);
     const arrived = await ScRecallTravel.placeToken(token, targetScene, spot);
     await ScRecallArrivalCamera.mark(arrived, user);
-    const crossings = { ...(portal.crossings ?? {}), [arrived.id]: { ...record, [direction]: true } };
+    // The record moves with the traveller to where it landed. Whatever was kept
+    // under the uuid it left, or the one it took, belongs to nobody now, and a
+    // token arriving there later must not inherit it.
+    const nextCrossings = [
+      ...crossings.filter((entry) => entry.tokenUuid !== token.uuid && entry.tokenUuid !== arrived.uuid),
+      {
+        tokenUuid: arrived.uuid,
+        actorId: ScRecallPortal.#actorId(arrived),
+        out: record.out === true || direction === "out",
+        back: record.back === true || direction === "back"
+      }
+    ];
     const remaining = usesLeft === null ? null : usesLeft - 1;
     // The opener coming home ends the trip for everyone, as a Diablo II town portal does.
-    const openerReturned = direction === "back" && portal.closeOnReturn && ScRecallPortal.#isOpener(portal, arrived);
+    const openerReturned = direction === "back" && portal.closeOnReturn && isOpener;
     if (remaining === 0 || openerReturned) {
       await ScRecallPortal.#close(portal.portalId, [region.uuid, portal.partnerUuid]);
     } else {
+      const changes = {
+        [`flags.${Constants.MODULE_ID}.${FLAG}.usesLeft`]: remaining,
+        [`flags.${Constants.MODULE_ID}.${FLAG}.crossings`]: nextCrossings
+      };
+      if (isOpener && portal.openerTokenUuid) {
+        changes[`flags.${Constants.MODULE_ID}.${FLAG}.openerTokenUuid`] = arrived.uuid;
+      }
       for (const side of [region, partner]) {
-        await side.update({
-          [`flags.${Constants.MODULE_ID}.${FLAG}.usesLeft`]: remaining,
-          [`flags.${Constants.MODULE_ID}.${FLAG}.crossings`]: crossings
-        });
+        await side.update(changes);
       }
     }
 
@@ -343,8 +397,21 @@ export class ScRecallPortal {
     };
   }
 
+  /**
+   * Whether a crossing record is this token's. A uuid names a token only while
+   * it stands there, so the actor must match too: a copied or duplicated token
+   * can come to hold a uuid the traveller left.
+   */
+  static #isTraveller(entry, token) {
+    return Boolean(token?.uuid) && entry?.tokenUuid === token.uuid && entry.actorId === ScRecallPortal.#actorId(token);
+  }
+
+  static #actorId(token) {
+    return token?.actorId ?? token?.actor?.id ?? null;
+  }
+
   static #isOpener(portal, token) {
-    if (portal.openerTokenId && token?.id === portal.openerTokenId) {
+    if (portal.openerTokenUuid && token?.uuid === portal.openerTokenUuid) {
       return true;
     }
     return Boolean(portal.openerActorId) && token?.actorLink === true

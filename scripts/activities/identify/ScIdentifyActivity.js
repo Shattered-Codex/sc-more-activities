@@ -1,5 +1,6 @@
 import { ActivityAvailability } from "../../availability/ActivityAvailability.js";
 import { ScActivityResultTracker } from "../ScActivityResultTracker.js";
+import { ScDeferredItemDestroy } from "../ScDeferredItemDestroy.js";
 import { ACTIVITY_TYPES } from "../ActivityTypes.js";
 import { ScIdentifyActivityData } from "./ScIdentifyActivityData.js";
 import { ScIdentifyActivityService } from "./ScIdentifyActivityService.js";
@@ -27,7 +28,23 @@ export class ScIdentifyActivity extends dnd5e.documents.activity.ActivityMixin(S
       return undefined;
     }
 
-    return super.use(usage, dialog, message);
+    const config = ScDeferredItemDestroy.usage(usage);
+    try {
+      return await super.use(config, dialog, message);
+    } finally {
+      // The GM loads this activity by UUID to check the request, so a spent scroll
+      // stays until the use is done, and goes however the use ends.
+      await ScDeferredItemDestroy.release(config);
+    }
+  }
+
+  async consume(usageConfig, messageConfig) {
+    return ScDeferredItemDestroy.consume(this, usageConfig, () => super.consume(usageConfig, messageConfig));
+  }
+
+  async refund(consumed) {
+    await ScDeferredItemDestroy.prepareRefund(this.actor, consumed);
+    return super.refund(consumed);
   }
 
   async _finalizeUsage(config, results) {

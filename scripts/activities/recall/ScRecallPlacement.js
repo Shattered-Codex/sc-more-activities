@@ -5,8 +5,8 @@
  * It works from the scene's data alone: the destination scene is rarely the
  * one on screen, so there is no canvas to ask about collisions. A square is
  * free when it lies inside the scene, overlaps no other token, and the line
- * from the anchor's center to it crosses no wall that blocks movement (open
- * doors let it through).
+ * from the anchor's center to it neither crosses nor touches a wall that
+ * blocks movement (open doors let it through).
  */
 export class ScRecallPlacement {
   /** How many squares away from the anchor to look before giving up. */
@@ -81,13 +81,23 @@ export class ScRecallPlacement {
   }
 
   static #crossesWall(from, to, walls) {
-    return walls.some(([x1, y1, x2, y2]) => ScRecallPlacement.#segmentsCross(from, to, { x: x1, y: y1 }, { x: x2, y: y2 }));
+    return walls.some(([x1, y1, x2, y2]) => ScRecallPlacement.#segmentsMeet(from, to, { x: x1, y: y1 }, { x: x2, y: y2 }));
   }
 
-  /** Whether segments ab and cd cross each other (touching at an end does not count). */
-  static #segmentsCross(a, b, c, d) {
+  /**
+   * Whether segments ab and cd share any point. Touching counts: a line
+   * through the corner where two walls meet slips between them otherwise.
+   */
+  static #segmentsMeet(a, b, c, d) {
     const side = (p, q, r) => ((q.x - p.x) * (r.y - p.y)) - ((q.y - p.y) * (r.x - p.x));
-    return (side(a, b, c) * side(a, b, d) < 0) && (side(c, d, a) * side(c, d, b) < 0);
+    const within = (p, q, r) => r.x >= Math.min(p.x, q.x) && r.x <= Math.max(p.x, q.x)
+      && r.y >= Math.min(p.y, q.y) && r.y <= Math.max(p.y, q.y);
+    const [abc, abd, cda, cdb] = [side(a, b, c), side(a, b, d), side(c, d, a), side(c, d, b)];
+    if (Math.sign(abc) * Math.sign(abd) < 0 && Math.sign(cda) * Math.sign(cdb) < 0) {
+      return true;
+    }
+    return (abc === 0 && within(a, b, c)) || (abd === 0 && within(a, b, d))
+      || (cda === 0 && within(c, d, a)) || (cdb === 0 && within(c, d, b));
   }
 
   static #inside(rect, bounds) {
