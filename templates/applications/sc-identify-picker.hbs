@@ -1,0 +1,54 @@
+<div class="sc-ma-identify-body">
+  {{#if showCreatures}}
+  <section class="sc-ma-identify-section">
+    <h4 class="sc-ma-identify-heading">{{ localize "SCMOREACTIVITIES.Activities.ScIdentify.Picker.Creatures" }}</h4>
+    <div class="sc-ma-identify-creatures">
+      {{#each creatures}}
+      <button type="button" class="sc-ma-identify-creature {{#if selected}}active{{/if}}" data-action="selectCreature"
+              data-index="{{ index }}" aria-pressed="{{#if selected}}true{{else}}false{{/if}}">
+        <img src="{{ img }}" alt="">
+        <span class="sc-ma-identify-creature-name">{{ name }}</span>
+        <span class="sc-ma-identify-meta">
+          {{#if isSelf}}{{ localize "SCMOREACTIVITIES.Activities.ScIdentify.Picker.You" }}{{else}}{{ distance }}{{/if}}
+          &middot; <i class="fa-solid fa-circle-question" inert></i> {{ count }}
+        </span>
+      </button>
+      {{/each}}
+    </div>
+  </section>
+  {{else}}
+  <header class="sc-ma-identify-owner">
+    <img src="{{ owner.img }}" alt="">
+    <div>
+      <strong>{{ owner.name }}</strong>
+      <span class="sc-ma-identify-meta">{{ owner.count }}</span>
+    </div>
+  </header>
+  {{/if}}
+
+  <section class="sc-ma-identify-section">
+    <h4 class="sc-ma-identify-heading">{{ localize "SCMOREACTIVITIES.Activities.ScIdentify.Picker.Items" }}</h4>
+    <div class="sc-ma-identify-items">
+      {{#each items}}
+      <label class="sc-ma-identify-item" data-item-id="{{ id }}">
+        <input type="radio" name="itemId" value="{{ id }}" {{ checked checked }}>
+        <span class="sc-ma-identify-item-icon"><img src="{{ img }}" alt=""></span>
+        <span class="sc-ma-identify-item-details">
+          <span class="sc-ma-identify-item-name item-name">{{ name }}</span>
+          <span class="sc-ma-identify-meta item-type">
+            {{ type }}{{#if container}} &middot; <i class="fa-solid fa-box-open" inert></i> {{ container }}{{/if}}
+          </span>
+        </span>
+        {{#if quantity}}<span class="sc-ma-identify-qty item-quantity">&times;{{ quantity }}</span>{{/if}}
+        <i class="fa-solid fa-circle-check sc-ma-identify-mark" inert></i>
+      </label>
+      {{/each}}
+    </div>
+  </section>
+
+  {{#if checkLabel}}
+  <div class="sc-ma-placement-summary">
+    <span><i class="fa-solid fa-dice-d20" inert></i> {{ checkLabel }}</span>
+  </div>
+  {{/if}}
+</div>

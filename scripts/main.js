@@ -11,12 +11,21 @@ import { ScCanvasActivityService } from "./activities/canvas/ScCanvasActivitySer
 import { ScSaveRequestCard } from "./activities/canvas/ScSaveRequestCard.js";
 import { ScContestActivityService } from "./activities/contest/ScContestActivityService.js";
 import { ScGrantActivityService } from "./activities/grant/ScGrantActivityService.js";
+import { ScChatRelay } from "./support/ScChatRelay.js";
+import { ScIdentifyCard } from "./activities/identify/ScIdentifyCard.js";
+import { ScIdentifyRelay } from "./activities/identify/ScIdentifyRelay.js";
+import { ScJournalItemDrop } from "./activities/journal/ScJournalItemDrop.js";
+import { ScRecallArrivalCamera } from "./activities/recall/ScRecallArrivalCamera.js";
+import { ScRecallPointHud } from "./activities/recall/ScRecallPointHud.js";
+import { ScRecallPortal } from "./activities/recall/ScRecallPortal.js";
+import { ScRecallTravel } from "./activities/recall/ScRecallTravel.js";
 import { ScPortalService } from "./activities/portal/ScPortalService.js";
 import { ScWallCompanions } from "./activities/wall/ScWallCompanions.js";
 import { ModuleSettingsRegistrar } from "./settings/ModuleSettingsRegistrar.js";
 import { MoreActivitiesMigrationService } from "./migration/MoreActivitiesMigrationService.js";
 import { Logger } from "./support/Logger.js";
 import { ScActivityResultTracker } from "./activities/ScActivityResultTracker.js";
+import { ScDeferredItemDestroy } from "./activities/ScDeferredItemDestroy.js";
 import { ScConditionalChainCardCustomizer } from "./activities/conditional-chain/ScConditionalChainCardCustomizer.js";
 import { Dnd5eLegacyTeleportPreserver } from "./adapters/dnd5e/Dnd5eLegacyTeleportPreserver.js";
 
@@ -40,9 +49,18 @@ Hooks.once("init", () => {
   Dnd5eLegacyTeleportPreserver.install();
 
   ScActivityResultTracker.registerHooks();
+  ScDeferredItemDestroy.registerHooks();
   ScConditionalChainCardCustomizer.registerHook();
   ScContestActivityService.registerQueries();
   ScGrantActivityService.registerQueries();
+  ScChatRelay.registerHooks();
+  ScIdentifyRelay.registerHandler();
+  ScIdentifyCard.registerHooks();
+  ScJournalItemDrop.registerHooks();
+  ScRecallTravel.registerHandler();
+  ScRecallPointHud.registerHooks();
+  ScRecallPortal.registerHooks();
+  ScRecallArrivalCamera.registerHooks();
   ScCanvasActivityService.registerQueries();
   ScPortalService.registerQueries();
   ScPortalService.registerHooks();

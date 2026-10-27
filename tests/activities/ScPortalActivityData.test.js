@@ -87,11 +87,6 @@ test("the size field accepts any stored string so no value can break an item", (
   assert.equal(schema.portal.fields.size.choices, undefined);
 });
 
-test("new portal activities allow player use by default", () => {
-  const schema = ScPortalActivityData.defineSchema();
-  assert.equal(schema.portal.fields.allowPlayerRequests.initial, true);
-});
-
 test("portal ranges are circular by default", () => {
   const schema = ScPortalActivityData.defineSchema();
   assert.equal(schema.portal.fields.rangeShape.initial, "circle");

@@ -38,9 +38,26 @@ const LINKS = Object.freeze([
   })
 ]);
 
+/** The lines under the strip, one per span. */
+const NOTE_LINES = Object.freeze([
+  Object.freeze({
+    key: "SCMOREACTIVITIES.Settings.CommunityLinks.NotePatreon",
+    fallback: "Enjoying this module? Consider joining my Patreon for access to many more modules, and take a look at the wiki."
+  }),
+  Object.freeze({
+    key: "SCMOREACTIVITIES.Settings.CommunityLinks.NoteDiscord",
+    fallback: "Have a suggestion or found a bug? Let me know on the Discord channel."
+  })
+]);
+
 export class CommunityLinks {
   static definitions() {
     return LINKS;
+  }
+
+  /** The lines of the note under the strip, localized. */
+  static noteLines() {
+    return NOTE_LINES.map((line) => Constants.localize(line.key, line.fallback));
   }
 
   /** The links with their labels resolved, in the order the strip renders. */
@@ -64,7 +81,7 @@ export class CommunityLinks {
   }
 
   /**
-   * Appends the strip to the module's own settings section. Foundry renders one
+   * Appends the strip, and the note under it, to the module's own settings section. Foundry renders one
    * `section[data-category="<module id>"]` per package, so the strip can be
    * anchored directly instead of walking up from a button.
    */
@@ -88,8 +105,19 @@ export class CommunityLinks {
       strip.append(CommunityLinks.#button(link));
     }
 
-    section.append(strip);
+    section.append(strip, CommunityLinks.#note());
     return strip;
+  }
+
+  static #note() {
+    const note = globalThis.document.createElement("p");
+    note.className = "sc-ma-community-note";
+    for (const text of CommunityLinks.noteLines()) {
+      const line = globalThis.document.createElement("span");
+      line.textContent = text;
+      note.append(line);
+    }
+    return note;
   }
 
   static #button(link) {

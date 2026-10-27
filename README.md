@@ -48,24 +48,38 @@ The goal is to preserve the value of richer activity workflows while shaping the
 ## Included Activity Types
 
 - `sc-sound`: play audio from an activity
+- `sc-journal`: open a journal entry, or one of its pages, for whoever uses the activity, even without permission to see it
 - `sc-macro`: run a world macro or GM-controlled inline code
 - `sc-hook`: fire a hook or module callback for developer workflows
 - `sc-chain`: trigger other activities from the same item in sequence
 - `sc-conditional-chain`: route between activities from the same item with conditions, rolls, and manual choices
 - `sc-contest`: resolve a contested roll workflow between participants
 - `sc-grant`: grant item-related rewards or support item flows
+- `sc-identify`: pick an unidentified item from your inventory, a targeted token's, or a creature's within range, and identify it, optionally behind a check whose DC comes from the item's rarity (including custom rarities from SC Item Rarity Colors) or a custom formula; with SC Item Rarity Colors active, the item picker shows each item in that module's style, including its Unidentified style and hidden image
 - `sc-advancement`: drive item-linked advancement or progression flows
 - `sc-teleport`: move tokens through a guided teleport workflow
 - `sc-movement`: push or pull tokens, with an optional direction choice at use time and preview support
 - `sc-wall`: create wall previews and GM-mediated wall placement
 - `sc-portal`: open a linked pair of portals and ask tokens whether they want to cross
+- `sc-recall`: travel to a chosen region on any scene, or back home beside the NPC a character bound, at once or through a portal that stays open, like a portal scroll or a home stone
 
 ## Asset Credits
 
 Some bundled activity icons are sourced from [game-icons.net](https://game-icons.net/),
-currently using artwork by Delapouite and Lorc.
+currently using artwork by Delapouite, Lorc, and sbed.
 The portal activity uses [Magic Portal by Lorc](https://game-icons.net/1x1/lorc/magic-portal.html),
 recolored to match the module palette.
+The identify activity uses [Crystal Ball by Lorc](https://game-icons.net/1x1/lorc/crystal-ball.html),
+recolored to match the module palette.
+The open journal activity uses [Book Cover by Delapouite](https://game-icons.net/1x1/delapouite/book-cover.html),
+recolored to match the module palette.
+The recall activity uses [House](https://game-icons.net/1x1/delapouite/house.html),
+[House Keys](https://game-icons.net/1x1/delapouite/house-keys.html), and
+[Position Marker](https://game-icons.net/1x1/delapouite/position-marker.html) by Delapouite;
+[Magic Gate](https://game-icons.net/1x1/lorc/magic-gate.html) and
+[Return Arrow](https://game-icons.net/1x1/lorc/return-arrow.html) by Lorc; and
+[Cancel](https://game-icons.net/1x1/sbed/cancel.html) by sbed.
+These icons are recolored to match the module palette or the surrounding control.
 Game-icons.net states that its icons are provided under the
 [Creative Commons Attribution 3.0 license](https://creativecommons.org/licenses/by/3.0/),
 which requires attribution to the original authors. See the
@@ -362,6 +376,8 @@ Which activities produce detailed results:
 - `attack` — attack outcome + attack roll details (**the attack roll only**, not the card damage)
 - `damage`, `heal`, `save` — roll totals and individual dice (the flow waits for the roll to happen)
 - `sc-grant` — gating check outcome and created/updated document counts
+- `sc-identify` — whether the chosen item was identified, plus the check DC and total
+- `sc-recall` — whether it travelled or bound a home, how many tokens arrived, and the destination scene
 - `sc-contest` — winner, tie, and per-participant totals
 - `sc-macro` — the explicit macro return at `value` or `macro.value`, plus `macro.returned`
 - other types — general information only (source activity, chat message, effect/template counts)
@@ -425,6 +441,25 @@ ignored:
 | Grant check DC / total | `activity.check.dc` / `activity.check.total` | DC and total of the gating check |
 | Documents created / updated | `activity.createdCount` / `activity.updatedCount` | How many documents the grant created / updated |
 | Target actor UUID | `activity.actorUuid` | The actor that received the grant |
+| Activity canceled / cancel reason | `activity.canceled` / `activity.reason` | Whether and why the activity was canceled |
+
+**Identify** — `sc-identify` activities:
+
+| Label | Path | Meaning |
+| --- | --- | --- |
+| Item identified | `activity.identified` | `true` when the chosen item was identified (also `success`) |
+| Identify check DC / total | `activity.check.dc` / `activity.check.total` | DC (from the item's rarity or the custom formula) and the check total (also `target` / `total`) |
+| Item UUID | `activity.itemUuid` | The item the user chose |
+| Actor UUID | `activity.actorUuid` | The actor whose item was chosen (yourself, the target, or the chosen creature) |
+| Activity canceled / cancel reason | `activity.canceled` / `activity.reason` | Whether and why the activity was canceled |
+
+**Recall** — `sc-recall` activities:
+
+| Label | Path | Meaning |
+| --- | --- | --- |
+| Recall action | `activity.action` | `"travel"` when tokens moved, `"portal"` when a portal opened, `"bind"` when the character set a new home |
+| Tokens that travelled | `activity.travelledCount` | How many tokens reached the destination, the user's included (also the main `total`) |
+| Destination scene UUID | `activity.sceneUuid` | The scene the tokens travelled to |
 | Activity canceled / cancel reason | `activity.canceled` / `activity.reason` | Whether and why the activity was canceled |
 
 **Contest** — `sc-contest` activities:
@@ -612,6 +647,97 @@ A portal closes when any of these happens:
 **Duration in rounds** is counted in combat rounds while the combat that opened the portal is running,
 and as the same amount of world time outside combat, so a portal opened out of initiative still
 expires. A duration of `0` keeps the portal open until it is closed.
+
+## SC Recall Guide
+
+`sc-recall` moves the user's token, and any companions they bring, somewhere else in the world, crossing
+scenes when needed. It has two destinations:
+
+- **Fixed region** — a Region chosen on the activity, on any scene. Like a portal scroll that always leads to
+  the same plaza. Tokens land inside it wherever there is room, as with core's Teleport Token behavior.
+- **Home stone** — beside the NPC each character bound as their home, wherever that NPC stands now, on
+  whichever scene it is. Arrivals take the free squares closest to the NPC, never through a wall that blocks
+  movement (open doors let them through).
+
+Using the activity always opens a small window first that names the destination and asks to confirm
+(**Travel** or **Open portal**), with the companion and home choices below when there are any. Nobody moves
+until the user confirms, and closing the window cancels the use.
+
+### Binding A Home
+
+Use a home stone activity within its **bind range** of a recall point and the window offers **Set as home**.
+The bind and companion ranges are measured edge to edge, as D&D counts distance: standing beside a creature is
+5 feet from it whatever its size, so a huge innkeeper is as easy to reach as a medium one.
+The home is stored on the character, so each character has its own and binding never needs the GM.
+**Recall points** decides which NPCs qualify: only tokens the GM marked with the house-flag button on the
+Token HUD (GM only), or any NPC token without a player owner.
+
+### Companions
+
+A **companion range** above 0 lets creatures within it come along; the window lists them and the user picks
+who goes (player characters start selected). **Who can come along** keeps it to tokens with the user's
+disposition, or allows anyone. Recall points themselves stay behind.
+
+### Opening A Portal
+
+**How they travel** set to **Open a portal** leaves a pair of portals instead of moving anyone. After confirming,
+the user clicks where the near side opens: the **opening range** is drawn around their token and the portal
+follows the pointer, green where it may open and red where it may not (right-click or Escape cancels). The other
+side opens at the destination: on the free spot nearest the region's center, inside it when it can, or on a free
+spot beside the home NPC.
+
+Every use opens its own pair of portals: several portals into the same plaza sit
+side by side instead of stacking, and each one leads back to the spot it was opened from.
+
+Anyone allowed crosses by clicking a side while a token of theirs stands on or next to it. The prompt names
+where that side leads (the destination, or the scene the portal was opened from on the way back), and the token
+lands on a free square beside the other side; owners follow their token to the new scene.
+
+**Instant** travel is one way: it leaves nothing behind to come back through. Use **Open a portal** with both
+directions for a way back, or a home stone to return home.
+
+- **Opening range** — how far from the user's token the near side may open (`0` for anywhere on the scene).
+- **Direction** — both ways, or one way only (from the side opened here to the destination).
+- **Close when its opener returns** — on by default: both sides close as soon as the creature that opened the portal
+  crosses back through it. Everyone else may go and come back freely until then.
+- **Go and return once** — each creature may cross out once and come back once; only those who went through can
+  return.
+- **Crossings** — total crossings, in either direction, before the portal closes (blank for no limit).
+- **Duration in rounds** — counted in combat rounds during combat, and as world time outside it; `0` keeps the
+  portal until it is used up or deleted.
+- **Who can cross** — only tokens with the opener's disposition, or anyone. A player only ever sends tokens they
+  own.
+
+Deleting either side on the Regions layer closes both. Size, shape, color, visibility, and optional art work like
+the `sc-portal` activity's, whose geometry and crossing prompt the recall portal reuses; the two activities never
+touch each other's portals.
+
+### Who Runs It
+
+A player uses the activity like any other. When everything stays on the same scene and every token is the
+player's own, it runs on their client. Travel to another scene creates the tokens there and deletes the
+originals, which only a GM may do, so the request goes to the active GM, who checks it against the stored
+activity (the player owns it, the first token is the activity's actor, companions are in range and allowed,
+the home is still a recall point) and then moves everyone. Owners watching the old scene are taken to the new
+one. Each owner's camera then centers on their token: right away on the same scene, or once the new scene
+has loaded. A GM's camera only follows the trips that GM took. Without an active GM, only same-scene travel with the player's own tokens is possible.
+
+Moving to another scene replaces each token with a new one, as core does: a token in combat leaves that
+combat, and players must be able to view the destination scene.
+
+## SC Open Journal Guide
+
+`sc-journal` opens a journal entry for whoever uses the activity: a letter found on a body, the map in a
+scroll case, a book that reads itself aloud. Set the journal by dropping a journal entry or one of its pages
+on the activity's Journal field, or by pasting its UUID (a page UUID sets the page too). Choose a page to
+open the journal at that page, or leave it on the whole journal. Dropping a journal entry or page on an
+item sheet's Activities tab creates the activity for it, named after what was dropped.
+
+The journal opens as an observer whatever the user's permission, the way core's Show to Players does when
+forced: every client already holds the world's journals, and the sheet grants a temporary Observer level
+that ends when it closes. Nothing is saved and no GM is needed. When the whole journal opens, pages the GM
+set to None on their own stay hidden, as they do for a forced show. Anyone who can edit the activity can
+point it at any journal whose UUID they know, so keep secret journals out of activities players can edit.
 
 ## Migration From `more-activities`
 

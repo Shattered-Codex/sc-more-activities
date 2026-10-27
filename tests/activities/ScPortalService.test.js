@@ -464,7 +464,6 @@ function makeActivity({ owner = true, ...overrides } = {}) {
       color: "#8a63d2",
       entryImage: "",
       exitImage: "",
-      allowPlayerRequests: false,
       ...overrides
     }
   };
@@ -573,25 +572,12 @@ test("an unlimited portal stores no use counter and no deadline", async(t) => {
   assert.equal(ScPortalService.isExpired(portal), false);
 });
 
-test("a player cannot open a portal unless the activity allows it", async(t) => {
+test("a player who owns the activity may open its portal", async(t) => {
   const caster = makeToken({ id: "caster", x: 100, y: 100 });
   const scene = makeScene({ tokens: [caster] });
   installGlobals(t, scene);
   globalThis.game.users.set("player", { id: "player", isGM: false, active: true });
   globalThis.fromUuid = async() => makeActivity();
-
-  const result = await ScPortalService.executeOperation(createRequest(scene, { requestUserId: "player" }));
-
-  assert.equal(result.ok, false);
-  assert.deepEqual(scene.created, []);
-});
-
-test("a player may open a portal when the activity allows it", async(t) => {
-  const caster = makeToken({ id: "caster", x: 100, y: 100 });
-  const scene = makeScene({ tokens: [caster] });
-  installGlobals(t, scene);
-  globalThis.game.users.set("player", { id: "player", isGM: false, active: true });
-  globalThis.fromUuid = async() => makeActivity({ allowPlayerRequests: true });
 
   const result = await ScPortalService.executeOperation(createRequest(scene, { requestUserId: "player" }));
 
@@ -604,7 +590,7 @@ test("a player cannot open somebody else's portal item", async(t) => {
   const scene = makeScene({ tokens: [caster] });
   installGlobals(t, scene);
   globalThis.game.users.set("player", { id: "player", isGM: false, active: true });
-  globalThis.fromUuid = async() => makeActivity({ allowPlayerRequests: true, owner: false });
+  globalThis.fromUuid = async() => makeActivity({ owner: false });
 
   const result = await ScPortalService.executeOperation(createRequest(scene, { requestUserId: "player" }));
 
@@ -658,7 +644,7 @@ test("a genuine player query is still served", async(t) => {
   const scene = makeScene({ tokens: [caster] });
   installGlobals(t, scene);
   globalThis.game.users.set("player", { id: "player", isGM: false, active: true });
-  globalThis.fromUuid = async() => makeActivity({ allowPlayerRequests: true });
+  globalThis.fromUuid = async() => makeActivity();
 
   const result = await ScPortalService.handlePortalQuery(createRequest(scene, { requestUserId: "player" }));
 

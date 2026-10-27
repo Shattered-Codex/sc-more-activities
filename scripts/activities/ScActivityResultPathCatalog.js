@@ -66,6 +66,22 @@ const GROUPS = Object.freeze({
     "activity.canceled",
     "activity.reason"
   ]),
+  identify: Object.freeze([
+    "activity.identified",
+    "activity.itemUuid",
+    "activity.actorUuid",
+    "activity.check.dc",
+    "activity.check.total",
+    "activity.canceled",
+    "activity.reason"
+  ]),
+  recall: Object.freeze([
+    "activity.action",
+    "activity.travelledCount",
+    "activity.sceneUuid",
+    "activity.canceled",
+    "activity.reason"
+  ]),
   contest: Object.freeze([
     "activity.canceled",
     "activity.winner",
@@ -102,6 +118,8 @@ const ACTIVITY_GROUPS = Object.freeze({
   heal: Object.freeze(["common", "roll", "dice"]),
   save: Object.freeze(["common", "save", "roll", "dice"]),
   "sc-grant": Object.freeze(["common", "grant", "roll"]),
+  "sc-identify": Object.freeze(["common", "identify", "roll"]),
+  "sc-recall": Object.freeze(["common", "recall"]),
   "sc-contest": Object.freeze(["common", "contest"]),
   "sc-macro": Object.freeze(["common", "macro"]),
   "sc-teleport": Object.freeze(["common", "canvas", "canvasDestination"]),

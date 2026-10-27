@@ -98,10 +98,6 @@ export class ScPortalActivityData extends dnd5e.dataModels.activity.BaseActivity
         exitImage: new fields.StringField({
           required: false,
           initial: ""
-        }),
-        allowPlayerRequests: new fields.BooleanField({
-          required: false,
-          initial: true
         })
       })
     };

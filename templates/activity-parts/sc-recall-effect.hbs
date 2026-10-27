@@ -1,0 +1,235 @@
+<section class="tab activity-{{ tab.id }} {{ tab.cssClass }}" data-tab="{{ tab.id }}" data-group="{{ tab.group }}">
+  {{> "systems/dnd5e/templates/activity/parts/activity-effects.hbs" }}
+
+  <fieldset>
+    <legend>{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Sections.Destination" }}</legend>
+
+    <div class="sc-ma-recall-choices" role="radiogroup"
+         aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Mode.Label" }}">
+      {{#each modeChoices}}
+      <label class="sc-ma-recall-choice">
+        <input type="radio" name="recall.mode" value="{{ this.value }}" {{#if this.checked}}checked{{/if}}>
+        <i class="sc-ma-recall-icon sc-ma-recall-icon--{{ this.icon }}" inert></i>
+        <span class="sc-ma-recall-choice-title">{{ this.label }}</span>
+        <span class="sc-ma-recall-choice-description">{{ this.description }}</span>
+      </label>
+      {{/each}}
+    </div>
+
+    {{#if isRegionMode}}
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Region.Label" }}</label>
+      <div class="form-fields sc-ma-region-picker" data-sc-region-picker>
+        <input type="hidden" name="recall.regionUuid" value="{{ recall.regionUuid }}">
+        <div class="sc-ma-region-selection">
+          <button type="button" data-sc-region-toggle aria-expanded="false" title="{{ selectedRegionLabel }}"><span data-sc-region-label>{{ selectedRegionLabel }}</span></button>
+          <button type="button" data-sc-region-clear aria-label="{{ localize 'SCMOREACTIVITIES.Activities.ScRecall.Fields.Region.Clear' }}" title="{{ localize 'SCMOREACTIVITIES.Activities.ScRecall.Fields.Region.Clear' }}">
+            <i class="sc-ma-recall-icon sc-ma-recall-icon--cancel" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="sc-ma-region-panel" data-sc-region-panel hidden>
+          <input type="search" autocomplete="off" placeholder="{{ localize 'SCMOREACTIVITIES.Activities.ScRecall.Fields.Region.Search' }}" aria-label="{{ localize 'SCMOREACTIVITIES.Activities.ScRecall.Fields.Region.Search' }}">
+          <div class="sc-ma-region-results" data-sc-region-results></div>
+          <p class="hint" role="status" aria-live="polite"></p>
+        </div>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Region.Hint" }}</p>
+    </div>
+    {{else}}
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.HomeSource.Label" }}</label>
+      <div class="form-fields">
+        <select name="recall.homeSource">
+          {{ selectOptions homeSourceOptions selected=recall.homeSource valueAttr="value" labelAttr="label" }}
+        </select>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.HomeSource.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.BindRange.Label" }}</label>
+      <div class="form-fields sc-ma-range-fields">
+        <input type="number" name="recall.bindRange" value="{{ recall.bindRange }}" min="0" step="any">
+        {{#if shapeWithDestination}}
+        <select name="recall.rangeShape" data-tooltip="{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.RangeShape.Hint" }}"
+                aria-label="{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.RangeShape.Label" }}">
+          {{ selectOptions rangeShapeOptions selected=recall.rangeShape valueAttr="value" labelAttr="label" }}
+        </select>
+        {{/if}}
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.BindRange.Hint" }}</p>
+    </div>
+    {{/if}}
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Sections.Travel" }}</legend>
+
+    <div class="sc-ma-recall-choices" role="radiogroup"
+         aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Delivery.Label" }}">
+      {{#each deliveryChoices}}
+      <label class="sc-ma-recall-choice">
+        <input type="radio" name="recall.delivery" value="{{ this.value }}" {{#if this.checked}}checked{{/if}}>
+        <i class="sc-ma-recall-icon sc-ma-recall-icon--{{ this.icon }}" inert></i>
+        <span class="sc-ma-recall-choice-title">{{ this.label }}</span>
+        <span class="sc-ma-recall-choice-description">{{ this.description }}</span>
+      </label>
+      {{/each}}
+    </div>
+
+    {{#unless isPortal}}
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.AllyRange.Label" }}</label>
+      <div class="form-fields sc-ma-range-fields">
+        <input type="number" name="recall.allyRange" value="{{ recall.allyRange }}" min="0" step="any">
+        {{#if shapeWithCompanions}}
+        <select name="recall.rangeShape" data-tooltip="{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.RangeShape.Hint" }}"
+                aria-label="{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.RangeShape.Label" }}">
+          {{ selectOptions rangeShapeOptions selected=recall.rangeShape valueAttr="value" labelAttr="label" }}
+        </select>
+        {{/if}}
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.AllyRange.Hint" }}</p>
+    </div>
+
+    {{#if showAllyFilter}}
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.AllyFilter.Label" }}</label>
+      <div class="form-fields">
+        <select name="recall.allyFilter">
+          {{ selectOptions allyFilterOptions selected=recall.allyFilter valueAttr="value" labelAttr="label" }}
+        </select>
+      </div>
+    </div>
+    {{/if}}
+    {{/unless}}
+  </fieldset>
+
+  {{#if isPortal}}
+  <fieldset>
+    <legend>{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Sections.Portal" }}</legend>
+
+    <details class="sc-ma-howto" data-sc-panel="howto" {{#if openPanels.howto}}open{{/if}}>
+      <summary><i class="fa-solid fa-circle-question" inert></i>{{ localize "SCMOREACTIVITIES.Activities.ScPortal.HowTo.Title" }}</summary>
+      <ul>
+        <li><i class="fa-solid fa-hand-pointer" inert></i><span>{{{ localize "SCMOREACTIVITIES.Activities.ScRecall.HowTo.Open" }}}</span></li>
+        <li><i class="fa-solid fa-door-open" inert></i><span>{{{ localize "SCMOREACTIVITIES.Activities.ScPortal.HowTo.Cross" }}}</span></li>
+        <li><i class="fa-solid fa-hourglass-end" inert></i><span>{{{ localize "SCMOREACTIVITIES.Activities.ScRecall.HowTo.Close" }}}</span></li>
+      </ul>
+    </details>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Portal.PlacementRange.Label" }}</label>
+      <div class="form-fields sc-ma-range-fields">
+        <input type="text" name="portal.placementRange" value="{{ portal.placementRange }}">
+        {{#if shapeWithPortal}}
+        <select name="recall.rangeShape" data-tooltip="{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.RangeShape.Hint" }}"
+                aria-label="{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.RangeShape.Label" }}">
+          {{ selectOptions rangeShapeOptions selected=recall.rangeShape valueAttr="value" labelAttr="label" }}
+        </select>
+        {{/if}}
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Portal.PlacementRange.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Portal.Size.Label" }}</label>
+      <div class="form-fields">
+        <select name="portal.size">
+          {{ selectOptions portalSizeOptions selected=portal.size valueAttr="value" labelAttr="label" }}
+        </select>
+        <select name="portal.shape">
+          {{ selectOptions portalShapeOptions selected=portal.shape valueAttr="value" labelAttr="label" }}
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Portal.Crossers.Label" }}</label>
+      <div class="form-fields">
+        <select name="recall.allyFilter">
+          {{ selectOptions allyFilterOptions selected=recall.allyFilter valueAttr="value" labelAttr="label" }}
+        </select>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Portal.Crossers.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Portal.Direction.Label" }}</label>
+      <div class="form-fields">
+        <select name="portal.direction">
+          {{ selectOptions directionOptions selected=portal.direction valueAttr="value" labelAttr="label" }}
+        </select>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Portal.Direction.Hint" }}</p>
+    </div>
+
+    {{#if showRoundTrip}}
+    <div class="sc-ma-toggles">
+      <label class="sc-ma-toggle">
+        <input type="checkbox" name="portal.closeOnReturn" {{#if portal.closeOnReturn}}checked{{/if}}>
+        <span>
+          <span class="sc-ma-toggle-title">{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Portal.CloseOnReturn.Label" }}</span>
+          <span class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Portal.CloseOnReturn.Hint" }}</span>
+        </span>
+      </label>
+      <label class="sc-ma-toggle">
+        <input type="checkbox" name="portal.roundTrip" {{#if portal.roundTrip}}checked{{/if}}>
+        <span>
+          <span class="sc-ma-toggle-title">{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Portal.RoundTrip.Label" }}</span>
+          <span class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Portal.RoundTrip.Hint" }}</span>
+        </span>
+      </label>
+    </div>
+    {{/if}}
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Portal.MaxUses.Label" }}</label>
+      <div class="form-fields">
+        <input type="text" name="portal.maxUses" value="{{ portal.maxUses }}"
+               placeholder="{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Portal.MaxUses.Placeholder" }}">
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Portal.MaxUses.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Portal.Duration.Label" }}</label>
+      <div class="form-fields">
+        <input type="text" name="portal.durationRounds" value="{{ portal.durationRounds }}">
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Portal.Duration.Hint" }}</p>
+    </div>
+
+    <details class="sc-ma-details" data-sc-panel="appearance" {{#if openPanels.appearance}}open{{/if}}>
+      <summary>{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Sections.Appearance" }}</summary>
+
+      <div class="sc-ma-details-body">
+        <div class="form-group">
+          <label>{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Portal.Visibility.Label" }}</label>
+          <div class="form-fields">
+            <select name="portal.visibility">
+              {{ selectOptions portalVisibilityOptions selected=portal.visibility valueAttr="value" labelAttr="label" }}
+            </select>
+          </div>
+          <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Portal.Visibility.Hint" }}</p>
+        </div>
+
+        <div class="form-group">
+          <label>{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Portal.Color.Label" }}</label>
+          <div class="form-fields">
+            <color-picker name="portal.color" value="{{ portal.color }}"></color-picker>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Portal.Image.Label" }}</label>
+          <div class="form-fields">
+            <file-picker name="portal.image" type="imagevideo" value="{{ portal.image }}"></file-picker>
+          </div>
+          <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Fields.Portal.Image.Hint" }}</p>
+        </div>
+      </div>
+    </details>
+  </fieldset>
+  {{/if}}
+</section>

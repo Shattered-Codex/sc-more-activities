@@ -13,8 +13,12 @@ export class ScPortalActivitySheet extends dnd5e.applications.activity.ActivityS
     }
   };
 
+  /** Collapsible panels (`data-sc-panel`) open in this sheet, kept across the re-render each change causes. */
+  #openPanels = new Set();
+
   async _prepareEffectContext(context, options) {
     context = await super._prepareEffectContext(context, options);
+    context.openPanels = Object.fromEntries([...this.#openPanels].map((name) => [name, true]));
     context.portal = {
       placementRange: this.activity?.portal?.placementRange ?? "30",
       linkRange: this.activity?.portal?.linkRange ?? "",
@@ -29,14 +33,26 @@ export class ScPortalActivitySheet extends dnd5e.applications.activity.ActivityS
       visibility: this.activity?.portal?.visibility ?? "all",
       color: this.activity?.portal?.color ?? "#8a63d2",
       entryImage: this.activity?.portal?.entryImage ?? "",
-      exitImage: this.activity?.portal?.exitImage ?? "",
-      allowPlayerRequests: this.activity?.portal?.allowPlayerRequests !== false
+      exitImage: this.activity?.portal?.exitImage ?? ""
     };
     context.shapeOptions = ScPortalActivitySheet.#shapeOptions();
     context.rangeShapeOptions = ScRangeShape.options();
     context.sizeOptions = ScPortalActivitySheet.#sizeOptions();
     context.visibilityOptions = ScPortalActivitySheet.#visibilityOptions();
     return context;
+  }
+
+  async _onRender(context, options) {
+    await super._onRender(context, options);
+    this.element.querySelectorAll("details[data-sc-panel]").forEach((panel) => {
+      panel.addEventListener("toggle", () => {
+        if (panel.open) {
+          this.#openPanels.add(panel.dataset.scPanel);
+        } else {
+          this.#openPanels.delete(panel.dataset.scPanel);
+        }
+      });
+    });
   }
 
   async _prepareIdentityContext(context, options) {

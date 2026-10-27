@@ -7,8 +7,8 @@ const moduleManifest = JSON.parse(readFileSync(new URL("module.json", root), "ut
 const effectTemplates = readdirSync(new URL("templates/activity-parts", root))
   .filter((name) => /^sc-.*-effect\.hbs$/.test(name));
 const registrationPaths = [
-  "advancement", "chain", "conditional-chain", "contest", "grant", "hook",
-  "macro", "movement", "portal", "sound", "teleport", "wall"
+  "advancement", "chain", "conditional-chain", "contest", "grant", "hook", "identify",
+  "journal", "macro", "movement", "portal", "recall", "sound", "teleport", "wall"
 ].map((type) => new URL(`scripts/activities/${type}/registerSc${type.split("-").map((part) => part[0].toUpperCase() + part.slice(1)).join("")}Activity.js`, root));
 
 test("declares dual D&D 5e 5.0 and 6.0 compatibility", () => {
@@ -21,7 +21,7 @@ test("declares dual D&D 5e 5.0 and 6.0 compatibility", () => {
 });
 
 test("always renders the D&D effect controls so an effect can be added", () => {
-  assert.equal(effectTemplates.length, 12);
+  assert.equal(effectTemplates.length, 15);
   for (const template of effectTemplates) {
     const contents = readFileSync(new URL(`templates/activity-parts/${template}`, root), "utf8");
     assert.match(contents, /\{\{> "systems\/dnd5e\/templates\/activity\/parts\/activity-effects\.hbs" \}\}/);
