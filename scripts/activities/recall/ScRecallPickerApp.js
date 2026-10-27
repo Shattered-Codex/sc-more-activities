@@ -43,7 +43,8 @@ export class ScRecallPickerApp extends HandlebarsApplicationMixin(ApplicationV2)
   };
 
   /**
-   * @param {object} destination  `{ label }`, or `{ error }` when there is nowhere to go yet.
+   * @param {object} destination  `{ label, anchor }` (the home NPC's token, whose art the card
+   *                              shows), or `{ error }` when there is nowhere to go yet.
    * @param {object|null} home    The home bound on the user's character.
    * @param {object[]} companions `{ token, distance, selected }`
    * @param {object[]} bindables  `{ token, distance, isHome }`
@@ -85,12 +86,14 @@ export class ScRecallPickerApp extends HandlebarsApplicationMixin(ApplicationV2)
     const tile = (entry, index) => ({
       index,
       name: entry.token?.name ?? entry.token?.document?.name ?? "",
-      img: entry.token?.document?.texture?.src ?? entry.token?.actor?.img ?? "",
+      img: ScRecallPickerApp.#image(entry.token),
       distance: `${Math.round(Number(entry.distance) || 0)} ${units}`
     });
     const canTravel = !this.#destination.error;
     return {
       canTravel,
+      // A home shows the NPC it leads to; a region has no face, so it keeps the marker.
+      destinationArt: canTravel ? ScRecallPickerApp.#image(this.#destination.anchor) : "",
       portal: this.#portal,
       destination: canTravel
         ? this.#destination.label
@@ -108,6 +111,18 @@ export class ScRecallPickerApp extends HandlebarsApplicationMixin(ApplicationV2)
       companions: this.#companions.map((entry, index) => ({ ...tile(entry, index), selected: this.#selected.has(index) })),
       bindables: this.#bindables.map((entry, index) => ({ ...tile(entry, index), isHome: entry.isHome }))
     };
+  }
+
+  /**
+   * A token's art for an <img>: its texture, or its actor's portrait when the
+   * texture is a video, which an <img> cannot show.
+   */
+  static #image(token) {
+    const src = token?.document?.texture?.src ?? token?.texture?.src ?? "";
+    if (src && !/\.(webm|mp4|m4v|ogv)(\?|$)/i.test(src)) {
+      return src;
+    }
+    return token?.actor?.img ?? "";
   }
 
   _onClose(options) {

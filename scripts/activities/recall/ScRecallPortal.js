@@ -369,7 +369,7 @@ export class ScRecallPortal {
       }
     ];
     const remaining = usesLeft === null ? null : usesLeft - 1;
-    // The opener coming home ends the trip for everyone, as a Diablo II town portal does.
+    // The opener coming home ends the trip for everyone.
     const openerReturned = direction === "back" && portal.closeOnReturn && isOpener;
     if (remaining === 0 || openerReturned) {
       await ScRecallPortal.#close(portal.portalId, [region.uuid, portal.partnerUuid]);
@@ -659,7 +659,7 @@ export class ScRecallPortal {
    * Where a new portal opens in the destination region: the free spot nearest
    * its center, inside it when possible. Every use opens its own pair, so a
    * busy destination gets portals side by side rather than stacked, each still
-   * leading back to where it was opened, as town portals do in Diablo II.
+   * leading back to where it was opened.
    */
   static #centerInRegion(region, scene, squares) {
     const box = ScRecallPortal.#regionBox(region);

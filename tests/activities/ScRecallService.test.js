@@ -384,7 +384,7 @@ test("the GM refuses a player who does not own the activity", async() => {
   assert.equal(world.heroToken.parent, world.field);
 });
 
-test("a hearthstone without a home and away from any recall point says how to set one", async() => {
+test("a home stone without a home and away from any recall point says how to set one", async() => {
   const world = setup({ mode: "home" });
 
   const result = await ScRecallService.execute(world.activity);
@@ -415,7 +415,7 @@ test("only NPCs the GM marked are recall points unless the activity takes any NP
   assert.equal(ScRecallTravel.isRecallPoint(world.friendToken, world.activity), false);
 });
 
-test("the hearthstone brings the character beside their home NPC on another scene", async() => {
+test("the home stone brings the character beside their home NPC on another scene", async() => {
   const world = setup({ mode: "home" });
   world.hero.flags[MODULE] = { recallHome: { tokenUuid: world.innkeeperToken.uuid, name: "innkeeper", sceneName: "town" } };
 
@@ -613,4 +613,22 @@ test("binding refuses once the user's own token has left the scene", async() => 
 
   assert.equal(result.reason, "bind-out-of-reach");
   assert.equal(world.hero.flags[MODULE]?.recallHome, undefined);
+});
+
+test("the destination card shows the home NPC's token, and only the marker for a region", async() => {
+  const world = setup({ mode: "home" });
+  world.innkeeperToken.texture = { src: "tokens/innkeeper.webp" };
+  world.hero.flags[MODULE] = { recallHome: { tokenUuid: world.innkeeperToken.uuid, name: "innkeeper", sceneName: "town" } };
+  const cardFor = (destination) => new ScRecallPickerApp({ destination })._prepareContext();
+
+  const home = await ScRecallTravel.resolveDestination(world.activity, world.hero);
+  assert.equal((await cardFor(home)).destinationArt, "tokens/innkeeper.webp");
+
+  world.innkeeperToken.texture = { src: "tokens/innkeeper.webm" };
+  world.innkeeperToken.actor.img = "portraits/innkeeper.webp";
+  assert.equal((await cardFor(home)).destinationArt, "portraits/innkeeper.webp", "a video token falls back to the portrait");
+
+  world.activity.recall.mode = "region";
+  assert.equal((await cardFor(await ScRecallTravel.resolveDestination(world.activity, world.hero))).destinationArt, "");
+  assert.equal((await cardFor({ error: "no-home" })).destinationArt, "");
 });

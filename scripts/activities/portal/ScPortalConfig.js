@@ -19,8 +19,7 @@ export class ScPortalConfig {
       visibility: ["gm", "hidden"].includes(config.visibility) ? config.visibility : "all",
       color: ScPortalConfig.#hexColor(config.color, "#8a63d2"),
       entryImage: String(config.entryImage ?? "").trim(),
-      exitImage: String(config.exitImage ?? "").trim(),
-      allowPlayerRequests: config.allowPlayerRequests !== false
+      exitImage: String(config.exitImage ?? "").trim()
     };
   }
 

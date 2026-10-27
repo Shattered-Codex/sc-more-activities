@@ -4,6 +4,9 @@ import { ScRecallRegionSearch } from "./ScRecallRegionSearch.js";
 export class ScRecallActivitySheet extends dnd5e.applications.activity.ActivitySheet {
   #regionEntries = [];
 
+  /** Collapsible panels (`data-sc-panel`) open in this sheet, kept across the re-render each change causes. */
+  #openPanels = new Set();
+
   static DEFAULT_OPTIONS = {
     classes: ["dnd5e2", "sheet", "activity-sheet", "sc-more-activities", "sc-ma-activity", "sc-ma-activity--recall"]
   };
@@ -53,10 +56,11 @@ export class ScRecallActivitySheet extends dnd5e.applications.activity.ActivityS
     context.shapeWithDestination = !context.isRegionMode;
     context.shapeWithCompanions = context.isRegionMode && !context.isPortal;
     context.shapeWithPortal = context.isRegionMode && context.isPortal;
-    context.deliveryOptions = [
-      { value: "instant", label: localize("Delivery.Choices.Instant") },
-      { value: "portal", label: localize("Delivery.Choices.Portal") }
-    ];
+    context.openPanels = Object.fromEntries([...this.#openPanels].map((name) => [name, true]));
+    context.deliveryChoices = ScRecallActivitySheet.#choices(context.recall.delivery, [
+      { value: "instant", icon: "travel", label: localize("Delivery.Choices.Instant"), description: localize("Delivery.Choices.InstantHint") },
+      { value: "portal", icon: "portal", label: localize("Delivery.Choices.Portal"), description: localize("Delivery.Choices.PortalHint") }
+    ]);
     context.directionOptions = [
       { value: "both", label: localize("Portal.Direction.Choices.Both") },
       { value: "oneWay", label: localize("Portal.Direction.Choices.OneWay") }
@@ -71,10 +75,10 @@ export class ScRecallActivitySheet extends dnd5e.applications.activity.ActivityS
       { value: "gm", label: localize("Portal.Visibility.Choices.Gm") },
       { value: "hidden", label: localize("Portal.Visibility.Choices.Hidden") }
     ];
-    context.modeOptions = [
-      { value: "region", label: localize("Mode.Choices.Region") },
-      { value: "home", label: localize("Mode.Choices.Home") }
-    ];
+    context.modeChoices = ScRecallActivitySheet.#choices(context.recall.mode, [
+      { value: "region", icon: "destination", label: localize("Mode.Choices.Region"), description: localize("Mode.Choices.RegionHint") },
+      { value: "home", icon: "home", label: localize("Mode.Choices.Home"), description: localize("Mode.Choices.HomeHint") }
+    ]);
     context.homeSourceOptions = [
       { value: "marked", label: localize("HomeSource.Choices.Marked") },
       { value: "any", label: localize("HomeSource.Choices.Any") }
@@ -95,6 +99,16 @@ export class ScRecallActivitySheet extends dnd5e.applications.activity.ActivityS
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.element.querySelectorAll("details[data-sc-panel]").forEach((panel) => {
+      panel.addEventListener("toggle", () => {
+        if (panel.open) {
+          this.#openPanels.add(panel.dataset.scPanel);
+        } else {
+          this.#openPanels.delete(panel.dataset.scPanel);
+        }
+      });
+    });
+
     const picker = this.element.querySelector("[data-sc-region-picker]");
     if (!picker) return;
     const value = picker.querySelector('[name="recall.regionUuid"]');
@@ -164,5 +178,10 @@ export class ScRecallActivitySheet extends dnd5e.applications.activity.ActivityS
       toggle.setAttribute("aria-expanded", "false");
       toggle.focus();
     };
+  }
+
+  /** Radio cards for one of the two choices that shape the activity. */
+  static #choices(selected, choices) {
+    return choices.map((choice) => ({ ...choice, checked: choice.value === selected }));
   }
 }

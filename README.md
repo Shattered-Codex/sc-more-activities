@@ -61,7 +61,7 @@ The goal is to preserve the value of richer activity workflows while shaping the
 - `sc-movement`: push or pull tokens, with an optional direction choice at use time and preview support
 - `sc-wall`: create wall previews and GM-mediated wall placement
 - `sc-portal`: open a linked pair of portals and ask tokens whether they want to cross
-- `sc-recall`: travel to a chosen region on any scene, or back home beside the NPC a character bound, at once or through a portal that stays open, like a town portal scroll or a hearthstone
+- `sc-recall`: travel to a chosen region on any scene, or back home beside the NPC a character bound, at once or through a portal that stays open, like a portal scroll or a home stone
 
 ## Asset Credits
 
@@ -653,9 +653,9 @@ expires. A duration of `0` keeps the portal open until it is closed.
 `sc-recall` moves the user's token, and any companions they bring, somewhere else in the world, crossing
 scenes when needed. It has two destinations:
 
-- **Fixed region** — a Region chosen on the activity, on any scene. A town portal scroll that always leads to
+- **Fixed region** — a Region chosen on the activity, on any scene. Like a portal scroll that always leads to
   the same plaza. Tokens land inside it wherever there is room, as with core's Teleport Token behavior.
-- **Hearthstone** — beside the NPC each character bound as their home, wherever that NPC stands now, on
+- **Home stone** — beside the NPC each character bound as their home, wherever that NPC stands now, on
   whichever scene it is. Arrivals take the free squares closest to the NPC, never through a wall that blocks
   movement (open doors let them through).
 
@@ -665,7 +665,7 @@ until the user confirms, and closing the window cancels the use.
 
 ### Binding A Home
 
-Use a hearthstone activity within its **bind range** of a recall point and the window offers **Set as home**.
+Use a home stone activity within its **bind range** of a recall point and the window offers **Set as home**.
 The bind and companion ranges are measured edge to edge, as D&D counts distance: standing beside a creature is
 5 feet from it whatever its size, so a huge innkeeper is as easy to reach as a medium one.
 The home is stored on the character, so each character has its own and binding never needs the GM.
@@ -686,7 +686,7 @@ follows the pointer, green where it may open and red where it may not (right-cli
 side opens at the destination: on the free spot nearest the region's center, inside it when it can, or on a free
 spot beside the home NPC.
 
-Every use opens its own pair of portals, as town portals do in Diablo II: several portals into the same plaza sit
+Every use opens its own pair of portals: several portals into the same plaza sit
 side by side instead of stacking, and each one leads back to the spot it was opened from.
 
 Anyone allowed crosses by clicking a side while a token of theirs stands on or next to it. The prompt names
@@ -694,12 +694,12 @@ where that side leads (the destination, or the scene the portal was opened from 
 lands on a free square beside the other side; owners follow their token to the new scene.
 
 **Instant** travel is one way: it leaves nothing behind to come back through. Use **Open a portal** with both
-directions for a way back, or a hearthstone to return home.
+directions for a way back, or a home stone to return home.
 
 - **Opening range** — how far from the user's token the near side may open (`0` for anywhere on the scene).
 - **Direction** — both ways, or one way only (from the side opened here to the destination).
 - **Close when its opener returns** — on by default: both sides close as soon as the creature that opened the portal
-  crosses back through it, as a Diablo II town portal does. Everyone else may go and come back freely until then.
+  crosses back through it. Everyone else may go and come back freely until then.
 - **Go and return once** — each creature may cross out once and come back once; only those who went through can
   return.
 - **Crossings** — total crossings, in either direction, before the portal closes (blank for no limit).

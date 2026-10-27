@@ -295,16 +295,10 @@ export class ScPortalService {
     }
 
     const config = ScPortalConfig.fromActivity(activity);
-    if (!user.isGM && !config.allowPlayerRequests) {
-      return ScPortalService.#failure(
-        "SCMOREACTIVITIES.Activities.ScPortal.Warning.PlayerRequestsDisabled",
-        "Only a GM can create portals with this activity."
-      );
-    }
 
-    // Allowing player use says players may open this portal, not that any
-    // player may open somebody else's. The request only carries a uuid, so
-    // ownership of the item behind it is what has to be checked here.
+    // Anyone who may use the activity may open its portal, but no player may
+    // open somebody else's. The request only carries a uuid, so ownership of
+    // the item behind it is what has to be checked here.
     if (!ScPortalService.#canUseActivity(activity, user)) {
       return ScPortalService.#failure(
         "SCMOREACTIVITIES.Activities.Canvas.Warning.ActivityPermission",

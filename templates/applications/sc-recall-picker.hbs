@@ -1,6 +1,13 @@
 <div class="sc-ma-recall-body">
   <header class="sc-ma-recall-destination {{#unless canTravel}}is-missing{{/unless}}">
+    {{#if destinationArt}}
+    <span class="sc-ma-recall-destination-art">
+      <img src="{{ destinationArt }}" alt="">
+      <span class="sc-ma-recall-destination-badge"><i class="sc-ma-recall-icon sc-ma-recall-icon--home" inert></i></span>
+    </span>
+    {{else}}
     <i class="sc-ma-recall-icon {{#if canTravel}}sc-ma-recall-icon--destination{{else}}sc-ma-recall-icon--cancel{{/if}}" inert></i>
+    {{/if}}
     <div>
       <span class="sc-ma-recall-meta">{{ localize "SCMOREACTIVITIES.Activities.ScRecall.Picker.Destination" }}</span>
       <strong>{{ destination }}</strong>

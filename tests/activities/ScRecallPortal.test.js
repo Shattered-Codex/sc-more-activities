@@ -300,7 +300,7 @@ test("using the scroll opens a pair of portals: one at the user, one in the dest
   assert.equal(ChatMessage.created[0].flags[MODULE].relay.status, "opened");
 });
 
-test("a hearthstone portal opens its far side beside the home NPC", async() => {
+test("a home stone portal opens its far side beside the home NPC", async() => {
   const world = setup({ mode: "home" });
 
   const { exit } = await openPortal(world);
@@ -541,7 +541,7 @@ test("crossing back through each destination portal returns to the spot it was o
   assert.ok(Math.abs(returned.x + 50 - 550) <= 100 && Math.abs(returned.y + 50 - 550) <= 100, "beside the first entry");
 });
 
-test("a second hearthstone portal beside the same NPC does not cover the first", async() => {
+test("a second home stone portal beside the same NPC does not cover the first", async() => {
   const world = setup({ mode: "home" });
   await openPortal(world);
   placement.point = { x: 750, y: 550 };
