@@ -6,11 +6,11 @@
     "media": [
         {
             "type": "setup",
-            "url": "https://i.imgur.com/hjOHnPm.png"
+            "url": "https://raw.githubusercontent.com/Shattered-Codex/sc-more-activities/main/assets/cover/cover.png"
         },
         {
             "type": "cover",
-            "url": "https://i.imgur.com/hjOHnPm.png"
+            "url": "https://raw.githubusercontent.com/Shattered-Codex/sc-more-activities/main/assets/cover/cover.png"
         }
     ],
     "authors": [

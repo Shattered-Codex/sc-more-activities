@@ -3,6 +3,7 @@ import { Logger } from "../../support/Logger.js";
 import { ModuleSettings } from "../../settings/ModuleSettings.js";
 import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
 import { ScRangeShape } from "../canvas/ScRangeShape.js";
+import { ScBlockedArea } from "../canvas/ScBlockedArea.js";
 import { ScCanvasResultCard } from "../canvas/ScCanvasResultCard.js";
 import { ScSaveRequestCard } from "../canvas/ScSaveRequestCard.js";
 import { ScTargetSaveService } from "../canvas/ScTargetSaveService.js";
@@ -374,8 +375,14 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
     }
 
     const movementColors = ModuleSettings.getMovementRangeColors();
-    const movementBorder = Number.parseInt(String(movementColors.borderColor ?? "#4da3ff").slice(1), 16);
-    const movementFill = Number.parseInt(String(movementColors.fillColor ?? "#8fd3ff").slice(1), 16);
+    const movementBorder = ScRangeShape.color(movementColors.borderColor, 0x4da3ff);
+    const movementFill = ScRangeShape.color(movementColors.fillColor, 0x8fd3ff);
+    const blockedColor = ScRangeShape.color(movementColors.blockedColor, 0xe5484d);
+    // Tokens the moved targets could end up on top of. The targets themselves
+    // are left out: they all move together.
+    const occupied = ScCanvasActivityService.occupiedTokenRects(preview.scene, {
+      ignoreIds: this.selectedTargetIds
+    });
 
     const originCenter = ScCanvasActivityService.getTokenCenter(preview.origin, preview.scene);
     ScRangeShape.drawPreview(this.previewGraphics, {
@@ -402,19 +409,27 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
 
       const radius = this.#pointMarkerPixelRadius();
       if (!entry.inRange || !entry.destinationCenter) {
-        this.previewGraphics.lineStyle(2, 0xd32f2f, 0.95);
-        this.previewGraphics.beginFill(0xffb3b3, 0.25);
+        this.previewGraphics.lineStyle(2, blockedColor, 0.95);
+        this.previewGraphics.beginFill(blockedColor, 0.25);
         this.previewGraphics.drawCircle(currentCenter.x, currentCenter.y, radius);
         this.previewGraphics.endFill();
         continue;
       }
 
-      this.previewGraphics.lineStyle(3, movementBorder, 0.9);
+      // A wall across the path stops the token short of the marker, and an
+      // occupied destination would stack it on another token: both are drawn
+      // blocked so the user sees it before confirming.
+      const blocked = ScBlockedArea.isPathBlocked(currentCenter, entry.destinationCenter)
+        || ScBlockedArea.pointInRects(entry.destinationCenter, occupied);
+      const stroke = blocked ? blockedColor : movementBorder;
+      const fill = blocked ? blockedColor : movementFill;
+
+      this.previewGraphics.lineStyle(3, stroke, 0.9);
       this.previewGraphics.moveTo(currentCenter.x, currentCenter.y);
       this.previewGraphics.lineTo(entry.destinationCenter.x, entry.destinationCenter.y);
 
-      this.previewGraphics.lineStyle(2, movementBorder, 0.95);
-      this.previewGraphics.beginFill(movementFill, 0.25);
+      this.previewGraphics.lineStyle(2, stroke, 0.95);
+      this.previewGraphics.beginFill(fill, 0.25);
       this.previewGraphics.drawCircle(entry.destinationCenter.x, entry.destinationCenter.y, radius);
       this.previewGraphics.endFill();
     }

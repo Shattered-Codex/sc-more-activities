@@ -15,13 +15,23 @@ export class ModuleSettings {
   static DEFAULT_PREVIEW_COLORS = Object.freeze({
     teleportRangeBorder: "#24b86a",
     teleportRangeFill: "#39f08c",
+    teleportRangeBlocked: "#e5484d",
     movementRangeBorder: "#4da3ff",
     movementRangeFill: "#8fd3ff",
+    movementRangeBlocked: "#e5484d",
     wallRangeBorder: "#d32f2f",
     wallRangeFill: "#fff4a8",
+    wallRangeBlocked: "#5b6170",
     portalRangeBorder: "#8a63d2",
-    portalRangeFill: "#c9b3f0"
+    portalRangeFill: "#c9b3f0",
+    portalRangeBlocked: "#e5484d"
   });
+
+  /** The overlays that have their own colours, in the order the picker lists them. */
+  static PREVIEW_SCOPES = Object.freeze(["teleport", "movement", "wall", "portal"]);
+
+  /** The colours every overlay has. */
+  static PREVIEW_COLOR_PARTS = Object.freeze(["Fill", "Border", "Blocked"]);
 
   static isDebugLoggingEnabled() {
     if (ModuleSettings.#isDevModeDebugEnabled()) {
@@ -102,50 +112,43 @@ export class ModuleSettings {
     }
   }
 
-  static getTeleportRangeColors() {
+  /**
+   * The colours one overlay draws with: its range fill and border, and the
+   * colour of the spaces inside it that cannot be used.
+   */
+  static getRangeColors(scope) {
     const colors = ModuleSettings.getPreviewColors();
     return {
-      borderColor: colors.teleportRangeBorder,
-      fillColor: colors.teleportRangeFill
+      borderColor: colors[`${scope}RangeBorder`],
+      fillColor: colors[`${scope}RangeFill`],
+      blockedColor: colors[`${scope}RangeBlocked`]
     };
+  }
+
+  static getTeleportRangeColors() {
+    return ModuleSettings.getRangeColors("teleport");
   }
 
   static getWallRangeColors() {
-    const colors = ModuleSettings.getPreviewColors();
-    return {
-      borderColor: colors.wallRangeBorder,
-      fillColor: colors.wallRangeFill
-    };
+    return ModuleSettings.getRangeColors("wall");
   }
 
   static getPortalRangeColors() {
-    const colors = ModuleSettings.getPreviewColors();
-    return {
-      borderColor: colors.portalRangeBorder,
-      fillColor: colors.portalRangeFill
-    };
+    return ModuleSettings.getRangeColors("portal");
   }
 
   static getMovementRangeColors() {
-    const colors = ModuleSettings.getPreviewColors();
-    return {
-      borderColor: colors.movementRangeBorder,
-      fillColor: colors.movementRangeFill
-    };
+    return ModuleSettings.getRangeColors("movement");
   }
 
   static #normalizePreviewColors(value = {}) {
+    // Built from the defaults, so a colour added in a later release (the
+    // blocked colour, say) falls back to its default for a stored older value.
     const defaults = ModuleSettings.DEFAULT_PREVIEW_COLORS;
-    return {
-      teleportRangeBorder: ModuleSettings.#sanitizeHexColor(value?.teleportRangeBorder, defaults.teleportRangeBorder),
-      teleportRangeFill: ModuleSettings.#sanitizeHexColor(value?.teleportRangeFill, defaults.teleportRangeFill),
-      movementRangeBorder: ModuleSettings.#sanitizeHexColor(value?.movementRangeBorder, defaults.movementRangeBorder),
-      movementRangeFill: ModuleSettings.#sanitizeHexColor(value?.movementRangeFill, defaults.movementRangeFill),
-      wallRangeBorder: ModuleSettings.#sanitizeHexColor(value?.wallRangeBorder, defaults.wallRangeBorder),
-      wallRangeFill: ModuleSettings.#sanitizeHexColor(value?.wallRangeFill, defaults.wallRangeFill),
-      portalRangeBorder: ModuleSettings.#sanitizeHexColor(value?.portalRangeBorder, defaults.portalRangeBorder),
-      portalRangeFill: ModuleSettings.#sanitizeHexColor(value?.portalRangeFill, defaults.portalRangeFill)
-    };
+    return Object.fromEntries(Object.entries(defaults).map(([key, fallback]) => [
+      key,
+      ModuleSettings.#sanitizeHexColor(value?.[key], fallback)
+    ]));
   }
 
   static #sanitizeHexColor(value, fallback) {

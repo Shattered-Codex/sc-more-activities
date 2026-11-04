@@ -177,42 +177,16 @@
   --sc-ma-preview-wall-fill: #fff4a8;
   --sc-ma-preview-portal-border: #8a63d2;
   --sc-ma-preview-portal-fill: #c9b3f0;
+  --sc-ma-preview-teleport-blocked: #e5484d;
+  --sc-ma-preview-movement-blocked: #e5484d;
+  --sc-ma-preview-wall-blocked: #5b6170;
+  --sc-ma-preview-portal-blocked: #e5484d;
   box-sizing: border-box;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 0.75rem;
   min-height: 0;
-  padding: 0.75rem;
-}
-
-.sc-ma-preview-single {
-  display: flex;
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-.sc-ma-preview-card {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 18%),
-    radial-gradient(circle at top, rgba(255, 255, 255, 0.04), transparent 52%),
-    var(--sc-ma-bg-card-soft);
-  border: 1px solid var(--sc-ma-border-soft);
-  border-radius: 10px;
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.sc-ma-preview-card-label {
-  border-bottom: 1px solid color-mix(in srgb, var(--sc-ma-border-soft) 88%, white 12%);
-  color: var(--sc-ma-text-strong);
-  font-size: 0.8rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  padding: 0.5rem 0.65rem;
-  text-transform: uppercase;
+  padding: 0;
 }
 
 .sc-ma-preview-stage {
@@ -242,6 +216,28 @@
 .sc-ma-preview-stage .sc-ma-preview-start,
 .sc-ma-preview-stage .sc-ma-preview-end {
   border-radius: 999px;
+}
+
+.sc-ma-preview-stage--teleport { --sc-ma-preview-blocked: var(--sc-ma-preview-teleport-blocked); }
+.sc-ma-preview-stage--movement { --sc-ma-preview-blocked: var(--sc-ma-preview-movement-blocked); }
+.sc-ma-preview-stage--wall { --sc-ma-preview-blocked: var(--sc-ma-preview-wall-blocked); }
+.sc-ma-preview-stage--portal { --sc-ma-preview-blocked: var(--sc-ma-preview-portal-blocked); }
+
+/* Grid spaces inside the range that cannot be used, as the canvas paints them:
+   an L of three fixed-size cells, so they stay joined at any stage ratio. */
+.sc-ma-preview-stage .sc-ma-preview-blocked {
+  display: grid;
+  grid-template-columns: repeat(2, 18px);
+  grid-auto-rows: 18px;
+  left: 16%;
+  position: absolute;
+  top: 30%;
+  z-index: 1;
+}
+
+.sc-ma-preview-stage .sc-ma-preview-blocked span {
+  background: color-mix(in srgb, var(--sc-ma-preview-blocked) 45%, transparent 55%);
+  border: 1px solid color-mix(in srgb, var(--sc-ma-preview-blocked) 80%, transparent 20%);
 }
 
 .sc-ma-preview-stage--teleport .sc-ma-preview-range {
@@ -2921,7 +2917,13 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: none;
   width: 100%;
+  /* Foundry fixes every button at one line (--button-size), which squashes the
+     tab; it is as tall as its padding makes it, like the other SC windows. */
+  height: auto;
+  min-height: 0;
+  margin: 0;
   padding: 8px 10px;
   background: transparent;
   border: 1px solid transparent;
@@ -2938,8 +2940,13 @@
   color: var(--sc-ma-cfg-text);
 }
 
+.sc-ma-config__tab:focus,
 .sc-ma-config__tab:focus-visible {
   outline: none;
+  box-shadow: none;
+}
+
+.sc-ma-config__tab:focus-visible {
   border-color: var(--sc-ma-cfg-accent);
 }
 
@@ -3550,11 +3557,22 @@
   font-size: 10px;
 }
 
+/* Sits between the grouping chips and the first group, so it keeps the same
+   gap below it that the chips keep above it. */
 .sc-ma-config__hidden-note {
-  margin: 10px 0 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: -4px 0 14px;
   color: var(--sc-ma-cfg-text-mute);
   font-size: 11px;
   font-style: italic;
+  line-height: 1.4;
+}
+
+.sc-ma-config__hidden-note i {
+  margin-top: 2px;
+  font-style: normal;
 }
 
 /* ===========================================================================
@@ -3952,28 +3970,211 @@
 }
 
 /* === Preview colors window ================================================ */
+/* Laid out like the SC colour editors: overlays on the rail, then a live
+   preview beside compact colour rows. */
 
-.sc-ma-preview-colors-shell .sc-ma-preview-single {
-  flex: 0 0 auto;
-  margin-bottom: 16px;
+.sc-ma-color-editor__body {
+  grid-template-columns: 200px minmax(0, 1fr);
 }
 
-.sc-ma-preview-colors-shell .sc-ma-preview-card {
-  background: var(--sc-ma-cfg-bg-1);
-  border-color: var(--sc-ma-cfg-border);
-  border-radius: var(--sc-ma-cfg-radius);
-  flex: 1 1 auto;
+.sc-ma-color-editor__rail {
+  gap: 10px;
+  padding: 12px 10px;
 }
 
-.sc-ma-preview-colors-shell .sc-ma-preview-card-label {
+.sc-ma-color-editor__rail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sc-ma-color-editor__eyebrow {
+  margin: 0;
+  border: 0;
   color: var(--sc-ma-cfg-text-mute);
-  font-family: var(--sc-ma-cfg-font-body);
-  font-size: 10px;
+  font: 600 10px/1.2 var(--sc-ma-cfg-font-body);
   letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
-.sc-ma-preview-colors-shell .sc-ma-preview-stage {
-  aspect-ratio: 16 / 6;
+/* The rail swatch reads the same live custom properties as the sample. */
+.sc-ma-color-editor__swatch {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border: 2px solid var(--sc-ma-swatch-border);
+  border-radius: 3px;
+  background: var(--sc-ma-swatch-fill);
+}
+
+.sc-ma-color-editor__swatch--teleport {
+  --sc-ma-swatch-border: var(--sc-ma-preview-teleport-border);
+  --sc-ma-swatch-fill: var(--sc-ma-preview-teleport-fill);
+}
+
+.sc-ma-color-editor__swatch--movement {
+  --sc-ma-swatch-border: var(--sc-ma-preview-movement-border);
+  --sc-ma-swatch-fill: var(--sc-ma-preview-movement-fill);
+}
+
+.sc-ma-color-editor__swatch--wall {
+  --sc-ma-swatch-border: var(--sc-ma-preview-wall-border);
+  --sc-ma-swatch-fill: var(--sc-ma-preview-wall-fill);
+}
+
+.sc-ma-color-editor__swatch--portal {
+  --sc-ma-swatch-border: var(--sc-ma-preview-portal-border);
+  --sc-ma-swatch-fill: var(--sc-ma-preview-portal-fill);
+}
+
+.sc-ma-color-editor__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  container-type: inline-size;
+}
+
+.sc-ma-color-editor__head {
+  flex: 0 0 auto;
+  padding: 12px 18px 10px;
+  border-bottom: 1px solid var(--sc-ma-cfg-border-soft);
+}
+
+.sc-ma-color-editor__head .sc-ma-config__panel-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sc-ma-color-editor__head .sc-ma-config__panel-title i {
+  color: var(--sc-ma-cfg-accent);
+  font-size: 15px;
+}
+
+.sc-ma-color-editor__grid {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1fr) clamp(280px, 42%, 340px);
+  min-height: 0;
+}
+
+.sc-ma-color-editor__preview,
+.sc-ma-color-editor__fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 14px 16px 16px;
+}
+
+.sc-ma-color-editor__preview {
+  border-right: 1px solid var(--sc-ma-cfg-border-soft);
+}
+
+/* The sample fills the column instead of leaving a gap under a fixed ratio. */
+.sc-ma-color-editor__preview .sc-ma-preview-stage {
+  flex: 1 1 auto;
+  min-height: 220px;
+  aspect-ratio: auto;
+  border: 1px solid var(--sc-ma-cfg-border);
+  border-radius: var(--sc-ma-cfg-radius);
+  overflow: hidden;
+}
+
+.sc-ma-color-editor__note {
+  margin: 0;
+  color: var(--sc-ma-cfg-text-mute);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.sc-ma-color-editor__rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.sc-ma-color-editor__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 40px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--sc-ma-cfg-border-soft);
+}
+
+.sc-ma-color-editor__label {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  cursor: help;
+}
+
+.sc-ma-color-editor__name {
+  overflow: hidden;
+  color: var(--sc-ma-cfg-text);
+  font-size: 12.5px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-ma-color-editor__info {
+  flex: 0 0 auto;
+  color: var(--sc-ma-cfg-text-mute);
+  font-size: 10px;
+}
+
+/* The control never gives up width to the label: Foundry's inputs flex by
+   default, which squeezed the hex field down to nothing. */
+.sc-ma-color-editor__row .sc-ma-color-control {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.sc-ma-config .sc-ma-color-editor__row .sc-ma-hex-input {
+  flex: 0 0 84px;
+  width: 84px;
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.sc-ma-config .sc-ma-color-editor__row .sc-ma-color-picker {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  min-height: 0;
+  padding: 0;
+}
+
+.sc-ma-config .sc-ma-color-editor__row .sc-ma-color-picker::-webkit-color-swatch-wrapper {
+  padding: 3px;
+}
+
+/* Narrow windows: the preview stacks above the rows. */
+@container (max-width: 560px) {
+  .sc-ma-color-editor__grid {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
+  }
+
+  .sc-ma-color-editor__preview,
+  .sc-ma-color-editor__fields {
+    overflow: visible;
+  }
+
+  .sc-ma-color-editor__preview {
+    border-right: 0;
+    border-bottom: 1px solid var(--sc-ma-cfg-border-soft);
+  }
 }
 
 /* The hex field and the swatch sit together in the row's control slot. */

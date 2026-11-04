@@ -4,11 +4,11 @@ import { ScDocumentWindowMinimizer } from "../../applications/ScDocumentWindowMi
 import { ModuleSettings } from "../../settings/ModuleSettings.js";
 import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
 import { ScRangeShape } from "../canvas/ScRangeShape.js";
+import { ScBlockedArea } from "../canvas/ScBlockedArea.js";
 import { ScPortalGeometry } from "../portal/ScPortalGeometry.js";
 
 const LANG = "SCMOREACTIVITIES.Activities.ScRecall";
 const VALID = { border: 0x24b86a, fill: 0x39f08c };
-const INVALID = { border: 0xd32f2f, fill: 0xffb3b3 };
 
 /**
  * Lets the user click where the near side of a recall portal opens, within
@@ -61,6 +61,8 @@ export class ScRecallPortalPlacement {
   #resolve;
   #graphics = null;
   #hover = null;
+  #blockedCells = {};
+  #sight = {};
   #minimized = [];
   #handlers = {};
 
@@ -133,10 +135,16 @@ export class ScRecallPortalPlacement {
     const point = this.#pointOf(event);
     const issue = this.#issue(point);
     if (issue) {
-      ui.notifications?.warn?.(issue === "range"
-        ? Constants.format(`${LANG}.Placement.OutOfRange`, { range: this.#options.range },
-          `The portal must open within ${this.#options.range}.`)
-        : Constants.localize("SCMOREACTIVITIES.Activities.Canvas.Warning.InvalidPosition", "The requested canvas position is invalid."));
+      if (issue === "range") {
+        ui.notifications?.warn?.(Constants.format(`${LANG}.Placement.OutOfRange`, { range: this.#options.range },
+          `The portal must open within ${this.#options.range}.`));
+      } else if (issue === "sight") {
+        ui.notifications?.warn?.(Constants.localize(`${LANG}.Placement.OutOfSight`,
+          "The portal must open where you can see."));
+      } else {
+        ui.notifications?.warn?.(Constants.localize("SCMOREACTIVITIES.Activities.Canvas.Warning.InvalidPosition",
+          "The requested canvas position is invalid."));
+      }
       return;
     }
     this.#finish(point);
@@ -151,12 +159,26 @@ export class ScRecallPortalPlacement {
   }
 
   #issue(point) {
-    return ScRecallPortalPlacement.issueFor({
+    const originCenter = this.#originCenter();
+    const issue = ScRecallPortalPlacement.issueFor({
       point,
-      originCenter: this.#originCenter(),
+      originCenter,
       range: this.#options.range,
       rangeShape: this.#options.rangeShape,
       scene: canvas?.scene
+    });
+    // Sight is the user's own view, so it is checked here rather than in
+    // issueFor, which the GM runs again without that view.
+    return issue ?? (this.#inSight(originCenter, point) ? null : "sight");
+  }
+
+  #inSight(originCenter, point) {
+    if (!originCenter || !point) {
+      return true;
+    }
+    return ScBlockedArea.canSee(originCenter, point, {
+      probe: ScBlockedArea.cachedSightProbe(this.#sight, originCenter),
+      requireVisibility: true
     });
   }
 
@@ -171,6 +193,7 @@ export class ScRecallPortalPlacement {
     }
     graphics.clear();
     const colors = ModuleSettings.getPortalRangeColors();
+    const blockedColor = ScRangeShape.color(colors.blockedColor, 0xe5484d);
     ScRangeShape.drawPreview(graphics, {
       center: this.#originCenter(),
       distance: this.#options.range,
@@ -179,11 +202,21 @@ export class ScRecallPortalPlacement {
       borderColor: colors.borderColor,
       fillColor: colors.fillColor
     });
+    ScBlockedArea.blockedCells({
+      originCenter: this.#originCenter(),
+      distance: this.#options.range,
+      rangeShape: this.#options.rangeShape,
+      scene: canvas?.scene,
+      sight: true,
+      requireVisibility: true,
+      cache: this.#blockedCells
+    });
+    ScBlockedArea.drawCachedCells(graphics, this.#blockedCells, blockedColor);
     if (!this.#hover) {
       return;
     }
 
-    const { border, fill } = this.#issue(this.#hover) ? INVALID : VALID;
+    const { border, fill } = this.#issue(this.#hover) ? { border: blockedColor, fill: blockedColor } : VALID;
     const radius = ScPortalGeometry.radiusPixels(this.#options.squares, canvas?.scene);
     graphics.lineStyle(3, border, 0.95);
     graphics.beginFill(fill, 0.3);

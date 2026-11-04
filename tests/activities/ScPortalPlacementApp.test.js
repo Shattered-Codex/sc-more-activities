@@ -78,3 +78,9 @@ test("an empty link range never restricts the exit", () => {
 test("a missing point is rejected before anything else", () => {
   assert.equal(issue({ point: null, originCenter: null }), "invalid");
 });
+
+test("a point the origin cannot see is reported as out of sight", () => {
+  assert.equal(issue({ inSight: false }), "sight");
+  // Range still wins, so the warning names the first thing to fix.
+  assert.equal(issue({ point: { x: 1050, y: 150 }, inSight: false }), "range");
+});

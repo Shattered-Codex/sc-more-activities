@@ -70,7 +70,13 @@ export class ScSaveRequestCard {
       group: "teleport",
       originTokenId,
       tokenIds,
-      execution: { destination },
+      // Captured on the requester's client: whoever clicks the button later
+      // (often the GM) perceives more, and must not refuse the destination over
+      // a token the requester never saw.
+      execution: {
+        destination,
+        perceivedTokenIds: ScCanvasActivityService.perceivedTokenIds(canvas?.scene)
+      },
       buttonKey: "SCMOREACTIVITIES.Activities.Canvas.Save.Request.TeleportButton",
       buttonFallback: "Teleport failed targets"
     });
@@ -561,6 +567,10 @@ export class ScSaveRequestCard {
         ? await ScCanvasActivityService.executeTeleportPlacement(activity, {
           tokenIds: moveIds,
           destination: data.execution?.destination ?? null,
+          // Cards posted before the list existed fall back to the clicker's view.
+          perceivedTokenIds: Array.isArray(data.execution?.perceivedTokenIds)
+            ? data.execution.perceivedTokenIds
+            : null,
           executionKey
         })
         : await ScCanvasActivityService.executeMovement(activity, {

@@ -155,6 +155,7 @@ test("draws an optional square teleport range while keeping circles as the defau
       return this;
     }
     endFill() { return this; }
+    drawPolygon() { return this; }
     moveTo() { return this; }
     lineTo() { return this; }
     destroy() {}
@@ -196,6 +197,7 @@ test("includes corner walls in a square teleport range", async(t) => {
     drawCircle() { return this; }
     drawRect() { return this; }
     endFill() { return this; }
+    drawPolygon() { return this; }
     moveTo(x, y) {
       this.commands.push(["moveTo", x, y]);
       return this;
@@ -395,6 +397,7 @@ test("marks only blocking in-range walls and never reveals secret doors", async(
     drawCircle() { return this; }
     drawRoundedRect() { return this; }
     endFill() { return this; }
+    drawPolygon() { return this; }
     moveTo() { return this; }
     lineTo(x, y) {
       this.commands.push(["lineTo", x, y]);
@@ -449,6 +452,7 @@ test("marks only the wall stretches the origin token can see", async(t) => {
     drawCircle() { return this; }
     drawRoundedRect() { return this; }
     endFill() { return this; }
+    drawPolygon() { return this; }
     moveTo(x, y) {
       this.commands.push(["moveTo", x, y]);
       return this;
@@ -511,10 +515,11 @@ test("marks only the wall stretches the origin token can see", async(t) => {
     ["lineTo", 100, 100]
   ]);
 
-  // The sight ray stops just short of the wall instead of ending on it.
+  // The sight ray stops just short of the wall instead of ending on it. The
+  // blocked-space tests aim at cell centres, which never sit on these walls.
   assert.ok(collisionTests.length > 0);
   assert.ok(collisionTests.every((entry) => entry.options.type === "sight" && entry.options.mode === "any"));
-  assert.ok(collisionTests.every((entry) => entry.target.x < 100 || entry.target.y < 200));
+  assert.ok(collisionTests.every((entry) => entry.target.x !== 100 && entry.target.x !== 200));
 
   // Hovering redraws from the memoized stretches instead of re-running sight.
   const tested = collisionTests.length;
@@ -531,6 +536,7 @@ test("caps the sight tests when a rangeless teleport spans the whole scene", asy
     drawCircle() { return this; }
     drawRoundedRect() { return this; }
     endFill() { return this; }
+    drawPolygon() { return this; }
     moveTo() { return this; }
     lineTo() { return this; }
     destroy() {}
@@ -593,6 +599,7 @@ test("sweeps once and answers every sample from the sight polygon", async(t) => 
     drawCircle() { return this; }
     drawRoundedRect() { return this; }
     endFill() { return this; }
+    drawPolygon() { return this; }
     moveTo() { return this; }
     lineTo() { return this; }
     destroy() {}
@@ -664,6 +671,7 @@ test("falls back to per-sample collisions when the sweep is degenerate", async(t
     drawCircle() { return this; }
     drawRoundedRect() { return this; }
     endFill() { return this; }
+    drawPolygon() { return this; }
     moveTo() { return this; }
     lineTo() { return this; }
     destroy() {}
@@ -724,6 +732,7 @@ test("drops the marks rather than sweeping per wall on a huge scene without a po
     drawCircle() { return this; }
     drawRoundedRect() { return this; }
     endFill() { return this; }
+    drawPolygon() { return this; }
     moveTo() { return this; }
     lineTo(x, y) {
       this.commands.push(["lineTo", x, y]);
@@ -793,6 +802,7 @@ test("coalesces a burst of wall updates into a single repaint", async(t) => {
     drawCircle() { return this; }
     drawRoundedRect() { return this; }
     endFill() { return this; }
+    drawPolygon() { return this; }
     moveTo() { return this; }
     lineTo() { return this; }
     destroy() {}
@@ -823,15 +833,19 @@ test("coalesces a burst of wall updates into a single repaint", async(t) => {
   globalThis.requestAnimationFrame = (fn) => frames.push(fn);
   globalThis.cancelAnimationFrame = () => {};
 
+  // Like core, every listener of an event runs: the blocked-area revision
+  // counter listens to the same wall hooks as the picker.
   const hooks = new Map();
   globalThis.Hooks = {
     on(event, fn) {
-      hooks.set(event, fn);
-      return event;
+      const listeners = hooks.get(event)?.listeners ?? [];
+      listeners.push(fn);
+      const fire = (...args) => listeners.forEach((listener) => listener(...args));
+      fire.listeners = listeners;
+      hooks.set(event, fire);
+      return `${event}:${listeners.length}`;
     },
-    off(event) {
-      hooks.delete(event);
-    }
+    off() {}
   };
 
   const calls = [];
@@ -888,6 +902,7 @@ test("hides wall stretches the player cannot see even when they are in line of s
     drawCircle() { return this; }
     drawRoundedRect() { return this; }
     endFill() { return this; }
+    drawPolygon() { return this; }
     moveTo() { return this; }
     lineTo(x, y) {
       this.commands.push(["lineTo", x, y]);
@@ -943,6 +958,7 @@ test("labels the destination footprint with the travelled distance", async(t) =>
     drawCircle() { return this; }
     drawRoundedRect() { return this; }
     endFill() { return this; }
+    drawPolygon() { return this; }
     destroy() {}
   }
   class Container {
@@ -1141,6 +1157,7 @@ test("leaves the ring and wall marks alone while the pointer moves", async(t) =>
     }
     drawRoundedRect() { return this; }
     endFill() { return this; }
+    drawPolygon() { return this; }
     moveTo() { return this; }
     lineTo(x, y) {
       this.commands.push(["lineTo", x, y]);
@@ -1211,6 +1228,7 @@ test("redraws the wall marks when a wall changes mid-selection", async(t) => {
     drawCircle() { return this; }
     drawRoundedRect() { return this; }
     endFill() { return this; }
+    drawPolygon() { return this; }
     moveTo() { return this; }
     lineTo(x, y) {
       this.commands.push(["lineTo", x, y]);
@@ -1292,6 +1310,7 @@ test("draws landing footprints from the placement preview on hover", async(t) =>
       return this;
     }
     endFill() { return this; }
+    drawPolygon() { return this; }
     destroy() {}
   }
 

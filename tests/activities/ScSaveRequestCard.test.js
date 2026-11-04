@@ -187,3 +187,19 @@ test("the native dnd5e roll label is used when available", async(t) => {
   assert.match(content, /<span class="visible-dc"><i><\/i>DC 14 Dexterity saving throw<\/span>/);
   assert.match(content, /<span class="hidden-dc"><i><\/i>Dexterity saving throw<\/span>/);
 });
+
+test("the teleport request keeps the requester's view of the scene for whoever executes it", async(t) => {
+  const goblin = makeToken({ id: "t1", name: "Goblin" });
+  const lurker = { ...makeToken({ id: "t2", name: "Lurker" }), hidden: true };
+  const { created } = installGlobals(t, { scene: makeScene([goblin, lurker]) });
+  globalThis.game.user = { id: "player-1", isGM: false };
+
+  await ScSaveRequestCard.postTeleportRequest(activity, {
+    destination: { x: 300, y: 400 },
+    tokenIds: ["t1"]
+  });
+
+  // The GM clicking the card later perceives the lurker; the player did not.
+  const flags = created[0].flags["sc-more-activities"].saveRequest;
+  assert.deepEqual(flags.execution.perceivedTokenIds, ["t1"]);
+});

@@ -381,6 +381,60 @@ test("teleport execution remains instantaneous", async(t) => {
   assert.deepEqual(updates, [{
     documentName: "Token",
     documents: [{ _id: target.id, x: 600, y: 100 }],
-    options: { animate: false }
+    // A displace waypoint: core neither stops it at a wall nor records it as
+    // a walk in the combat movement history (whose ruler would linger).
+    options: {
+      animate: false,
+      movement: {
+        [target.id]: { waypoints: [{ x: 600, y: 100, action: "displace" }] }
+      }
+    }
   }]);
+});
+
+test("a deferred teleport is validated against the requester's view, not the executor's", async(t) => {
+  const actor = { id: "actor-deferred", uuid: "Actor.actor-deferred" };
+  const origin = makeToken({ id: "origin-deferred", x: 100, y: 100, actor });
+  const target = makeToken({ id: "target-deferred", x: 300, y: 100 });
+  // The player who asked never saw this one; the GM clicking the card does.
+  const lurker = makeToken({ id: "lurker-deferred", x: 600, y: 100 });
+  actor.getActiveTokens = () => [origin];
+  const scene = makeScene([origin, target, lurker]);
+  const updates = [];
+  scene.updateEmbeddedDocuments = async(documentName, documents) => {
+    updates.push(...documents);
+    return documents;
+  };
+  installCanvasGlobals(t, scene);
+
+  const activity = {
+    uuid: "Activity.teleport-deferred",
+    actor,
+    teleport: { maxTargets: 1, teleportDistance: 0, snapToGrid: true }
+  };
+  globalThis.game.user.isGM = true;
+  globalThis.game.scenes = { get: (id) => id === scene.id ? scene : null };
+  globalThis.game.users = { get: (id) => id === globalThis.game.user.id ? globalThis.game.user : null };
+  globalThis.ui = { notifications: { info() {}, warn() {}, error() {} } };
+  globalThis.fromUuid = async(uuid) => uuid === activity.uuid ? activity : null;
+  t.after(() => {
+    delete globalThis.fromUuid;
+    delete globalThis.ui;
+  });
+
+  const blocked = await ScCanvasActivityService.executeTeleportPlacement(activity, {
+    tokenIds: [target.id],
+    destination: { x: 650, y: 150 },
+    executionKey: "deferred-own-view"
+  });
+  assert.equal(blocked.ok, false, "the GM's own view sees the lurker");
+
+  const result = await ScCanvasActivityService.executeTeleportPlacement(activity, {
+    tokenIds: [target.id],
+    destination: { x: 650, y: 150 },
+    perceivedTokenIds: [origin.id, target.id],
+    executionKey: "deferred-requester-view"
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(updates.map((update) => update._id), [target.id]);
 });

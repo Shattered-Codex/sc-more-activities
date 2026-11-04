@@ -4,6 +4,7 @@ import { Logger } from "../../support/Logger.js";
 import { ModuleSettings } from "../../settings/ModuleSettings.js";
 import { ScWallCompanions } from "../wall/ScWallCompanions.js";
 import { ScWallConfig } from "../wall/ScWallConfig.js";
+import { ScBlockedArea } from "./ScBlockedArea.js";
 import { ScRangeShape } from "./ScRangeShape.js";
 import { ScTokenSize } from "./ScTokenSize.js";
 import { ScWallGeometry } from "../wall/ScWallGeometry.js";
@@ -121,7 +122,12 @@ export class ScCanvasActivityService {
     }
   }
 
-  static async executeTeleportPlacement(activity, { tokenIds = [], destination = null, executionKey = null } = {}) {
+  static async executeTeleportPlacement(activity, {
+    tokenIds = [],
+    destination = null,
+    executionKey = null,
+    perceivedTokenIds = null
+  } = {}) {
     try {
       const scene = ScCanvasActivityService.#activeScene();
       const origin = ScCanvasActivityService.#originTokenDocument(activity);
@@ -151,7 +157,15 @@ export class ScCanvasActivityService {
       const request = ScCanvasActivityService.#request("teleport", activity, scene, {
         destination: point,
         originTokenId: origin.id,
-        tokenIds: targetIds
+        tokenIds: targetIds,
+        // The GM re-checks the landings for occupancy, but it cannot see what
+        // the requester sees: a token they do not perceive must neither refuse
+        // the teleport nor betray that it is there. A deferred execution (the
+        // saving throw card, clicked later and maybe by the GM) hands over the
+        // list captured on the requester's client; otherwise it is this user's.
+        perceivedTokenIds: Array.isArray(perceivedTokenIds)
+          ? ScCanvasActivityService.#uniqueIds(perceivedTokenIds)
+          : ScCanvasActivityService.perceivedTokenIds(scene)
       });
       if (executionKey) {
         request.executionKey = String(executionKey);
@@ -168,7 +182,13 @@ export class ScCanvasActivityService {
     }
   }
 
-  static getTeleportPlacementPreview(activity, { tokenIds = [], destination = null } = {}) {
+  /**
+   * Classifies a teleport hover point. Each landing footprint reports whether
+   * the origin can see it and whether another token already stands there, so
+   * the picker can paint it blocked before the user clicks. `sightProbe` lets
+   * a caller reuse one sight sweep across pointer moves.
+   */
+  static getTeleportPlacementPreview(activity, { tokenIds = [], destination = null, sightProbe = undefined } = {}) {
     const scene = canvas?.scene;
     const origin = ScCanvasActivityService.#originTokenDocument(activity);
     const point = ScCanvasActivityService.#validPoint(destination);
@@ -191,18 +211,30 @@ export class ScCanvasActivityService {
     const inRange = teleportDistance <= 0 || distance <= teleportDistance;
 
     const updates = ScCanvasActivityService.#placementTeleportUpdates(targets, point, config, scene);
+    const occupied = ScCanvasActivityService.occupiedTokenRects(scene, {
+      ignoreIds: targets.map((token) => token.id)
+    });
+    const probe = sightProbe === undefined ? ScBlockedArea.sightProbe(originCenter) : sightProbe;
     const landings = updates.map((update) => {
       const token = targets.find((candidate) => candidate.id === update.id);
       const size = ScCanvasActivityService.#tokenPixelSize(token, scene);
+      const center = {
+        x: Number(update.x) + (size.width / 2),
+        y: Number(update.y) + (size.height / 2)
+      };
       return {
         id: update.id,
         size,
-        center: {
-          x: Number(update.x) + (size.width / 2),
-          y: Number(update.y) + (size.height / 2)
-        }
+        center,
+        blocked: ScCanvasActivityService.#landingBlockReason(update, size, center, {
+          originCenter,
+          occupied,
+          probe,
+          requireVisibility: true
+        })
       };
     });
+    const blocked = landings.find((landing) => landing.blocked)?.blocked ?? null;
 
     return {
       originCenter,
@@ -210,8 +242,58 @@ export class ScCanvasActivityService {
       distance,
       teleportDistance,
       inRange,
+      blocked,
       landings
     };
+  }
+
+  /**
+   * The footprints of the tokens that block a landing, as pixel rectangles.
+   * With a `user`, only tokens that user can perceive count, so a hidden token
+   * is never betrayed by a space that refuses to take a teleport. `onlyIds`
+   * restricts them to the tokens a requesting client reported it perceives,
+   * which is how the GM honours a player's view it cannot compute itself.
+   * With neither, hidden tokens are left out.
+   */
+  static occupiedTokenRects(scene = canvas?.scene, { ignoreIds = [], user = game?.user, onlyIds = null } = {}) {
+    const ignored = new Set(ignoreIds);
+    const only = onlyIds ? new Set(onlyIds) : null;
+    const rects = [];
+    for (const token of ScCanvasActivityService.getSceneTokens(scene)) {
+      const document = token?.document ?? token;
+      if (!document || ignored.has(document.id)) {
+        continue;
+      }
+      let perceivable;
+      if (only) {
+        perceivable = only.has(document.id);
+      } else if (user) {
+        perceivable = ScCanvasActivityService.canPerceiveToken(token, user);
+      } else {
+        perceivable = document.hidden !== true;
+      }
+      if (!perceivable) {
+        continue;
+      }
+      const size = ScCanvasActivityService.#tokenPixelSize(document, scene);
+      const x = Number(document.x);
+      const y = Number(document.y);
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        rects.push({ x, y, width: size.width, height: size.height });
+      }
+    }
+    return rects;
+  }
+
+  static #landingBlockReason(update, size, center, { originCenter, occupied, probe, requireVisibility }) {
+    const footprint = { x: Number(update.x), y: Number(update.y), width: size.width, height: size.height };
+    if (ScBlockedArea.overlappingRect(footprint, occupied)) {
+      return ScBlockedArea.REASONS.OCCUPIED;
+    }
+    if (!ScBlockedArea.canSee(originCenter, center, { probe, requireVisibility })) {
+      return ScBlockedArea.REASONS.SIGHT;
+    }
+    return null;
   }
 
   static async executeWallPlacement(activity, { walls = [], facing = null, originTokenId = null } = {}) {
@@ -408,6 +490,14 @@ export class ScCanvasActivityService {
       return canvas.grid.getTopLeftPoint(rounded);
     }
     return ScCanvasActivityService.#snapPoint(rounded, scene);
+  }
+
+  /** Ids of the tokens on the scene this user can perceive right now. */
+  static perceivedTokenIds(scene = canvas?.scene, user = game?.user) {
+    return ScCanvasActivityService.getSceneTokens(scene)
+      .filter((token) => ScCanvasActivityService.canPerceiveToken(token, user))
+      .map((token) => (token?.document ?? token)?.id)
+      .filter(Boolean);
   }
 
   static getSceneTokens(scene = canvas?.scene) {
@@ -798,7 +888,7 @@ export class ScCanvasActivityService {
 
   static async #executeTokenUpdates(scene, user, activity, payload) {
     const operation = payload.operation === "teleport"
-      ? ScCanvasActivityService.#serverTeleportUpdates(scene, activity, payload)
+      ? ScCanvasActivityService.#serverTeleportUpdates(scene, activity, payload, user)
       : ScCanvasActivityService.#serverMovementUpdates(scene, activity, payload);
     if (!operation.ok) {
       return operation;
@@ -853,9 +943,11 @@ export class ScCanvasActivityService {
     }
 
     try {
-      await scene.updateEmbeddedDocuments("Token", updates, {
-        animate: payload.operation === "movement"
-      });
+      await scene.updateEmbeddedDocuments(
+        "Token",
+        updates,
+        ScCanvasActivityService.#tokenUpdateOptions(scene, payload.operation, updates)
+      );
     } catch (error) {
       if (executionKey) {
         ScCanvasActivityService.#executedKeys.delete(executionKey);
@@ -867,6 +959,34 @@ export class ScCanvasActivityService {
       count: updates.length,
       skipped: operation.skipped ?? []
     };
+  }
+
+  /**
+   * A teleport moves every token with a `displace` waypoint, the action core
+   * uses for its own region teleport. A plain x/y update would be a walk:
+   * core would stop it at the first wall, measure it against the token's
+   * speed, and record it in the combat movement history, whose ruler then
+   * keeps highlighting the walked spaces in the user's colour long after the
+   * token has landed.
+   */
+  static #tokenUpdateOptions(scene, operation, updates) {
+    if (operation !== "teleport") {
+      return { animate: true };
+    }
+
+    const movement = {};
+    for (const update of updates) {
+      const elevation = Number(scene.tokens?.get(update._id)?.elevation);
+      movement[update._id] = {
+        waypoints: [{
+          x: update.x,
+          y: update.y,
+          ...(Number.isFinite(elevation) ? { elevation } : {}),
+          action: "displace"
+        }]
+      };
+    }
+    return { animate: false, movement };
   }
 
   static async #executeWallCreation(scene, user, activity, payload) {
@@ -901,7 +1021,7 @@ export class ScCanvasActivityService {
     };
   }
 
-  static #serverTeleportUpdates(scene, activity, payload) {
+  static #serverTeleportUpdates(scene, activity, payload, user = null) {
     const config = activity?.teleport ?? {};
     const origin = scene.tokens?.get(payload.originTokenId);
     const targets = ScCanvasActivityService.#tokenDocumentsFromIds(scene, payload.tokenIds);
@@ -974,21 +1094,107 @@ export class ScCanvasActivityService {
       }
     }
 
+    if (explicitDestination) {
+      const updates = ScCanvasActivityService.#unblockedLandings(
+        scene,
+        origin,
+        eligibleTargets,
+        ScCanvasActivityService.#placementTeleportUpdates(eligibleTargets, destination, config, scene),
+        skipped,
+        ScCanvasActivityService.#occupantFilter(payload, user)
+      );
+      if (!updates.length) {
+        return ScCanvasActivityService.#failure(
+          "SCMOREACTIVITIES.Activities.ScTeleport.Warning.DestinationBlocked",
+          "That destination is blocked: it is out of sight or already occupied."
+        );
+      }
+      return { ok: true, skipped, updates };
+    }
+
     return {
       ok: true,
       skipped,
-      updates: explicitDestination
-        ? ScCanvasActivityService.#placementTeleportUpdates(eligibleTargets, destination, config, scene)
-        : eligibleTargets.map((token) => {
-          const point = ScCanvasActivityService.#topLeftForCenter(destination, token, config.snapToGrid !== false, scene);
-          return {
-            id: token.id,
-            x: point.x,
-            y: point.y
-          };
-        })
+      updates: eligibleTargets.map((token) => {
+        const point = ScCanvasActivityService.#topLeftForCenter(destination, token, config.snapToGrid !== false, scene);
+        return {
+          id: token.id,
+          x: point.x,
+          y: point.y
+        };
+      })
     };
   }
+
+  /**
+   * Drops the landings that would put a token out of the origin's sight or on
+   * top of another token, recording who was left behind. The picker already
+   * refuses such a click; this covers a request that bypassed it, and a
+   * save-gated teleport whose remaining targets now land somewhere else.
+   *
+   * Sight is only tested when this client is viewing the scene, since the wall
+   * geometry core tests against belongs to the scene on the canvas.
+   */
+  static #unblockedLandings(scene, origin, targets, updates, skipped, occupantFilter = {}) {
+    const originCenter = origin ? ScCanvasActivityService.#tokenCenter(origin, scene) : null;
+    const probe = originCenter && canvas?.scene?.id === scene?.id
+      ? ScBlockedArea.sightProbe(originCenter)
+      : null;
+    const occupied = ScCanvasActivityService.occupiedTokenRects(scene, {
+      ...occupantFilter,
+      ignoreIds: targets.map((token) => token.id)
+    });
+
+    // A target left behind keeps standing where it is, so its space has to
+    // block the others: otherwise one member could land on a teammate that
+    // never left. Each pass returns the newly stranded to the occupied list
+    // and checks the rest again, until nobody else is dropped.
+    let remaining = updates;
+    for (;;) {
+      const kept = [];
+      const dropped = [];
+      for (const update of remaining) {
+        const token = targets.find((candidate) => candidate.id === update.id);
+        const size = ScCanvasActivityService.#tokenPixelSize(token, scene);
+        const center = {
+          x: Number(update.x) + (size.width / 2),
+          y: Number(update.y) + (size.height / 2)
+        };
+        const reason = ScCanvasActivityService.#landingBlockReason(update, size, center, {
+          originCenter,
+          occupied,
+          probe,
+          requireVisibility: false
+        });
+        (reason ? dropped : kept).push({ update, token, size });
+      }
+      if (!dropped.length) {
+        return kept.map(({ update }) => update);
+      }
+      for (const { update, token, size } of dropped) {
+        skipped.push(token?.name ?? update.id);
+        const x = Number(token?.x);
+        const y = Number(token?.y);
+        if (Number.isFinite(x) && Number.isFinite(y)) {
+          occupied.push({ x, y, width: size.width, height: size.height });
+        }
+      }
+      remaining = kept.map(({ update }) => update);
+    }
+  }
+
+  /**
+   * Which tokens may count as occupants when the GM re-validates a teleport:
+   * those the requesting client reported it perceives; everything for a GM
+   * requester, who perceives every token; otherwise every token not hidden.
+   */
+  static #occupantFilter(payload, user) {
+    if (Array.isArray(payload?.perceivedTokenIds)) {
+      return { user: null, onlyIds: ScCanvasActivityService.#uniqueIds(payload.perceivedTokenIds) };
+    }
+    return { user: user?.isGM ? user : null };
+  }
+
 
   static #placementTeleportUpdates(tokens, destination, config, scene) {
     if (tokens.length <= 1) {
