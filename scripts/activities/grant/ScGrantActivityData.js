@@ -79,6 +79,15 @@ export class ScGrantActivityData extends dnd5e.dataModels.activity.BaseActivityD
           initial: ScGrantEntryHelpers.DEFAULT_BASTION_DAYS
         })
       }),
+      // Flags written on every item the grant creates, as typed by whoever
+      // configures it ("scope.key" = value), for modules that need a marker.
+      itemFlags: new fields.ArrayField(new fields.SchemaField({
+        key: new fields.StringField({ required: false, blank: true, initial: "" }),
+        value: new fields.StringField({ required: false, blank: true, initial: "" })
+      }), {
+        required: false,
+        initial: []
+      }),
       check: new fields.SchemaField({
         ability: new fields.StringField({
           required: false,

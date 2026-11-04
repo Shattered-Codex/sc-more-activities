@@ -163,6 +163,47 @@
   </div>
   {{/if}}
 
+  <div class="sc-ma-collapsible {{#unless advancedTrayExpanded}}collapsed{{/unless}}" data-grant-advanced-tray>
+    <button type="button" class="sc-ma-collapsible-header" data-action="toggle-advanced-tray">
+      <i class="fa-solid fa-sliders" inert></i>
+      <span>{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Sections.Advanced" }}</span>
+      {{#if itemFlags.length}}<span class="sc-ma-grant-badge">{{ itemFlags.length }}</span>{{/if}}
+      <i class="fa-solid fa-caret-down" inert></i>
+    </button>
+    <div class="sc-ma-collapsible-content">
+      <fieldset>
+        <legend>
+          <span>{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.ItemFlags.Label" }}</span>
+          <button type="button" class="unbutton control-button" data-action="add-item-flag"
+                  data-tooltip aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.ItemFlags.Add" }}">
+            <i class="fas fa-plus" inert></i>
+          </button>
+        </legend>
+        <ul class="sc-ma-grant-flag-list unlist">
+          {{#each itemFlags}}
+          <li class="sc-ma-grant-flag-row {{#if this.invalid}}is-invalid{{/if}}">
+            <input type="text" name="itemFlags.{{ this.index }}.key" value="{{ this.key }}"
+                   placeholder="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.ItemFlags.KeyPlaceholder" }}"
+                   aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.ItemFlags.Key" }}"
+                   {{#if this.invalid}}data-tooltip="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.ItemFlags.Invalid" }}"{{/if}}>
+            <span class="sc-ma-grant-sep">=</span>
+            <input type="text" name="itemFlags.{{ this.index }}.value" value="{{ this.value }}"
+                   placeholder="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.ItemFlags.ValuePlaceholder" }}"
+                   aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.ItemFlags.Value" }}">
+            <button type="button" class="unbutton control-button" data-action="remove-item-flag" data-index="{{ this.index }}"
+                    data-tooltip aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.ItemFlags.Remove" }}">
+              <i class="fas fa-minus" inert></i>
+            </button>
+          </li>
+          {{else}}
+          <li class="sc-ma-grant-empty">{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.ItemFlags.Empty" }}</li>
+          {{/each}}
+        </ul>
+        <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.ItemFlags.Hint" }}</p>
+      </fieldset>
+    </div>
+  </div>
+
   <div class="sc-ma-collapsible {{#unless checkTrayExpanded}}collapsed{{/unless}}" data-grant-check-tray>
     <button type="button" class="sc-ma-collapsible-header" data-action="toggle-check-tray">
       <i class="fa-solid fa-gears" inert></i>

@@ -1196,3 +1196,110 @@ test("a player's order that draws a world table is issued by the GM", async(t) =
   assert.deepEqual(ScGrantBastionOrders.pendingOf(facility).plan.sources.map((source) => source.uuid), [candle.uuid]);
   assert.equal(caster.created.length, 0);
 });
+
+test("granted copies carry the flags configured on the activity, and nothing else is added", async() => {
+  const { activity, caster } = setup({ recipient: "self" });
+  activity.itemFlags = [
+    { key: "importer.isStandardDragDrop", value: "true" },
+    { key: "world.note", value: "from the garden" },
+    { key: "sc-more-activities.grantDeliveryKey", value: "\"spoofed\"" },
+    { key: "__proto__.polluted", value: "true" },
+    { key: "nodot", value: "1" }
+  ];
+
+  const result = await ScGrantActivityService.execute(activity);
+
+  assert.equal(result.canceled, false);
+  const flags = caster.created[0].flags;
+  assert.equal(flags.importer.isStandardDragDrop, true);
+  assert.equal(flags.world.note, "from the garden");
+  assert.equal(flags["sc-more-activities"].grantDeliveryKey, undefined);
+  assert.equal({}.polluted, undefined);
+  assert.equal(flags.nodot, undefined);
+});
+
+test("a grant without configured flags creates its copies untouched", async() => {
+  const { activity, caster } = setup({ recipient: "self" });
+
+  await ScGrantActivityService.execute(activity);
+
+  assert.deepEqual(Object.keys(caster.created[0].flags), ["sc-more-activities"]);
+});
+
+const TYPED_FLAGS = [
+  { key: "world.object", value: "{\"a\":1}" },
+  { key: "world.list", value: "[1,2]" },
+  { key: "world.empty", value: "null" },
+  { key: "world.text", value: "\"true\"" },
+  { key: "world.flag", value: "true" }
+];
+
+function assertTypedFlags(flags) {
+  assert.deepEqual(flags.world, { object: { a: 1 }, list: [1, 2], empty: null, text: "true", flag: true });
+}
+
+test("configured flag values keep their types on an immediate grant", async() => {
+  const { activity, caster } = setup({ recipient: "self" });
+  activity.itemFlags = TYPED_FLAGS;
+
+  await ScGrantActivityService.execute(activity);
+
+  assertTypedFlags(caster.created[0].flags);
+});
+
+test("configured flag values keep their types through a bastion order", async() => {
+  const { activity, caster, facility } = setupBastionDelivery();
+  activity.grants = [{ type: "item", uuid: candle.uuid, quantity: "10" }];
+  activity.itemFlags = TYPED_FLAGS;
+  await ScGrantActivityService.execute(activity);
+  assert.deepEqual(ScGrantBastionOrders.pendingOf(facility).plan.itemFlags[0], { key: "world.object", value: { a: 1 } });
+
+  await completeOrder(facility);
+
+  assertTypedFlags(caster.created[0].flags);
+});
+
+test("non-stackable copies get their own copy of an object flag", async() => {
+  const { activity, caster, facility } = setupBastionDelivery();
+  activity.grants = [{ type: "item", uuid: ring.uuid, quantity: "2" }];
+  activity.itemFlags = [{ key: "world.object", value: "{\"a\":1}" }];
+  const lookup = globalThis.fromUuid;
+  globalThis.fromUuid = async (uuid) => (uuid === ring.uuid ? ring : lookup(uuid));
+  await ScGrantActivityService.execute(activity);
+
+  await completeOrder(facility);
+
+  const [first, second] = caster.created;
+  assert.deepEqual(first.flags.world.object, { a: 1 });
+  assert.notEqual(first.flags.world.object, second.flags.world.object);
+});
+
+test("a retry follows flags added to the activity after the order failed", async() => {
+  const { activity, caster, facility } = setupBastionDelivery();
+  activity.grants = [{ type: "item", uuid: candle.uuid, quantity: "10" }];
+  await ScGrantActivityService.execute(activity);
+  const create = caster.createEmbeddedDocuments;
+  caster.createEmbeddedDocuments = async() => [];
+  await completeOrder(facility);
+  assert.equal(ScGrantBastionOrders.pendingOf(facility).state, "failed");
+
+  // The GM adds the marker another module needs, then retries.
+  activity.itemFlags = [{ key: "importer.isStandardDragDrop", value: "true" }];
+  caster.createEmbeddedDocuments = create;
+  assert.equal((await ScGrantBastionOrders.retry(facility)).ok, true);
+
+  assert.equal(caster.created[0].flags.importer.isStandardDragDrop, true);
+});
+
+test("an order whose activity was deleted writes the flags stored when it was issued", async() => {
+  const { activity, caster, facility } = setupBastionDelivery();
+  activity.grants = [{ type: "item", uuid: candle.uuid, quantity: "10" }];
+  activity.itemFlags = [{ key: "importer.isStandardDragDrop", value: "true" }];
+  await ScGrantActivityService.execute(activity);
+  facility.system.activities.delete(activity.id);
+  facility.getRollData = () => ({});
+
+  await completeOrder(facility);
+
+  assert.equal(caster.created[0].flags.importer.isStandardDragDrop, true);
+});

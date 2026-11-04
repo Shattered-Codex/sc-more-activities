@@ -7,6 +7,7 @@ import { Dnd5eActivityAdapter } from "./adapters/dnd5e/Dnd5eActivityAdapter.js";
 import { ActivityRegistry } from "./registry/ActivityRegistry.js";
 import { registerBuiltInActivities } from "./activities/registerBuiltInActivities.js";
 import { ActivityCreateDialogTabs } from "./integrations/dnd5e/ActivityCreateDialogTabs.js";
+import { ScAutomatedAnimationsIntegration } from "./integrations/autoanimations/ScAutomatedAnimationsIntegration.js";
 import { ScCanvasActivityService } from "./activities/canvas/ScCanvasActivityService.js";
 import { ScSaveRequestCard } from "./activities/canvas/ScSaveRequestCard.js";
 import { ScContestActivityService } from "./activities/contest/ScContestActivityService.js";
@@ -69,6 +70,7 @@ Hooks.once("init", () => {
   ScPortalService.registerQueries();
   ScPortalService.registerHooks();
   ScWallCompanions.registerHooks();
+  ScAutomatedAnimationsIntegration.register();
   ScSaveRequestCard.registerHooks();
   registry.beginCollection();
   publicApi = ApiPublisher.publish(PublicApiFactory.create({

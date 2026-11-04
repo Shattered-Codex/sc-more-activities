@@ -273,10 +273,12 @@ export class ScGrantActivityService {
    * deliver, as plain data that can be stored and applied later. `rolls` (the
    * Roll objects, for the chat card) are not part of the stored plan.
    */
-  static async planGrant(rawEntries, rollData = {}) {
+  static async planGrant(rawEntries, rollData = {}, { itemFlags = [] } = {}) {
     const entries = ScGrantEntryHelpers.normalizeEntries(rawEntries);
     const { sources, lines, rolls } = await ScGrantActivityService.#resolveSources(entries, rollData);
     return {
+      // Parsed here, once: from now on the values keep their types.
+      itemFlags: ScGrantEntryHelpers.normalizeItemFlags(itemFlags),
       sources: sources.map(({ item, quantity, tableUuid }) => ({
         uuid: item.uuid,
         quantity,
@@ -295,7 +297,7 @@ export class ScGrantActivityService {
    * order over), nothing else is written and the result is "claim-lost".
    */
   static async deliverPlan(recipientActor, plan, {
-    activityId, deliveryId, checkInfo = null, banner = null, rolls = [], holds = () => true
+    activityId, deliveryId, checkInfo = null, banner = null, rolls = [], holds = () => true, itemFlags = null
   }) {
     // Like an immediate grant, a plan that resolved no item delivers nothing.
     if (!plan?.sources?.length) {
@@ -306,7 +308,9 @@ export class ScGrantActivityService {
       return { ok: false, reason: "no-items" };
     }
     try {
-      const outcome = await ScGrantActivityService.#applyPlan(recipientActor, plan, { activityId, deliveryId, holds });
+      const outcome = await ScGrantActivityService.#applyPlan(recipientActor, plan, {
+        activityId, deliveryId, holds, itemFlags: itemFlags ?? plan.itemFlags
+      });
       if (!holds()) {
         return { ok: false, reason: "claim-lost" };
       }
@@ -402,7 +406,7 @@ export class ScGrantActivityService {
    */
   static async #grantItems(activity, sourceActor, recipientActor, entries, checkInfo, { banner = null } = {}) {
     const rollData = activity?.getRollData?.() ?? sourceActor?.getRollData?.() ?? {};
-    const plan = await ScGrantActivityService.planGrant(entries, rollData);
+    const plan = await ScGrantActivityService.planGrant(entries, rollData, { itemFlags: activity?.itemFlags });
     if (!plan.sources.length) {
       return { ok: false, reason: "no-create-data" };
     }
@@ -417,7 +421,9 @@ export class ScGrantActivityService {
    * each source's key is written in the same update as its items, and a
    * source whose key the recipient already holds is skipped.
    */
-  static async #applyPlan(recipientActor, plan, { activityId = null, deliveryId = null, holds = () => true } = {}) {
+  static async #applyPlan(recipientActor, plan, {
+    activityId = null, deliveryId = null, holds = () => true, itemFlags = plan.itemFlags
+  } = {}) {
     const created = [];
     const updated = [];
     let totalGranted = 0;
@@ -472,7 +478,8 @@ export class ScGrantActivityService {
       const documents = ScGrantActivityService.#createDocumentsForEntry(
         { item: sourceItem, quantity: source.quantity, tableUuid: source.tableUuid },
         activityId,
-        key
+        key,
+        itemFlags
       );
       created.push(...await ScGrantActivityService.#createDocuments(recipientActor, documents, key, sourceItem));
     }
@@ -1012,7 +1019,7 @@ export class ScGrantActivityService {
     return document?.documentName === "Item" || document?.constructor?.documentName === "Item";
   }
 
-  static #createDocumentsForEntry(source, activityId = null, deliveryKey = null) {
+  static #createDocumentsForEntry(source, activityId = null, deliveryKey = null, itemFlags = []) {
     const { item: sourceItem, quantity, tableUuid } = source;
     const baseData = sourceItem.toObject();
     delete baseData._id;
@@ -1031,6 +1038,12 @@ export class ScGrantActivityService {
     const flags = foundry.utils.mergeObject(baseData.flags ?? {}, {
       [Constants.MODULE_ID]: moduleFlags
     }, { inplace: false });
+    // Parsed flags: their keys are checked again, their values written as they are.
+    for (const { key, value } of Array.isArray(itemFlags) ? itemFlags : []) {
+      if (ScGrantEntryHelpers.isValidItemFlagKey(key)) {
+        foundry.utils.setProperty(flags, key, foundry.utils.deepClone(value));
+      }
+    }
 
     if (ScGrantActivityService.#supportsQuantity(baseData)) {
       baseData.system.quantity = quantity;
