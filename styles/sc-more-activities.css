@@ -859,6 +859,25 @@ i.sc-ma-grant-card-banner-art {
   width: 3.2rem;
 }
 
+.sc-ma-grant-flag-list {
+  display: grid;
+  gap: 0.4rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sc-ma-grant-flag-row {
+  align-items: center;
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: minmax(0, 3fr) auto minmax(0, 2fr) auto;
+}
+
+.sc-ma-grant-flag-row.is-invalid input:first-child {
+  border-color: var(--sc-ma-danger);
+}
+
 .sc-ma-grant-badge {
   background: color-mix(in srgb, var(--sc-ma-accent) 16%, transparent);
   border: 1px solid color-mix(in srgb, var(--sc-ma-accent) 40%, transparent);

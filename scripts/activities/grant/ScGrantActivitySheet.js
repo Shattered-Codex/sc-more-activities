@@ -18,6 +18,7 @@ export class ScGrantActivitySheet extends dnd5e.applications.activity.ActivitySh
 
   #checkTrayExpanded = null;
   #bastionTrayExpanded = null;
+  #advancedTrayExpanded = null;
 
   async _prepareEffectContext(context, options) {
     context = await super._prepareEffectContext(context, options);
@@ -63,6 +64,13 @@ export class ScGrantActivitySheet extends dnd5e.applications.activity.ActivitySh
 
     this.#prepareSelectionContext(context);
     await this.#prepareBastionContext(context);
+
+    context.itemFlags = this.#cloneItemFlags().map((row, index) => ({
+      index,
+      ...row,
+      invalid: Boolean(row.key.trim()) && !ScGrantEntryHelpers.isValidItemFlagKey(row.key)
+    }));
+    context.advancedTrayExpanded = this.#advancedTrayExpanded ?? context.itemFlags.length > 0;
 
     context.check = ScGrantEntryHelpers.normalizeCheck(this.activity?.check);
     context.checkEnabled = ScGrantEntryHelpers.isCheckEnabled(context.check);
@@ -208,6 +216,13 @@ export class ScGrantActivitySheet extends dnd5e.applications.activity.ActivitySh
     const submitData = super._prepareSubmitData(event, formData);
     const rawGrants = foundry.utils.getProperty(submitData, "grants");
     foundry.utils.setProperty(submitData, "grants", this.#normalizeGrantSubmitData(rawGrants));
+    const rawItemFlags = foundry.utils.getProperty(submitData, "itemFlags");
+    foundry.utils.setProperty(submitData, "itemFlags", rawItemFlags
+      ? ScGrantActivitySheet.#indexedRows(rawItemFlags).map((row) => ({
+        key: String(row?.key ?? "").trim(),
+        value: String(row?.value ?? "")
+      }))
+      : this.#cloneItemFlags());
 
     const selection = foundry.utils.getProperty(submitData, "checkSelection");
     if (selection !== undefined) {
@@ -265,6 +280,32 @@ export class ScGrantActivitySheet extends dnd5e.applications.activity.ActivitySh
       this.#checkTrayExpanded = this.#toggleTray("[data-grant-check-tray]") ?? this.#checkTrayExpanded;
     });
 
+    this.element.querySelector("[data-action='toggle-advanced-tray']")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      this.#advancedTrayExpanded = this.#toggleTray("[data-grant-advanced-tray]") ?? this.#advancedTrayExpanded;
+    });
+
+    this.element.querySelector("[data-action='add-item-flag']")?.addEventListener("click", async(event) => {
+      event.preventDefault();
+      this.#advancedTrayExpanded = true;
+      await this.activity.update({ itemFlags: [...this.#cloneItemFlags(), { key: "", value: "" }] });
+      this.render();
+    });
+
+    this.element.querySelectorAll("[data-action='remove-item-flag']").forEach((button) => {
+      button.addEventListener("click", async(event) => {
+        event.preventDefault();
+        const index = Number(event.currentTarget.dataset.index);
+        if (!Number.isInteger(index)) {
+          return;
+        }
+        const itemFlags = this.#cloneItemFlags();
+        itemFlags.splice(index, 1);
+        await this.activity.update({ itemFlags });
+        this.render();
+      });
+    });
+
     this.element.querySelector("[data-action='toggle-bastion-tray']")?.addEventListener("click", (event) => {
       event.preventDefault();
       this.#bastionTrayExpanded = this.#toggleTray("[data-grant-bastion-tray]") ?? this.#bastionTrayExpanded;
@@ -294,6 +335,20 @@ export class ScGrantActivitySheet extends dnd5e.applications.activity.ActivitySh
     }
     tray.classList.toggle("collapsed");
     return !tray.classList.contains("collapsed");
+  }
+
+  #cloneItemFlags() {
+    return (this.activity?.itemFlags ?? []).map((row) => ({
+      key: String(row?.key ?? ""),
+      value: String(row?.value ?? "")
+    }));
+  }
+
+  /** Form rows submitted as `{ 0: {...}, 1: {...} }` (or an array), in index order. */
+  static #indexedRows(raw) {
+    return Array.isArray(raw)
+      ? raw
+      : Object.entries(raw).sort(([left], [right]) => Number(left) - Number(right)).map(([, value]) => value);
   }
 
   #cloneGrants() {

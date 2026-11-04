@@ -767,6 +767,16 @@ weight 2, the user could take 3 bouquets, 3 vials of perfume and 2 candles. Poin
 lost, and the picker warns about them. A relayed grant's units are checked against the budget again
 on the GM's client.
 
+### Flags On Granted Items
+
+The **Advanced** tray lists flags the grant writes on every item it creates, as `scope.key = value`
+rows. The value is read as JSON when it can be (`true`, `3`, `"text"`), and as text otherwise. Use
+it when another module expects a marker on the items it sees created on an actor. The flags stay on
+the created items. Keys must be dotted paths, and this module's own scope is reserved. A bastion
+order writes the activity's flags as they are when it delivers, so a retry picks up flags added
+after a failure; once the activity is deleted, it writes the flags it was issued with. With no rows,
+items are created as they are.
+
 ### Delivering Through A Bastion Order
 
 On a facility item, the **Bastion Delivery** tray can change *Delivery* to *Bastion order*. Using
@@ -790,6 +800,9 @@ number of days, instead of granting at once:
   when it failed. A retry delivers the order as it was issued and skips anything that already
   reached the recipient, and it is never offered while another attempt is running. Deleting the
   grant activity does not stop a delivery.
+- a module that refuses the creation of a delivery's items leaves the order undelivered, with
+  nothing lost or duplicated, so it can be retried. If that module skips items carrying a marker
+  flag, add the flag under **Flags On Granted Items**.
 
 Existing grants keep their behavior: the defaults are *Grant all*, weight 1, and *Immediately*.
 

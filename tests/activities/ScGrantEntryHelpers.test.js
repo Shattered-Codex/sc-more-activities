@@ -151,3 +151,23 @@ test("multiplies a pack quantity and defaults invalid weights to 1", () => {
   assert.equal(ScGrantEntryHelpers.normalizeCost("3"), 3);
   assert.equal(ScGrantEntryHelpers.isBudget({ mode: "budget" }), true);
 });
+
+test("reads configured item flags: valid scope.key paths outside this module, values as JSON when possible", () => {
+  assert.deepEqual(ScGrantEntryHelpers.normalizeItemFlags([
+    { key: " importer.isStandardDragDrop ", value: "true" },
+    { key: "world.count", value: "3" },
+    { key: "world.label", value: "plain text" },
+    { key: "world.nested.path", value: "{\"a\":1}" },
+    { key: "sc-more-activities.grantDeliveryKey", value: "x" },
+    { key: "world.__proto__.x", value: "1" },
+    { key: "nodot", value: "1" },
+    { key: "", value: "1" },
+    null
+  ]), [
+    { key: "importer.isStandardDragDrop", value: true },
+    { key: "world.count", value: 3 },
+    { key: "world.label", value: "plain text" },
+    { key: "world.nested.path", value: { a: 1 } }
+  ]);
+  assert.deepEqual(ScGrantEntryHelpers.normalizeItemFlags(undefined), []);
+});

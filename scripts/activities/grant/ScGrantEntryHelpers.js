@@ -1,3 +1,8 @@
+import { Constants } from "../../constants/Constants.js";
+
+const FLAG_KEY_PATTERN = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)+$/;
+const FORBIDDEN_FLAG_KEY_PARTS = new Set(["__proto__", "prototype", "constructor"]);
+
 export class ScGrantEntryHelpers {
   static SOURCE_TYPES = Object.freeze({
     ITEM: "item",
@@ -133,6 +138,42 @@ export class ScGrantEntryHelpers {
       order,
       days: Number.isFinite(days) && days >= 1 ? days : ScGrantEntryHelpers.DEFAULT_BASTION_DAYS
     };
+  }
+
+  /**
+   * Whether `key` can name a flag on a granted item: a dotted `scope.key`
+   * path, outside this module's own scope (which holds the delivery data).
+   */
+  static isValidItemFlagKey(key) {
+    const text = String(key ?? "").trim();
+    if (!FLAG_KEY_PATTERN.test(text)) {
+      return false;
+    }
+    const parts = text.split(".");
+    return parts[0] !== Constants.MODULE_ID && !parts.some((part) => FORBIDDEN_FLAG_KEY_PARTS.has(part));
+  }
+
+  /** A flag value as typed: read as JSON when it is (true, 3, "text", {...}), else kept as text. */
+  static parseItemFlagValue(value) {
+    const text = String(value ?? "").trim();
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text;
+    }
+  }
+
+  /**
+   * The flags a grant writes on every item it creates, from the activity's
+   * `itemFlags` rows: `{ key, value }` with a valid key and a parsed value.
+   */
+  static normalizeItemFlags(rows = []) {
+    return (Array.isArray(rows) ? rows : [])
+      .filter((row) => ScGrantEntryHelpers.isValidItemFlagKey(row?.key))
+      .map((row) => ({
+        key: String(row.key).trim(),
+        value: ScGrantEntryHelpers.parseItemFlagValue(row.value)
+      }));
   }
 
   static normalizeEntry(raw) {

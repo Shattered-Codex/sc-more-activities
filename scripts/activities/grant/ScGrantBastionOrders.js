@@ -157,7 +157,7 @@ export class ScGrantBastionOrders {
     // drawn. Deliveries only apply this plan, so every attempt (and every
     // retry) delivers the same items, and none of them ever writes a plan.
     const rollData = activity?.getRollData?.() ?? activity?.actor?.getRollData?.() ?? {};
-    const resolved = await ScGrantActivityService.planGrant(entries, rollData);
+    const resolved = await ScGrantActivityService.planGrant(entries, rollData, { itemFlags: activity.itemFlags });
     if (!resolved.sources.length) {
       return {
         ok: false,
@@ -177,7 +177,7 @@ export class ScGrantBastionOrders {
     const facility = ScGrantBastionOrders.#liveFacility(activity);
     const { order, days } = ScGrantEntryHelpers.normalizeBastion(activity.bastion);
     const changed = Boolean(ScGrantBastionOrders.pendingOf(facility));
-    const plan = { sources: resolved.sources, lines: resolved.lines };
+    const plan = { sources: resolved.sources, lines: resolved.lines, itemFlags: resolved.itemFlags };
 
     await facility.update({
       "system.progress.value": 0,
@@ -455,7 +455,12 @@ export class ScGrantBastionOrders {
     if (!Array.isArray(plan?.sources) || !plan.sources.length) {
       return "no-items";
     }
+    // Flags only mark the created items; they change neither which items arrive
+    // nor how many. So a delivery (or a retry) follows the activity's current
+    // flags, and the ones stored with the order only once the activity is gone.
+    const activity = facility.system?.activities?.get?.(pending.activityId) ?? null;
     const outcome = await ScGrantActivityService.deliverPlan(recipient, plan, {
+      itemFlags: activity ? ScGrantEntryHelpers.normalizeItemFlags(activity.itemFlags) : (plan.itemFlags ?? []),
       activityId: pending.activityId,
       deliveryId: pending.orderId,
       checkInfo: pending.checkInfo ?? null,
