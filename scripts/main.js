@@ -11,6 +11,8 @@ import { ScCanvasActivityService } from "./activities/canvas/ScCanvasActivitySer
 import { ScSaveRequestCard } from "./activities/canvas/ScSaveRequestCard.js";
 import { ScContestActivityService } from "./activities/contest/ScContestActivityService.js";
 import { ScGrantActivityService } from "./activities/grant/ScGrantActivityService.js";
+import { ScGrantBastionOrders } from "./activities/grant/ScGrantBastionOrders.js";
+import { ScGrantCard } from "./activities/grant/ScGrantCard.js";
 import { ScChatRelay } from "./support/ScChatRelay.js";
 import { ScIdentifyCard } from "./activities/identify/ScIdentifyCard.js";
 import { ScIdentifyRelay } from "./activities/identify/ScIdentifyRelay.js";
@@ -53,6 +55,8 @@ Hooks.once("init", () => {
   ScConditionalChainCardCustomizer.registerHook();
   ScContestActivityService.registerQueries();
   ScGrantActivityService.registerQueries();
+  ScGrantBastionOrders.registerHooks();
+  ScGrantCard.registerHooks();
   ScChatRelay.registerHooks();
   ScIdentifyRelay.registerHandler();
   ScIdentifyCard.registerHooks();

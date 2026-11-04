@@ -86,7 +86,10 @@
             {{/if}}
             <p class="sc-ma-config__empty" data-activity-no-results hidden>{{ this.noResultsLabel }}</p>
             {{#if this.hiddenLabel}}
-              <p class="sc-ma-config__hidden-note">{{ this.hiddenLabel }}</p>
+              <p class="sc-ma-config__hidden-note">
+                <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+                <span>{{ this.hiddenLabel }}</span>
+              </p>
             {{/if}}
             {{#each this.groups}}
               <div class="sc-ma-config__group" data-activity-group>

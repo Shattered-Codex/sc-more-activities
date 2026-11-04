@@ -12,8 +12,8 @@ test("normalizes legacy grant entries with numeric quantities", () => {
   ]);
 
   assert.deepEqual(entries, [
-    { type: "item", uuid: "Compendium.test.Item.foo", quantity: "3" },
-    { type: "item", uuid: "Item.abc123", quantity: "1" }
+    { type: "item", uuid: "Compendium.test.Item.foo", quantity: "3", cost: 1 },
+    { type: "item", uuid: "Item.abc123", quantity: "1", cost: 1 }
   ]);
 });
 
@@ -27,7 +27,8 @@ test("preserves table source type and formula quantity on new entries", () => {
   assert.deepEqual(entry, {
     type: "table",
     uuid: "RollTable.xyz",
-    quantity: "1d4 + @prof"
+    quantity: "1d4 + @prof",
+    cost: 1
   });
 });
 
@@ -90,4 +91,63 @@ test("normalizes check configuration and detects when the check gate is enabled"
     skill: "",
     dc: { calculation: "", formula: "" }
   });
+});
+
+test("defaults legacy activities to granting every source immediately", () => {
+  assert.deepEqual(ScGrantEntryHelpers.normalizeSelection(undefined), { mode: "all", count: 1, budget: "10" });
+  assert.equal(ScGrantEntryHelpers.normalizeDelivery(undefined), "instant");
+  assert.deepEqual(ScGrantEntryHelpers.normalizeBastion(undefined), { order: "harvest", days: 7 });
+  assert.deepEqual(ScGrantEntryHelpers.normalizeBastion({ order: "build", days: 0 }), { order: "harvest", days: 7 });
+});
+
+test("only asks for a choice when it leaves some sources out", () => {
+  assert.equal(ScGrantEntryHelpers.choiceCount({ mode: "all", count: 1 }, 3), 0);
+  assert.equal(ScGrantEntryHelpers.choiceCount({ mode: "choose", count: 1 }, 3), 1);
+  assert.equal(ScGrantEntryHelpers.choiceCount({ mode: "choose", count: 2 }, 3), 2);
+  assert.equal(ScGrantEntryHelpers.choiceCount({ mode: "choose", count: 3 }, 3), 0);
+});
+
+test("accepts exactly the required number of distinct, valid picks", () => {
+  const entries = ["a", "b", "c"].map((uuid) => ({ type: "item", uuid, quantity: "10" }));
+  const selection = { mode: "choose", count: 2 };
+
+  assert.deepEqual(ScGrantEntryHelpers.applyPicks(entries, selection, [2, 0]).map((entry) => entry.uuid), ["a", "c"]);
+  assert.equal(ScGrantEntryHelpers.applyPicks(entries, selection, [1]), null);
+  assert.equal(ScGrantEntryHelpers.applyPicks(entries, selection, [1, 1]), null);
+  assert.equal(ScGrantEntryHelpers.applyPicks(entries, selection, [0, 3]), null);
+  assert.equal(ScGrantEntryHelpers.applyPicks(entries, selection, undefined), null);
+  assert.equal(ScGrantEntryHelpers.applyPicks(entries, { mode: "all" }, undefined), entries);
+});
+
+test("a budget spends up to its points on weighted units and multiplies each pack", () => {
+  const entries = [
+    { type: "item", uuid: "bouquet", quantity: "1", cost: 1 },
+    { type: "item", uuid: "perfume", quantity: "1", cost: 1 },
+    { type: "item", uuid: "candle", quantity: "1", cost: 2 },
+    { type: "table", uuid: "loot", quantity: "1d2", cost: 1 }
+  ];
+  const selection = { mode: "budget", budget: "10" };
+
+  const chosen = ScGrantEntryHelpers.applyPicks(entries, selection, [3, 3, 2, 0], { budget: 10 });
+  assert.deepEqual(chosen.map(({ uuid, quantity }) => [uuid, quantity]), [
+    ["bouquet", "3"], ["perfume", "3"], ["candle", "2"]
+  ]);
+
+  // Up to the budget: spending less is allowed, more or nothing is not.
+  assert.equal(ScGrantEntryHelpers.applyPicks(entries, selection, [1, 0, 0, 0], { budget: 10 }).length, 1);
+  assert.equal(ScGrantEntryHelpers.applyPicks(entries, selection, [3, 3, 3, 0], { budget: 10 }), null);
+  assert.equal(ScGrantEntryHelpers.applyPicks(entries, selection, [0, 0, 0, 0], { budget: 10 }), null);
+  assert.equal(ScGrantEntryHelpers.applyPicks(entries, selection, [1, 0, 0], { budget: 10 }), null);
+  assert.equal(ScGrantEntryHelpers.applyPicks(entries, selection, [-1, 2, 0, 0], { budget: 10 }), null);
+  assert.equal(ScGrantEntryHelpers.applyPicks(entries, selection, [1.5, 0, 0, 0], { budget: 10 }), null);
+
+  assert.equal(ScGrantEntryHelpers.applyPicks(entries, selection, [0, 0, 0, 2], { budget: 10 })[0].quantity, "2 * (1d2)");
+});
+
+test("multiplies a pack quantity and defaults invalid weights to 1", () => {
+  assert.equal(ScGrantEntryHelpers.multiplyQuantity("5", 2), "10");
+  assert.equal(ScGrantEntryHelpers.multiplyQuantity("1d4", 1), "1d4");
+  assert.equal(ScGrantEntryHelpers.normalizeCost(0), 1);
+  assert.equal(ScGrantEntryHelpers.normalizeCost("3"), 3);
+  assert.equal(ScGrantEntryHelpers.isBudget({ mode: "budget" }), true);
 });

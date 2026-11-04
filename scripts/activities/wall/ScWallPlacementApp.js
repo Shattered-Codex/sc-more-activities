@@ -4,6 +4,7 @@ import { Logger } from "../../support/Logger.js";
 import { ScDocumentWindowMinimizer } from "../../applications/ScDocumentWindowMinimizer.js";
 import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
 import { ScRangeShape } from "../canvas/ScRangeShape.js";
+import { ScBlockedArea } from "../canvas/ScBlockedArea.js";
 import { ScWallConfig } from "./ScWallConfig.js";
 import { ScWallGeometry } from "./ScWallGeometry.js";
 
@@ -49,6 +50,8 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
     this.hoverPoint = null;
     this.previewGraphics = null;
     this.previewText = null;
+    this.blockedCellsCache = {};
+    this.sightProbeCache = {};
     this.sceneId = canvas?.scene?.id ?? null;
     this.originTokenId = ScCanvasActivityService.getOriginTokenDocument(activity)?.id ?? null;
     this.selectedFacing = this.config.facing === "any" ? "away" : this.config.facing;
@@ -551,6 +554,14 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
       return;
     }
 
+    if (placementIssue === "sight") {
+      ui.notifications?.warn?.(Constants.localize(
+        "SCMOREACTIVITIES.Activities.ScWall.Warning.PointOutOfSight",
+        "Wall point must be somewhere you can see."
+      ));
+      return;
+    }
+
     ui.notifications?.warn?.(Constants.format(
       "SCMOREACTIVITIES.Activities.ScWall.Warning.PointOutOfRange",
       { range: this.#config().referenceRange },
@@ -678,6 +689,17 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
       borderColor: colors.borderColor,
       fillColor: colors.fillColor
     });
+    // Spaces a wall point cannot go: behind a wall or out of this user's view.
+    ScBlockedArea.blockedCells({
+      originCenter,
+      distance: config.referenceRange,
+      rangeShape: config.rangeShape,
+      scene: canvas?.scene,
+      sight: true,
+      requireVisibility: true,
+      cache: this.blockedCellsCache
+    });
+    ScBlockedArea.drawCachedCells(graphics, this.blockedCellsCache, colors.blockedColor);
     this.#drawPlacedWalls(graphics);
     this.#drawCurrentPlacement(graphics);
 
@@ -689,8 +711,9 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
     }
 
     const pointIsValid = this.#canPlacePoint(this.hoverPoint);
-    const strokeColor = pointIsValid ? 0x1f9d55 : 0xd32f2f;
-    const fillColor = pointIsValid ? 0x7ed6a7 : 0xffb3b3;
+    const blockedColor = ScRangeShape.color(colors.blockedColor, 0xd32f2f);
+    const strokeColor = pointIsValid ? 0x1f9d55 : blockedColor;
+    const fillColor = pointIsValid ? 0x7ed6a7 : blockedColor;
 
     graphics.lineStyle(3, strokeColor, 0.9);
     const segments = this.#previewSegments(this.hoverPoint);
@@ -840,6 +863,22 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
     ) <= range;
   }
 
+  /**
+   * Whether the origin can see the point and this user can see it now. The
+   * point is often a grid vertex lying right on a scene wall, which the test
+   * steps just short of so building along an existing wall stays possible.
+   */
+  #pointInSight(point) {
+    const originCenter = this.#originCenter();
+    if (!originCenter) {
+      return true;
+    }
+    return ScBlockedArea.canSee(originCenter, point, {
+      probe: ScBlockedArea.cachedSightProbe(this.sightProbeCache, originCenter),
+      requireVisibility: true
+    });
+  }
+
   #canPlacePoint(point) {
     return !this.#placementIssue(point);
   }
@@ -847,6 +886,10 @@ export class ScWallPlacementApp extends HandlebarsApplicationMixin(ApplicationV2
   #placementIssue(point) {
     if (!point || !this.#pointWithinPlacementRange(point)) {
       return "range";
+    }
+
+    if (!this.#pointInSight(point)) {
+      return "sight";
     }
 
     const config = this.#config();

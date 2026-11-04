@@ -6,14 +6,12 @@ import { ScCanvasResultCard } from "../canvas/ScCanvasResultCard.js";
 import { ScSaveRequestCard } from "../canvas/ScSaveRequestCard.js";
 import { ScTargetSaveService } from "../canvas/ScTargetSaveService.js";
 import { ScRangeShape } from "../canvas/ScRangeShape.js";
+import { ScBlockedArea } from "../canvas/ScBlockedArea.js";
 import { Logger } from "../../support/Logger.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(ApplicationV2) {
-  /** Pixels to stop short of a wall so the sight ray does not hit it. */
-  static #SIGHT_EPSILON = 2;
-
   /** Upper bound on sight tests per wall, so a scene-long wall stays cheap. */
   static #MAX_WALL_SAMPLES = 24;
 
@@ -55,6 +53,7 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     this.staticGraphics = null;
     this.previewLabels = null;
     this.wallSegmentsCache = null;
+    this.sightProbeCache = null;
     this.staticSignature = null;
     this.wallChangeHooks = null;
     this.pendingWallRedraw = null;
@@ -144,15 +143,23 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
    * notice it on its own — moving a wall, opening a door, or flipping one to
    * secret leaves the placeable count untouched — and a stale mark would keep
    * drawing a wall that just became secret.
+   *
+   * Tokens and vision only feed the blocked spaces, so they repaint those
+   * without throwing away the far costlier wall marks.
    */
   #watchWallChanges() {
     const hooks = globalThis.Hooks;
     if (typeof hooks?.on !== "function" || this.wallChangeHooks) {
       return;
     }
-    const invalidate = () => this.#invalidateWallMarks();
-    this.wallChangeHooks = ["createWall", "updateWall", "deleteWall"]
-      .map((event) => ({ event, id: hooks.on(event, invalidate) }));
+    const invalidateWalls = () => this.#invalidateWallMarks();
+    const invalidateBlocked = () => this.#invalidateBlockedCells();
+    this.wallChangeHooks = [
+      ...["createWall", "updateWall", "deleteWall"]
+        .map((event) => ({ event, id: hooks.on(event, invalidateWalls) })),
+      ...["createToken", "updateToken", "deleteToken", "sightRefresh"]
+        .map((event) => ({ event, id: hooks.on(event, invalidateBlocked) }))
+    ];
   }
 
   /**
@@ -163,6 +170,11 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
    */
   #invalidateWallMarks() {
     this.wallSegmentsCache = null;
+    this.sightProbeCache = null;
+    this.#invalidateBlockedCells();
+  }
+
+  #invalidateBlockedCells() {
     this.staticSignature = null;
     if (this.pendingWallRedraw !== null) {
       return;
@@ -302,6 +314,7 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
 
   #destroyPreviewGraphics() {
     this.wallSegmentsCache = null;
+    this.sightProbeCache = null;
     this.staticSignature = null;
     if (this.previewLabels) {
       this.previewLabels.parent?.removeChild?.(this.previewLabels);
@@ -325,10 +338,13 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
    * Redraws the range ring and the wall marks, but only when something they
    * depend on actually changed. A pointer move does not.
    */
-  #drawStatic(originCenter, rangeDistance, borderColor, fillColor, rangeShape, scene = canvas?.scene) {
+  #drawStatic(originCenter, rangeDistance, colors, rangeShape, scene = canvas?.scene) {
+    const { borderColor, fillColor, blockedColor } = colors;
     const squareRange = ScRangeShape.isSquare(rangeShape);
     const rangePixels = rangeDistance > 0 ? ScRangeShape.pixels(rangeDistance, scene) : Infinity;
-    const signature = `${originCenter?.x}:${originCenter?.y}:${rangePixels}:${borderColor}:${fillColor}:${squareRange}`;
+    const signature = [
+      originCenter?.x, originCenter?.y, rangePixels, borderColor, fillColor, blockedColor, squareRange
+    ].join(":");
     if (this.staticSignature === signature) {
       return;
     }
@@ -343,7 +359,28 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
       borderColor,
       fillColor
     });
+    // The spaces a single token could not land on: out of the origin's sight,
+    // out of this user's view, or under another token. The hover marker still
+    // checks each landing exactly, which matters for large or grouped tokens.
+    ScBlockedArea.drawCells(this.staticGraphics, ScBlockedArea.blockedCells({
+      originCenter,
+      distance: rangeDistance,
+      rangeShape,
+      scene,
+      sight: true,
+      requireVisibility: true,
+      probe: this.#sightProbe(originCenter),
+      occupied: ScCanvasActivityService.occupiedTokenRects(scene, {
+        ignoreIds: this.selectedTargets.map((target) => target.id)
+      })
+    }), blockedColor);
     this.#drawWalls(originCenter, rangePixels, squareRange);
+  }
+
+  /** One sight sweep per origin position, shared by the blocked spaces and the hover checks. */
+  #sightProbe(originCenter) {
+    this.sightProbeCache ??= {};
+    return ScBlockedArea.cachedSightProbe(this.sightProbeCache, originCenter);
   }
 
   #drawPreview() {
@@ -364,39 +401,32 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     const colors = ModuleSettings.getTeleportRangeColors();
     const borderColor = ScTeleportDestinationApp.#hexToNumber(colors.borderColor, 0x24b86a);
     const fillColor = ScTeleportDestinationApp.#hexToNumber(colors.fillColor, 0x39f08c);
-    const outOfRangeColor = 0xd32f2f;
-    const outOfRangeFill = 0xff6b6b;
+    const blockedColor = ScTeleportDestinationApp.#hexToNumber(colors.blockedColor, 0xe5484d);
 
     const originCenter = ScCanvasActivityService.getTokenCenter(origin);
-    this.#drawStatic(
-      originCenter,
-      config.teleportDistance,
-      colors.borderColor,
-      colors.fillColor,
-      config.rangeShape,
-      canvas?.scene
-    );
+    this.#drawStatic(originCenter, config.teleportDistance, colors, config.rangeShape, canvas?.scene);
 
     if (!this.hoverPoint) {
       return;
     }
 
-    const preview = ScCanvasActivityService.getTeleportPlacementPreview(this.activity, {
-      tokenIds: this.selectedTargets.map((target) => target.id),
-      destination: this.hoverPoint
-    });
+    const preview = this.#hoverPreview(originCenter);
     if (!preview) {
       return;
     }
 
-    const strokeColor = preview.inRange ? borderColor : outOfRangeColor;
-    const areaColor = preview.inRange ? fillColor : outOfRangeFill;
+    const usable = preview.inRange && !preview.blocked;
+    const strokeColor = usable ? borderColor : blockedColor;
+    const areaColor = usable ? fillColor : blockedColor;
 
     for (const landing of preview.landings) {
       const x = landing.center.x - (landing.size.width / 2);
       const y = landing.center.y - (landing.size.height / 2);
-      this.previewGraphics.lineStyle(2, strokeColor, 0.95);
-      this.previewGraphics.beginFill(areaColor, 0.25);
+      // Each footprint carries its own verdict, so a group shows exactly which
+      // member would land somewhere it cannot.
+      const landingUsable = preview.inRange && !landing.blocked;
+      this.previewGraphics.lineStyle(2, landingUsable ? borderColor : blockedColor, 0.95);
+      this.previewGraphics.beginFill(landingUsable ? fillColor : blockedColor, 0.25);
       this.previewGraphics.drawRoundedRect(x, y, landing.size.width, landing.size.height, 6);
       this.previewGraphics.endFill();
     }
@@ -408,6 +438,14 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     this.previewGraphics.endFill();
 
     this.#drawDistanceLabel(preview, originCenter, config.teleportDistance, markerRadius);
+  }
+
+  #hoverPreview(originCenter, destination = this.hoverPoint) {
+    return ScCanvasActivityService.getTeleportPlacementPreview(this.activity, {
+      tokenIds: this.selectedTargets.map((target) => target.id),
+      destination,
+      sightProbe: this.#sightProbe(originCenter)
+    });
   }
 
   /**
@@ -438,7 +476,7 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     const label = new PIXI.Text(text, new PIXI.TextStyle({
       fontFamily: "Signika, sans-serif",
       fontSize: Math.max(Math.round(gridSize * 0.22), 14),
-      fill: preview.inRange ? 0xffffff : 0xff6b6b,
+      fill: preview.inRange && !preview.blocked ? 0xffffff : 0xff6b6b,
       stroke: 0x000000,
       strokeThickness: 4,
       align: "center"
@@ -503,6 +541,20 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
         "SCMOREACTIVITIES.Activities.ScTeleport.Warning.DestinationOutOfRange",
         "Destination is outside the teleport range."
       ));
+      return;
+    }
+
+    const blocked = this.#hoverPreview(originCenter, destination)?.blocked ?? null;
+    if (blocked) {
+      ui.notifications?.warn?.(blocked === ScBlockedArea.REASONS.OCCUPIED
+        ? Constants.localize(
+          "SCMOREACTIVITIES.Activities.ScTeleport.Warning.DestinationOccupied",
+          "That destination is already occupied."
+        )
+        : Constants.localize(
+          "SCMOREACTIVITIES.Activities.ScTeleport.Warning.DestinationOutOfSight",
+          "You cannot see that destination."
+        ));
       return;
     }
 
@@ -644,7 +696,7 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     }
 
     const candidates = ScTeleportDestinationApp.#collectWallSegments(walls, originCenter, rangePixels, squareRange);
-    const probe = ScTeleportDestinationApp.#sightProbe(originCenter);
+    const probe = this.#sightProbe(originCenter);
     const segments = ScTeleportDestinationApp.#filterToVisible(candidates, originCenter, probe);
     this.wallSegmentsCache = { signature, segments };
     return segments;
@@ -672,42 +724,7 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
 
     const maxSamples = ScTeleportDestinationApp.#sampleBudget(candidates.length);
     return candidates
-      .flatMap(([a, b]) => ScTeleportDestinationApp.#visibleParts(a, b, originCenter, maxSamples, probe.test));
-  }
-
-  /**
-   * Answers "can the origin token see this point?" as cheaply as core allows.
-   *
-   * The sight polygon already is the region the token can see, so one sweep up
-   * front turns every later sample into a containment test. Asking
-   * testCollision per sample instead means a sweep per sample, which a teleport
-   * with no range limit multiplies by every wall on the scene.
-   */
-  static #sightProbe(originCenter) {
-    const backend = globalThis.CONFIG?.Canvas?.polygonBackends?.sight;
-    if (!backend || !originCenter) {
-      return null;
-    }
-
-    if (typeof backend.create === "function") {
-      try {
-        const polygon = backend.create(originCenter, { type: "sight" });
-        // A degenerate sweep would report everything as hidden and silently
-        // drop the marks, so it has to be a real polygon before we trust it.
-        if (typeof polygon?.contains === "function" && Number(polygon.points?.length) >= 6) {
-          return { kind: "polygon", test: (point) => polygon.contains(point.x, point.y) };
-        }
-      } catch {
-        // Fall through to the per-sample form.
-      }
-    }
-    if (typeof backend.testCollision === "function") {
-      return {
-        kind: "collision",
-        test: (point) => !backend.testCollision(originCenter, point, { type: "sight", mode: "any" })
-      };
-    }
-    return null;
+      .flatMap(([a, b]) => ScTeleportDestinationApp.#visibleParts(a, b, originCenter, maxSamples, probe));
   }
 
   /**
@@ -812,7 +829,8 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     for (let step = 0; step < steps; step += 1) {
       const from = ScTeleportDestinationApp.#lerp(a, b, step / steps);
       const to = ScTeleportDestinationApp.#lerp(a, b, (step + 1) / steps);
-      if (ScTeleportDestinationApp.#canSee(originCenter, ScTeleportDestinationApp.#lerp(from, to, 0.5), probe)) {
+      const middle = ScTeleportDestinationApp.#lerp(from, to, 0.5);
+      if (ScBlockedArea.canSee(originCenter, middle, { probe, requireVisibility: true })) {
         runStart ??= from;
         continue;
       }
@@ -826,37 +844,6 @@ export class ScTeleportDestinationApp extends HandlebarsApplicationMixin(Applica
     }
 
     return parts;
-  }
-
-  static #canSee(originCenter, point, probe) {
-    // The sample sits on the wall itself, which is the boundary of what can be
-    // seen, so step just short of it before asking.
-    const distance = Math.hypot(point.x - originCenter.x, point.y - originCenter.y);
-    if (distance <= ScTeleportDestinationApp.#SIGHT_EPSILON) {
-      return true;
-    }
-    const ratio = (distance - ScTeleportDestinationApp.#SIGHT_EPSILON) / distance;
-    const target = ScTeleportDestinationApp.#lerp(originCenter, point, ratio);
-
-    try {
-      if (!probe(target)) {
-        return false;
-      }
-    } catch {
-      return true;
-    }
-
-    // In sight of the token is not the same as on screen: a stretch sitting in
-    // the dark or in unexplored fog is still something the player cannot see.
-    const visibility = canvas?.visibility;
-    if (typeof visibility?.testVisibility !== "function") {
-      return true;
-    }
-    try {
-      return visibility.testVisibility(target) !== false;
-    } catch {
-      return true;
-    }
   }
 
   static #wallSampleCount(a, b, maxSamples) {

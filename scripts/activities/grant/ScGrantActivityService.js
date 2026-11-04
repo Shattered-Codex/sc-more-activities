@@ -2,10 +2,20 @@ import { Constants } from "../../constants/Constants.js";
 import { Logger } from "../../support/Logger.js";
 import { ACTIVITY_TYPES } from "../ActivityTypes.js";
 import { ScUsageScaling } from "../ScUsageScaling.js";
+import { ScGrantBastionOrders } from "./ScGrantBastionOrders.js";
+import { ScGrantCard } from "./ScGrantCard.js";
+import { ScGrantChoiceApp } from "./ScGrantChoiceApp.js";
 import { ScGrantEntryHelpers } from "./ScGrantEntryHelpers.js";
 
 const QUERY_ID = "sc-more-activities.grantItems";
 const QUERY_TIMEOUT = 30000;
+// Delivery keys a stack remembers, so a retried bastion delivery skips what it already added.
+const MAX_DELIVERY_KEYS = 20;
+
+/** A bastion delivery stopped because another client took its order over. */
+class ClaimLostError extends Error {}
+
+const ID_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
 export class ScGrantActivityService {
   static registerQueries() {
@@ -55,8 +65,13 @@ export class ScGrantActivityService {
 
     const sourceActor = activity.actor ?? activity.item?.actor ?? null;
     const recipientActor = await ScGrantActivityService.#requestedRecipient(activity, sourceActor, payload.recipientUuid);
-    const entries = ScGrantEntryHelpers.normalizeEntries(activity.grants ?? []);
-    if (!sourceActor || !recipientActor || !entries.length) {
+    const entries = ScGrantEntryHelpers.applyPicks(
+      ScGrantEntryHelpers.normalizeEntries(activity.grants ?? []),
+      activity.selection,
+      payload.picks,
+      { budget: ScGrantActivityService.resolveBudget(activity) }
+    );
+    if (!sourceActor || !recipientActor || !entries?.length) {
       return ScGrantActivityService.#invalidRequest();
     }
 
@@ -69,6 +84,20 @@ export class ScGrantActivityService {
         return ScGrantActivityService.#invalidRequest();
       }
       checkInfo = { dc, total };
+    }
+
+    // A player's bastion order whose tables must be drawn by the GM: the GM
+    // issues it, and with it draws the tables.
+    if (ScGrantBastionOrders.appliesTo(activity)) {
+      try {
+        const issued = await ScGrantBastionOrders.issue(activity, { recipientActor, entries, checkInfo });
+        return issued.ok
+          ? { ok: true, bastion: { order: issued.order, days: issued.days, changed: issued.changed } }
+          : { ok: false, message: issued.message };
+      } catch (error) {
+        Logger.error("Could not issue a relayed sc-grant bastion order.", error);
+        return { ok: false, message: ScGrantActivityService.#executionFailedMessage(error) };
+      }
     }
 
     try {
@@ -112,7 +141,31 @@ export class ScGrantActivityService {
       return { canceled: true, reason: "missing-items" };
     }
 
-    const relay = ScGrantActivityService.#shouldRelay(recipientActor, entries);
+    const budget = ScGrantEntryHelpers.isBudget(activity?.selection)
+      ? ScGrantActivityService.resolveBudget(activity)
+      : 0;
+    if (ScGrantEntryHelpers.isBudget(activity?.selection) && budget < 1) {
+      ui.notifications?.warn?.(Constants.localize(
+        "SCMOREACTIVITIES.Activities.ScGrant.Warning.NoBudget",
+        "This grant has no points to spend."
+      ));
+      return { canceled: true, reason: "no-budget" };
+    }
+
+    const bastion = ScGrantBastionOrders.appliesTo(activity);
+    if (bastion) {
+      const blocker = ScGrantBastionOrders.blocker(activity);
+      if (blocker) {
+        ui.notifications?.warn?.(blocker);
+        return { canceled: true, reason: "bastion-unavailable" };
+      }
+    }
+
+    // A bastion order only writes to the user's own facility, and its items are
+    // created later; only its table draws need the GM, as for any grant.
+    const relay = bastion
+      ? ScGrantActivityService.#drawsTablesAsPlayer(entries)
+      : ScGrantActivityService.#shouldRelay(recipientActor, entries);
     if (relay && !ScGrantActivityService.#canRelay()) {
       ui.notifications?.warn?.(Constants.localize(
         "SCMOREACTIVITIES.Activities.ScGrant.Warning.NoActiveGm",
@@ -152,9 +205,35 @@ export class ScGrantActivityService {
         };
       }
 
+      const picks = await ScGrantActivityService.#choose(activity, entries, { bastion, budget });
+      const chosen = ScGrantEntryHelpers.applyPicks(entries, activity?.selection, picks, { budget });
+      if (!chosen) {
+        return { canceled: true, reason: "choice-canceled" };
+      }
+
+      if (bastion) {
+        const issued = relay
+          ? await ScGrantActivityService.#requestGmIssue(activity, recipient, checkInfo, picks)
+          : await ScGrantBastionOrders.issue(activity, { recipientActor, entries: chosen, checkInfo });
+        if (!issued.ok) {
+          ui.notifications?.warn?.(issued.message);
+          return { canceled: true, reason: "bastion-unavailable" };
+        }
+        ui.notifications?.info?.(ScGrantBastionOrders.issuedNotice(activity.item?.name, issued));
+        return {
+          canceled: false,
+          checkPassed: true,
+          check: checkInfo,
+          actor: recipientActor,
+          pending: true,
+          updated: [],
+          created: []
+        };
+      }
+
       const outcome = relay
-        ? await ScGrantActivityService.#requestGmGrant(activity, recipient, checkInfo)
-        : await ScGrantActivityService.#grantItems(activity, sourceActor, recipientActor, entries, checkInfo);
+        ? await ScGrantActivityService.#requestGmGrant(activity, recipient, checkInfo, picks)
+        : await ScGrantActivityService.#grantItems(activity, sourceActor, recipientActor, chosen, checkInfo);
 
       if (!outcome.ok) {
         if (outcome.reason === "no-create-data") {
@@ -190,44 +269,316 @@ export class ScGrantActivityService {
   }
 
   /**
+   * Rolls the quantities and draws the tables of `entries`: what a grant will
+   * deliver, as plain data that can be stored and applied later. `rolls` (the
+   * Roll objects, for the chat card) are not part of the stored plan.
+   */
+  static async planGrant(rawEntries, rollData = {}) {
+    const entries = ScGrantEntryHelpers.normalizeEntries(rawEntries);
+    const { sources, lines, rolls } = await ScGrantActivityService.#resolveSources(entries, rollData);
+    return {
+      sources: sources.map(({ item, quantity, tableUuid }) => ({
+        uuid: item.uuid,
+        quantity,
+        tableUuid: tableUuid ?? null
+      })),
+      lines,
+      rolls
+    };
+  }
+
+  /**
+   * Delivers a completed bastion order's stored plan (see ScGrantBastionOrders).
+   * Each source is written with `deliveryId`, so a retry after a partial
+   * failure skips the sources that already reached the recipient. `holds()`
+   * is checked before every write: once it is false (another client took the
+   * order over), nothing else is written and the result is "claim-lost".
+   */
+  static async deliverPlan(recipientActor, plan, {
+    activityId, deliveryId, checkInfo = null, banner = null, rolls = [], holds = () => true
+  }) {
+    // Like an immediate grant, a plan that resolved no item delivers nothing.
+    if (!plan?.sources?.length) {
+      ui.notifications?.warn?.(Constants.localize(
+        "SCMOREACTIVITIES.Activities.ScGrant.Warning.NoResolvedItems",
+        "No valid items could be resolved for this grant activity."
+      ));
+      return { ok: false, reason: "no-items" };
+    }
+    try {
+      const outcome = await ScGrantActivityService.#applyPlan(recipientActor, plan, { activityId, deliveryId, holds });
+      if (!holds()) {
+        return { ok: false, reason: "claim-lost" };
+      }
+      await ScGrantActivityService.#createChatCard(null, recipientActor, plan.lines ?? [], rolls, checkInfo, banner);
+      ui.notifications?.info?.(Constants.format(
+        "SCMOREACTIVITIES.Activities.ScGrant.Info.GrantedItems",
+        { count: outcome.totalGranted, actor: recipientActor.name ?? "" },
+        `Granted ${outcome.totalGranted} item(s).`
+      ));
+      return { ok: true, ...outcome };
+    } catch (error) {
+      if (error instanceof ClaimLostError) {
+        return { ok: false, reason: "claim-lost" };
+      }
+      Logger.error("Could not deliver an sc-grant bastion order.", error);
+      ui.notifications?.error?.(ScGrantActivityService.#executionFailedMessage(error));
+      return { ok: false, error };
+    }
+  }
+
+  /**
+   * The points a budget grant lets the user spend: a whole number or a
+   * deterministic formula over the activity's roll data, so the GM resolves
+   * the same budget when it checks a relayed choice.
+   */
+  static resolveBudget(activity) {
+    const formula = ScGrantEntryHelpers.normalizeSelection(activity?.selection).budget;
+    let value = Number(formula);
+    if (!/^\d+$/.test(formula)) {
+      const actor = activity?.actor ?? activity?.item?.actor ?? null;
+      const rollData = activity?.getRollData?.({ deterministic: true })
+        ?? actor?.getRollData?.({ deterministic: true })
+        ?? {};
+      const simplify = globalThis.dnd5e?.utils?.simplifyBonus;
+      value = typeof simplify === "function" ? simplify(formula, rollData) : Number.NaN;
+    }
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+  }
+
+  /**
+   * What the user picked: source indices in the choose mode, one unit count
+   * per source in the budget mode, `[]` when the activity grants every
+   * source, or `null` when the user closed the picker.
+   */
+  static async #choose(activity, entries, { bastion = false, budget = 0 } = {}) {
+    const isBudget = ScGrantEntryHelpers.isBudget(activity?.selection);
+    const count = ScGrantEntryHelpers.choiceCount(activity?.selection, entries.length);
+    if (!isBudget && !count) {
+      return [];
+    }
+
+    const options = await Promise.all(entries.map(async(entry) => {
+      const document = await ScGrantActivityService.#fromUuid(entry.uuid);
+      const isTable = entry.type === ScGrantEntryHelpers.SOURCE_TYPES.TABLE;
+      return {
+        name: document?.name ?? entry.uuid,
+        img: document?.img ?? (isTable ? "icons/svg/d20-grey.svg" : "icons/svg/item-bag.svg"),
+        quantity: entry.quantity,
+        cost: entry.cost,
+        typeLabel: Constants.localize(
+          isTable
+            ? "SCMOREACTIVITIES.Activities.ScGrant.Fields.Source.TypeTable"
+            : "SCMOREACTIVITIES.Activities.ScGrant.Fields.Source.TypeItem",
+          isTable ? "Roll Table" : "Item"
+        )
+      };
+    }));
+
+    let note = "";
+    if (bastion) {
+      const { order, days } = ScGrantEntryHelpers.normalizeBastion(activity?.bastion);
+      note = Constants.format(
+        "SCMOREACTIVITIES.Activities.ScGrant.Bastion.ChoiceNote",
+        { order: ScGrantBastionOrders.orderLabel(order), days },
+        `Delivered when the order completes (${days} days).`
+      );
+    }
+
+    return ScGrantChoiceApp.wait({
+      title: activity?.name ?? "",
+      mode: isBudget ? "budget" : "choose",
+      count,
+      budget,
+      options,
+      note
+    });
+  }
+
+  /**
    * Resolves, stacks, and creates the granted items, then posts the chat
    * card. Runs on whichever client may write to the recipient: the user's own
    * when they own it, the GM's otherwise.
    */
-  static async #grantItems(activity, sourceActor, recipientActor, entries, checkInfo) {
+  static async #grantItems(activity, sourceActor, recipientActor, entries, checkInfo, { banner = null } = {}) {
     const rollData = activity?.getRollData?.() ?? sourceActor?.getRollData?.() ?? {};
-    const { sources, lines, rolls } = await ScGrantActivityService.#resolveSources(entries, rollData);
-    const createData = [];
-    const quantityUpdates = [];
-    let totalGranted = 0;
-
-    for (const source of sources) {
-      const existingStack = ScGrantActivityService.#findExistingStack(recipientActor, source.item, activity);
-      const documents = ScGrantActivityService.#createDocumentsForEntry(source, activity, existingStack);
-      createData.push(...documents);
-      if (existingStack && ScGrantActivityService.#supportsQuantity(existingStack.toObject())) {
-        quantityUpdates.push({
-          _id: existingStack.id,
-          "system.quantity": (Number(existingStack.system?.quantity) || 0) + source.quantity
-        });
-      }
-      totalGranted += source.quantity;
-    }
-
-    if (!createData.length && !quantityUpdates.length) {
+    const plan = await ScGrantActivityService.planGrant(entries, rollData);
+    if (!plan.sources.length) {
       return { ok: false, reason: "no-create-data" };
     }
+    const outcome = await ScGrantActivityService.#applyPlan(recipientActor, plan, { activityId: activity?.id ?? null });
+    await ScGrantActivityService.#createChatCard(activity, recipientActor, plan.lines, plan.rolls, checkInfo, banner);
+    return { ok: true, ...outcome };
+  }
 
-    const updated = quantityUpdates.length
-      ? await recipientActor.updateEmbeddedDocuments("Item", quantityUpdates)
-      : [];
+  /**
+   * Writes a plan's sources to the recipient, one source per write: a stack
+   * gets its quantity raised, anything else is created. With a `deliveryId`,
+   * each source's key is written in the same update as its items, and a
+   * source whose key the recipient already holds is skipped.
+   */
+  static async #applyPlan(recipientActor, plan, { activityId = null, deliveryId = null, holds = () => true } = {}) {
+    const created = [];
+    const updated = [];
+    let totalGranted = 0;
 
-    const created = createData.length
-      ? await recipientActor.createEmbeddedDocuments("Item", createData)
-      : [];
+    for (const [index, source] of (plan.sources ?? []).entries()) {
+      const key = deliveryId ? `${deliveryId}.${index}` : null;
+      totalGranted += source.quantity;
+      // Delivered sources are skipped before anything is loaded: their source
+      // item may since have been deleted, which must not block the rest.
+      if (key && ScGrantActivityService.#holdsDeliveryKey(recipientActor, key)) {
+        continue;
+      }
 
-    await ScGrantActivityService.#createChatCard(activity, recipientActor, lines, rolls, checkInfo);
-    return { ok: true, totalGranted, updated: updated ?? [], created: created ?? [] };
+      const sourceItem = await fromUuid(source.uuid).catch(() => null);
+      if (!sourceItem || !ScGrantActivityService.#isItemDocument(sourceItem)) {
+        throw new Error(Constants.format(
+          "SCMOREACTIVITIES.Activities.ScGrant.Error.InvalidUuid",
+          { uuid: source.uuid },
+          `Invalid grant item UUID: ${source.uuid}`
+        ));
+      }
+
+      // From here to the write nothing awaits: the claim and the delivery key
+      // are checked against the state the write starts from, so a client that
+      // lost its claim, or a source another client delivered, is never written.
+      if (key && ScGrantActivityService.#holdsDeliveryKey(recipientActor, key)) {
+        continue;
+      }
+      if (!holds()) {
+        throw new ClaimLostError();
+      }
+
+      const stack = ScGrantActivityService.#findExistingStack(recipientActor, sourceItem, activityId);
+      if (stack) {
+        const update = {
+          _id: stack.id,
+          "system.quantity": (Number(stack.system?.quantity) || 0) + source.quantity
+        };
+        if (key) {
+          const keys = stack.flags?.[Constants.MODULE_ID]?.grantDeliveryKeys ?? [];
+          update[`flags.${Constants.MODULE_ID}.grantDeliveryKeys`] = [...keys, key].slice(-MAX_DELIVERY_KEYS);
+        }
+        const result = await recipientActor.updateEmbeddedDocuments("Item", [update]) ?? [];
+        // A hook can veto the update: nothing was delivered then.
+        if (!result.length) {
+          throw new Error(ScGrantActivityService.#refusedMessage(sourceItem));
+        }
+        updated.push(...result);
+        continue;
+      }
+
+      const documents = ScGrantActivityService.#createDocumentsForEntry(
+        { item: sourceItem, quantity: source.quantity, tableUuid: source.tableUuid },
+        activityId,
+        key
+      );
+      created.push(...await ScGrantActivityService.#createDocuments(recipientActor, documents, key, sourceItem));
+    }
+
+    return { totalGranted, created, updated };
+  }
+
+
+  /**
+   * Creates a source's items. A keyed (bastion) delivery gives each item an id
+   * derived from its delivery key and keeps it, so the same item can only be
+   * created once: a creation still in flight from a client that lost its claim
+   * and the creation of the client that took over cannot both land. Items that
+   * already exist are skipped, and a conflict on those ids means another
+   * attempt created them.
+   */
+  static async #createDocuments(actor, documents, key, sourceItem) {
+    // A hook can veto a creation (Foundry then returns fewer documents, or
+    // none): the source was not delivered, which must fail the delivery.
+    if (!key) {
+      const created = await actor.createEmbeddedDocuments("Item", documents) ?? [];
+      if (created.length < documents.length) {
+        throw new Error(ScGrantActivityService.#refusedMessage(sourceItem));
+      }
+      return created;
+    }
+    const pending = documents
+      .map((data, copy) => ({ ...data, _id: ScGrantActivityService.#deliveryItemId(key, copy) }))
+      .filter((data) => !ScGrantActivityService.#hasItem(actor, data._id));
+    if (!pending.length) {
+      return [];
+    }
+    let created = [];
+    try {
+      created = await actor.createEmbeddedDocuments("Item", pending, { keepId: true }) ?? [];
+    } catch (error) {
+      if (!pending.every((data) => ScGrantActivityService.#hasItem(actor, data._id))) {
+        throw error;
+      }
+    }
+    // Delivered only when every item exists, by this attempt or another one.
+    if (!pending.every((data) => ScGrantActivityService.#hasItem(actor, data._id))) {
+      throw new Error(ScGrantActivityService.#refusedMessage(sourceItem));
+    }
+    return created;
+  }
+
+  static #refusedMessage(sourceItem) {
+    return Constants.format(
+      "SCMOREACTIVITIES.Activities.ScGrant.Error.Refused",
+      { item: sourceItem?.name ?? "" },
+      `The creation of ${sourceItem?.name ?? "an item"} was refused.`
+    );
+  }
+
+  static #hasItem(actor, id) {
+    return Boolean(actor?.items?.get?.(id)) || Array.from(actor?.items ?? []).some((item) => (item.id ?? item._id) === id);
+  }
+
+  /**
+   * A valid document id (16 alphanumeric characters) that depends only on a
+   * delivery key and the copy number, so every client derives the same one.
+   */
+  static #deliveryItemId(key, copy) {
+    const text = `${key}#${copy}`;
+    let a = 0x811c9dc5;
+    let b = 0x9e3779b9;
+    for (let index = 0; index < text.length; index += 1) {
+      const code = text.charCodeAt(index);
+      a = Math.imul(a ^ code, 16777619);
+      b = Math.imul(b ^ code, 2246822519);
+    }
+    let id = "";
+    for (let index = 0; index < 16; index += 1) {
+      const state = index % 2 ? (a = ScGrantActivityService.#xorshift(a)) : (b = ScGrantActivityService.#xorshift(b));
+      id += ID_CHARS[(state >>> 0) % ID_CHARS.length];
+    }
+    return id;
+  }
+
+  static #xorshift(value) {
+    let state = value || 1;
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    return state;
+  }
+
+  /**
+   * Whether a source was fully delivered: added to a stack (which keeps the
+   * key), or created with every copy it needs. A creation that a hook cut
+   * short leaves copies missing, so the source is not delivered yet.
+   */
+  static #holdsDeliveryKey(actor, key) {
+    const items = Array.from(actor?.items ?? []);
+    const flagsOf = (item) => item.flags?.[Constants.MODULE_ID] ?? {};
+    if (items.some((item) => (flagsOf(item).grantDeliveryKeys ?? []).includes(key))) {
+      return true;
+    }
+    const copies = Number(items.find((item) => flagsOf(item).grantDeliveryKey === key)
+      ?.flags?.[Constants.MODULE_ID]?.grantDeliveryCopies);
+    if (!Number.isInteger(copies) || copies < 1) {
+      return false;
+    }
+    return Array.from({ length: copies }, (_unused, copy) => ScGrantActivityService.#deliveryItemId(key, copy))
+      .every((id) => ScGrantActivityService.#hasItem(actor, id));
   }
 
   /**
@@ -247,12 +598,26 @@ export class ScGrantActivityService {
     return drawsTables && ScGrantActivityService.#canRelay();
   }
 
+  /** Whether a player's grant draws world tables, whose results only a GM may mark as drawn. */
+  static #drawsTablesAsPlayer(entries) {
+    if (game?.user?.isGM) {
+      return false;
+    }
+    const drawsTables = entries.some((entry) => entry.type === ScGrantEntryHelpers.SOURCE_TYPES.TABLE);
+    return drawsTables && ScGrantActivityService.#canRelay();
+  }
+
+  static async #requestGmIssue(activity, recipient, checkInfo, picks) {
+    const result = await ScGrantActivityService.#requestGmGrant(activity, recipient, checkInfo, picks);
+    return result.ok && result.bastion ? { ok: true, ...result.bastion } : { ok: false, message: result.message };
+  }
+
   static #canRelay() {
     const gm = ScGrantActivityService.#activeGmUser();
     return Boolean(gm && typeof gm.query === "function" && globalThis.CONFIG?.queries?.[QUERY_ID]);
   }
 
-  static async #requestGmGrant(activity, recipient, checkInfo) {
+  static async #requestGmGrant(activity, recipient, checkInfo, picks = []) {
     const gm = ScGrantActivityService.#activeGmUser();
     try {
       const result = await gm.query(QUERY_ID, {
@@ -260,13 +625,15 @@ export class ScGrantActivityService {
         recipientUuid: recipient.token?.uuid ?? recipient.actor?.uuid ?? null,
         requestUserId: game?.user?.id ?? null,
         scaling: ScUsageScaling.of(activity),
-        check: checkInfo
+        check: checkInfo,
+        picks
       }, { timeout: QUERY_TIMEOUT });
       return {
         ok: result?.ok === true,
         reason: result?.reason,
         message: result?.message,
         totalGranted: Number(result?.totalGranted) || 0,
+        bastion: result?.bastion ?? null,
         created: Array.isArray(result?.created) ? result.created : [],
         updated: Array.isArray(result?.updated) ? result.updated : []
       };
@@ -496,13 +863,14 @@ export class ScGrantActivityService {
           if (existing) {
             existing.quantity += 1;
           } else {
-            counts.set(key, { uuid: drawnItem.uuid, name: drawnItem.name ?? "", quantity: 1 });
+            counts.set(key, { uuid: drawnItem.uuid, name: drawnItem.name ?? "", img: drawnItem.img ?? "", quantity: 1 });
           }
         }
         lines.push({
           kind: "table",
           uuid: table.uuid,
           name: table.name ?? "",
+          img: table.img ?? "",
           draws: quantity,
           formula: roll ? roll.formula : null,
           total: roll?.total ?? null,
@@ -524,6 +892,7 @@ export class ScGrantActivityService {
         kind: "item",
         uuid: item.uuid,
         name: item.name ?? "",
+        img: item.img ?? "",
         quantity,
         formula: roll ? roll.formula : null,
         total: roll?.total ?? null
@@ -547,58 +916,57 @@ export class ScGrantActivityService {
     }
   }
 
-  static async #createChatCard(activity, recipientActor, lines, rolls, checkInfo) {
+  static async #createChatCard(activity, recipientActor, lines, rolls, checkInfo, banner = null) {
     if (!lines.length) {
       return;
     }
 
-    const rollSuffix = (line) => (line.formula
-      ? ` <span class="sc-ma-grant-card-roll">(${line.formula} = ${line.total})</span>`
-      : "");
+    const notes = [];
+    if (checkInfo) {
+      notes.push({
+        icon: "fa-dice-d20",
+        text: Constants.format(
+          "SCMOREACTIVITIES.Activities.ScGrant.Card.CheckPassed",
+          { dc: checkInfo.dc, total: checkInfo.total },
+          `Check passed (DC ${checkInfo.dc}, rolled ${checkInfo.total}).`
+        )
+      });
+    }
 
-    const listHtml = lines.map((line) => {
-      if (line.kind === "table") {
-        const children = line.items.length
-          ? line.items.map((item) => `<li>${item.quantity} &times; @UUID[${item.uuid}]{${item.name}}</li>`).join("")
-          : `<li>${Constants.localize(
-            "SCMOREACTIVITIES.Activities.ScGrant.Card.TableEmpty",
-            "No items drawn."
-          )}</li>`;
-        const drawsText = Constants.format(
-          "SCMOREACTIVITIES.Activities.ScGrant.Card.TableDraws",
-          { count: line.draws },
-          `${line.draws} draw(s)`
-        );
-        return `<li>@UUID[${line.uuid}]{${line.name}} &mdash; ${drawsText}${rollSuffix(line)}<ul>${children}</ul></li>`;
-      }
-      return `<li>${line.quantity} &times; @UUID[${line.uuid}]{${line.name}}${rollSuffix(line)}</li>`;
-    }).join("");
-
-    const parts = [
-      `<p class="sc-ma-grant-card-header">${Constants.format(
+    const content = ScGrantCard.content({
+      banner: banner ?? ScGrantActivityService.#defaultBanner(activity),
+      intro: Constants.format(
         "SCMOREACTIVITIES.Activities.ScGrant.Card.Received",
         { actor: recipientActor.name ?? "" },
         `${recipientActor.name ?? "The actor"} received:`
-      )}</p>`
-    ];
-    if (checkInfo) {
-      parts.push(`<p class="sc-ma-grant-card-check">${Constants.format(
-        "SCMOREACTIVITIES.Activities.ScGrant.Card.CheckPassed",
-        { dc: checkInfo.dc, total: checkInfo.total },
-        `Check passed (DC ${checkInfo.dc}, rolled ${checkInfo.total}).`
-      )}</p>`);
-    }
-    parts.push(`<ul class="sc-ma-grant-card-list">${listHtml}</ul>`);
+      ),
+      lines,
+      notes,
+      emptyText: Constants.localize("SCMOREACTIVITIES.Activities.ScGrant.Card.TableEmpty", "No items drawn."),
+      drawsText: (count) => Constants.format(
+        "SCMOREACTIVITIES.Activities.ScGrant.Card.TableDraws",
+        { count },
+        `${count} draw(s)`
+      )
+    });
 
     try {
       await ChatMessage.create({
         speaker: ChatMessage.getSpeaker({ actor: recipientActor }),
-        content: `<div class="sc-ma-grant-card">${parts.join("")}</div>`,
+        content,
         rolls
       });
     } catch (error) {
       Logger.warn("Could not create sc-grant chat card.", error);
     }
+  }
+
+  /** The card's banner for a grant used directly: the item it comes from, and the activity. */
+  static #defaultBanner(activity) {
+    const item = activity?.item ?? null;
+    const title = item?.name || activity?.name || "";
+    const subtitle = activity?.name && activity.name !== title ? activity.name : "";
+    return { img: item?.img ?? "", title, subtitle };
   }
 
   static async #drawTableItems(table, draws) {
@@ -644,25 +1012,25 @@ export class ScGrantActivityService {
     return document?.documentName === "Item" || document?.constructor?.documentName === "Item";
   }
 
-  static #createDocumentsForEntry(source, activity, existingStack = null) {
+  static #createDocumentsForEntry(source, activityId = null, deliveryKey = null) {
     const { item: sourceItem, quantity, tableUuid } = source;
     const baseData = sourceItem.toObject();
     delete baseData._id;
 
     const moduleFlags = {
-      grantActivityId: activity?.id ?? null,
+      grantActivityId: activityId,
       grantSourceUuid: sourceItem.uuid ?? null
     };
     if (tableUuid) {
       moduleFlags.grantTableUuid = tableUuid;
     }
+    if (deliveryKey) {
+      moduleFlags.grantDeliveryKey = deliveryKey;
+      moduleFlags.grantDeliveryCopies = ScGrantActivityService.#supportsQuantity(baseData) ? 1 : quantity;
+    }
     const flags = foundry.utils.mergeObject(baseData.flags ?? {}, {
       [Constants.MODULE_ID]: moduleFlags
     }, { inplace: false });
-
-    if (existingStack && ScGrantActivityService.#supportsQuantity(baseData)) {
-      return [];
-    }
 
     if (ScGrantActivityService.#supportsQuantity(baseData)) {
       baseData.system.quantity = quantity;
@@ -683,14 +1051,14 @@ export class ScGrantActivityService {
     return typeof itemData?.system?.quantity === "number";
   }
 
-  static #findExistingStack(actor, sourceItem, activity) {
-    return actor.items.find((item) => {
+  static #findExistingStack(actor, sourceItem, activityId) {
+    return Array.from(actor.items ?? []).find((item) => {
       const sourceUuid = item.flags?.[Constants.MODULE_ID]?.grantSourceUuid;
-      const activityId = item.flags?.[Constants.MODULE_ID]?.grantActivityId;
+      const grantActivityId = item.flags?.[Constants.MODULE_ID]?.grantActivityId;
       const compendiumSource = item?._source?._stats?.compendiumSource ?? item?.system?._source?.compendiumSource ?? null;
       return ScGrantActivityService.#supportsQuantity(item.toObject())
         && (sourceUuid === sourceItem.uuid || compendiumSource === sourceItem.uuid)
-        && (activityId === activity?.id || compendiumSource === sourceItem.uuid);
+        && (grantActivityId === activityId || compendiumSource === sourceItem.uuid);
     }) ?? null;
   }
 }

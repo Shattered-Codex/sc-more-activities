@@ -64,7 +64,11 @@ export class ScRangeShape {
     return Number(distance) / gridDistance * gridSize;
   }
 
+  /** A colour as PIXI wants it: a hex string ("#rrggbb") or an already numeric colour. */
   static color(value, fallback) {
+    if (typeof value === "number") {
+      return Number.isInteger(value) && value >= 0 && value <= 0xffffff ? value : fallback;
+    }
     const match = /^#?([0-9a-f]{6})$/iu.exec(String(value ?? ""));
     return match ? Number.parseInt(match[1], 16) : fallback;
   }

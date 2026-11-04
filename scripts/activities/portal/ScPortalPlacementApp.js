@@ -3,6 +3,7 @@ import { ModuleSettings } from "../../settings/ModuleSettings.js";
 import { ScDocumentWindowMinimizer } from "../../applications/ScDocumentWindowMinimizer.js";
 import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
 import { ScRangeShape } from "../canvas/ScRangeShape.js";
+import { ScBlockedArea } from "../canvas/ScBlockedArea.js";
 import { ScPortalConfig } from "./ScPortalConfig.js";
 import { ScPortalGeometry } from "./ScPortalGeometry.js";
 import { ScPortalService } from "./ScPortalService.js";
@@ -14,7 +15,6 @@ const SIDE_COLORS = {
   entry: { border: 0x24b86a, fill: 0x39f08c },
   exit: { border: 0x3d7bd6, fill: 0x8fd3ff }
 };
-const INVALID_COLORS = { border: 0xd32f2f, fill: 0xffb3b3 };
 const LINK_COLOR = 0x8a63d2;
 
 export class ScPortalPlacementApp extends HandlebarsApplicationMixin(ApplicationV2) {
@@ -55,6 +55,8 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
     this.canvasContextMenuHandler = null;
     this.previewGraphics = null;
     this.previewLabels = null;
+    this.blockedCellsCache = {};
+    this.sightProbeCache = {};
     this.minimizedWindows = null;
     this.hasPannedToOrigin = false;
     this.sceneId = canvas?.scene?.id ?? null;
@@ -419,14 +421,27 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
   }
 
   #placementIssue(point) {
+    const originCenter = this.#originCenter();
     return ScPortalPlacementApp.placementIssueFor({
       point,
-      originCenter: this.#originCenter(),
+      originCenter,
       placementRange: this.config.placementRange,
       entryPoint: this.points.length === 1 ? this.points[0] : null,
       linkRange: this.config.linkRange,
       rangeShape: this.config.rangeShape,
-      scene: canvas?.scene
+      scene: canvas?.scene,
+      inSight: this.#pointInSight(originCenter, point)
+    });
+  }
+
+  /** Whether the origin can see the point and this user can see it now. */
+  #pointInSight(originCenter, point) {
+    if (!originCenter || !point) {
+      return true;
+    }
+    return ScBlockedArea.canSee(originCenter, point, {
+      probe: ScBlockedArea.cachedSightProbe(this.sightProbeCache, originCenter),
+      requireVisibility: true
     });
   }
 
@@ -441,7 +456,8 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
     entryPoint = null,
     linkRange = "",
     rangeShape = "circle",
-    scene = null
+    scene = null,
+    inSight = true
   } = {}) {
     if (!point) {
       return "invalid";
@@ -461,6 +477,10 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
       return "linkRange";
     }
 
+    if (!inSight) {
+      return "sight";
+    }
+
     return null;
   }
 
@@ -477,6 +497,13 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
         "SCMOREACTIVITIES.Activities.ScPortal.Warning.LinkTooFar",
         { range: this.config.linkRange },
         `The two portal sides must be within ${this.config.linkRange} of each other.`
+      ));
+      return;
+    }
+    if (issue === "sight") {
+      ui.notifications?.warn?.(Constants.localize(
+        "SCMOREACTIVITIES.Activities.ScPortal.Warning.OutOfSight",
+        "The portal must be placed where you can see."
       ));
       return;
     }
@@ -544,6 +571,8 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
     this.#clearLabels();
     const originCenter = this.#originCenter();
     const colors = ModuleSettings.getPortalRangeColors();
+    const blockedColor = ScRangeShape.color(colors.blockedColor, 0xe5484d);
+    const invalidColors = { border: blockedColor, fill: blockedColor };
     ScRangeShape.drawPreview(graphics, {
       center: originCenter,
       distance: this.config.placementRange,
@@ -552,6 +581,17 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
       borderColor: colors.borderColor,
       fillColor: colors.fillColor
     });
+    // Spaces a side cannot open on: behind a wall or out of this user's view.
+    ScBlockedArea.blockedCells({
+      originCenter,
+      distance: this.config.placementRange,
+      rangeShape: this.config.rangeShape,
+      scene: canvas?.scene,
+      sight: true,
+      requireVisibility: true,
+      cache: this.blockedCellsCache
+    });
+    ScBlockedArea.drawCachedCells(graphics, this.blockedCellsCache, blockedColor);
     const radius = ScPortalGeometry.radiusPixels(this.config.squares, canvas?.scene);
     const [entry, exit] = this.points;
     if (entry && !exit && this.config.linkRange !== "") {
@@ -588,11 +628,11 @@ export class ScPortalPlacementApp extends HandlebarsApplicationMixin(Application
     // The hover preview wears the colours and name of the side it will become,
     // so the user always knows which one the next click places.
     const valid = !this.#placementIssue(this.hoverPoint);
-    const sideColors = valid ? (entry ? SIDE_COLORS.exit : SIDE_COLORS.entry) : INVALID_COLORS;
+    const sideColors = valid ? (entry ? SIDE_COLORS.exit : SIDE_COLORS.entry) : invalidColors;
     this.#drawSide(graphics, this.hoverPoint, radius, sideColors);
     this.#drawLabel(this.hoverPoint, radius, entry ? exitLabel : entryLabel, sideColors.fill);
     if (entry) {
-      this.#drawLink(graphics, entry, this.hoverPoint, radius, valid ? LINK_COLOR : INVALID_COLORS.border, 0.6);
+      this.#drawLink(graphics, entry, this.hoverPoint, radius, valid ? LINK_COLOR : invalidColors.border, 0.6);
     }
   }
 

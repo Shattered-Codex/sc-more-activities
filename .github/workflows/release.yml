@@ -137,7 +137,8 @@ jobs:
           printf 'Packaging files:\n'
           printf ' - %s\n' "${FILES[@]}"
 
-          zip -r "./${MODULE_ID}.zip" "${FILES[@]}"
+          # Promotional artwork is hosted publicly and is not needed at runtime.
+          zip -r "./${MODULE_ID}.zip" "${FILES[@]}" -x "assets/cover/*"
 
       - name: Prepare release artifacts
         shell: bash
@@ -185,18 +186,7 @@ jobs:
             COMMIT_MESSAGE="Release published"
           fi
 
-          COVER_IMAGE=""
-          if [ -f "assets/img/cover.webp" ]; then
-            COVER_IMAGE="assets/img/cover.webp"
-          elif [ -f "assets/imgs/cover.webp" ]; then
-            COVER_IMAGE="assets/imgs/cover.webp"
-          fi
-
-          if [ -n "${COVER_IMAGE}" ]; then
-            EMBED_IMAGE_URL="attachment://cover.webp"
-          else
-            EMBED_IMAGE_URL=$(jq -r 'first(.media[]? | select(.type == "cover") | .url) // empty' module.json)
-          fi
+          EMBED_IMAGE_URL=$(jq -r 'first(.media[]? | select(.type == "cover") | .url) // empty' module.json)
 
           payload=$(jq -n \
             --arg content "@everyone" \
@@ -220,17 +210,10 @@ jobs:
             }
             | if $image_url != "" then .embeds[0].image = { url: $image_url } else . end')
 
-          if [ -n "${COVER_IMAGE}" ]; then
-            curl -sSf \
-              -F "payload_json=${payload}" \
-              -F "files[0]=@${COVER_IMAGE};filename=cover.webp;type=image/webp" \
-              "${DISCORD_WEBHOOK_URL}"
-          else
-            curl -sSf \
-              -H "Content-Type: application/json" \
-              -d "${payload}" \
-              "${DISCORD_WEBHOOK_URL}"
-          fi
+          curl -sSf \
+            -H "Content-Type: application/json" \
+            -d "${payload}" \
+            "${DISCORD_WEBHOOK_URL}"
 
       - name: Upload artifacts to R2
         if: ${{ success() }}

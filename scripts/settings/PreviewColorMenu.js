@@ -2,7 +2,7 @@ import { Constants } from "../constants/Constants.js";
 import { ModuleSettings } from "./ModuleSettings.js";
 
 /** Preview scopes, in the order they appear in the picker. */
-const SCOPES = ["teleport", "movement", "wall", "portal"];
+const SCOPES = ModuleSettings.PREVIEW_SCOPES;
 const SCOPE_ICONS = Object.freeze({
   teleport: "fa-solid fa-bolt",
   movement: "fa-solid fa-arrows-up-down-left-right",
@@ -24,8 +24,8 @@ export class PreviewColorMenu extends HandlebarsApplicationMixin(ApplicationV2) 
     classes: ["sc-more-activities", "sc-ma-config-theme", "sc-ma-preview-colors-app"],
     tag: "form",
     position: {
-      width: 820,
-      height: 640
+      width: 900,
+      height: 560
     },
     window: {
       contentClasses: ["sc-ma-config-theme"],
@@ -43,7 +43,8 @@ export class PreviewColorMenu extends HandlebarsApplicationMixin(ApplicationV2) 
 
   constructor(options = {}) {
     super(options);
-    this.draftColors = foundry.utils.deepClone(ModuleSettings.getPreviewColors());
+    this.savedColors = foundry.utils.deepClone(ModuleSettings.getPreviewColors());
+    this.draftColors = foundry.utils.deepClone(this.savedColors);
     this.selectedScope = DEFAULT_SCOPE;
   }
 
@@ -53,6 +54,8 @@ export class PreviewColorMenu extends HandlebarsApplicationMixin(ApplicationV2) 
       selectedScope: scope,
       scopeLabel: PreviewColorMenu.#scopeLabel(scope),
       scopeHint: PreviewColorMenu.#scopeHint(scope),
+      scopeIcon: SCOPE_ICONS[scope],
+      isDirty: SCOPES.some((value) => this.#isScopeDirty(value)),
       isTeleportScope: scope === "teleport",
       isMovementScope: scope === "movement",
       isWallScope: scope === "wall",
@@ -62,31 +65,54 @@ export class PreviewColorMenu extends HandlebarsApplicationMixin(ApplicationV2) 
         value,
         label: PreviewColorMenu.#scopeLabel(value),
         icon: SCOPE_ICONS[value],
-        selected: scope === value
+        selected: scope === value,
+        dirty: this.#isScopeDirty(value)
       }))
     };
   }
 
+  /** Whether any colour of this overlay differs from what is saved. */
+  #isScopeDirty(scope) {
+    return ModuleSettings.PREVIEW_COLOR_PARTS.some((part) => {
+      const key = `${scope}Range${part}`;
+      return String(this.draftColors[key]).toLowerCase() !== String(this.savedColors[key]).toLowerCase();
+    });
+  }
+
   /**
-   * The two colour inputs of the active scope. Every scope has the same pair,
-   * so the template renders this list instead of repeating the markup per scope.
+   * Edits never re-render the window (that would drop the open colour
+   * picker), so the rail dots and the save button follow them here.
+   */
+  #refreshDirtyState() {
+    let anyDirty = false;
+    for (const scope of SCOPES) {
+      const dirty = this.#isScopeDirty(scope);
+      anyDirty ||= dirty;
+      const dot = this.element.querySelector(`[data-scope-dot="${scope}"]`);
+      if (dot) {
+        dot.hidden = !dirty;
+      }
+    }
+    this.element.querySelector("[data-action='save']")?.classList.toggle("is-dirty", anyDirty);
+  }
+
+  /**
+   * The colour inputs of the active scope. Every scope has the same set, so
+   * the template renders this list instead of repeating the markup per scope.
    */
   #colorFields(scope) {
-    return [
-      { key: `${scope}RangeFill`, suffix: "fill", labelKey: "Fill" },
-      { key: `${scope}RangeBorder`, suffix: "border", labelKey: "Border" }
-    ].map(({ key, suffix, labelKey }) => ({
-      key,
-      id: `sc-ma-${scope}-range-${suffix}`,
+    return ModuleSettings.PREVIEW_COLOR_PARTS.map((part) => ({
+      key: `${scope}Range${part}`,
+      id: `sc-ma-${scope}-range-${part.toLowerCase()}`,
       label: Constants.localize(
-        `SCMOREACTIVITIES.Settings.PreviewColorsMenu.Fields.${labelKey}.Label`,
-        labelKey
+        `SCMOREACTIVITIES.Settings.PreviewColorsMenu.Fields.${part}.Label`,
+        part
       ),
       hint: Constants.localize(
-        `SCMOREACTIVITIES.Settings.PreviewColorsMenu.Fields.${labelKey}.Hint`,
-        labelKey
+        `SCMOREACTIVITIES.Settings.PreviewColorsMenu.Fields.${part}.Hint`,
+        part
       ),
-      value: this.draftColors[key]
+      value: this.draftColors[`${scope}Range${part}`]
     }));
   }
 
@@ -211,13 +237,15 @@ export class PreviewColorMenu extends HandlebarsApplicationMixin(ApplicationV2) 
 
     const styles = {};
     for (const scope of SCOPES) {
-      styles[`--sc-ma-preview-${scope}-border`] = this.draftColors[`${scope}RangeBorder`];
-      styles[`--sc-ma-preview-${scope}-fill`] = this.draftColors[`${scope}RangeFill`];
+      for (const part of ModuleSettings.PREVIEW_COLOR_PARTS) {
+        styles[`--sc-ma-preview-${scope}-${part.toLowerCase()}`] = this.draftColors[`${scope}Range${part}`];
+      }
     }
 
     for (const [name, value] of Object.entries(styles)) {
       root.style.setProperty(name, value);
     }
+    this.#refreshDirtyState();
   }
 
   #normalizeHexColor(value) {

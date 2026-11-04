@@ -1,0 +1,10 @@
+<footer class="form-footer">
+  <button type="submit" {{#unless canConfirm}}disabled{{/unless}}>
+    <i class="fa-solid fa-check" inert></i>
+    {{ localize "SCMOREACTIVITIES.Activities.ScGrant.Choice.Confirm" }}
+  </button>
+  <button type="button" data-action="cancel">
+    <i class="fa-solid fa-xmark" inert></i>
+    {{ localize "SCMOREACTIVITIES.Activities.ScGrant.Choice.Cancel" }}
+  </button>
+</footer>

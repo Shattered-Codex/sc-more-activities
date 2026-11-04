@@ -290,3 +290,174 @@ test("a zero target radius keeps every requested target eligible", async(t) => {
   assert.equal(result.ok, true);
   assert.deepEqual(scene.updates.map((update) => update._id), ["far"]);
 });
+
+test("teleport execution refuses a destination another token stands on", async(t) => {
+  const origin = makeToken({ id: "origin-occupied", x: 0, y: 0 });
+  const target = makeToken({ id: "target-occupied", x: 100, y: 0 });
+  const bystander = makeToken({ id: "bystander-occupied", x: 300, y: 300 });
+  const scene = makeScene([origin, target, bystander]);
+  const activity = {
+    actor: { testUserPermission: () => true },
+    teleport: { maxTargets: 1, targetRadius: 0, teleportDistance: 0, snapToGrid: true }
+  };
+  installGlobals(t, { scene, activity });
+
+  const result = await ScCanvasActivityService.handleCanvasQuery({
+    operation: "teleport",
+    activityUuid: "Activity.abc",
+    sceneId: "scene-1",
+    requestUserId: "player",
+    originTokenId: origin.id,
+    tokenIds: [target.id],
+    destination: { x: 350, y: 350 }
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(scene.updates.length, 0);
+});
+
+test("a hidden token does not block a teleport the player could not know about", async(t) => {
+  const origin = makeToken({ id: "origin-hidden", x: 0, y: 0 });
+  const target = makeToken({ id: "target-hidden", x: 100, y: 0 });
+  const lurker = { ...makeToken({ id: "lurker-hidden", x: 300, y: 300 }), hidden: true };
+  const scene = makeScene([origin, target, lurker]);
+  const activity = {
+    actor: { testUserPermission: () => true },
+    teleport: { maxTargets: 1, targetRadius: 0, teleportDistance: 0, snapToGrid: true }
+  };
+  installGlobals(t, { scene, activity });
+
+  const result = await ScCanvasActivityService.handleCanvasQuery({
+    operation: "teleport",
+    activityUuid: "Activity.abc",
+    sceneId: "scene-1",
+    requestUserId: "player",
+    originTokenId: origin.id,
+    tokenIds: [target.id],
+    destination: { x: 350, y: 350 }
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(scene.updates, [{ _id: target.id, x: 300, y: 300 }]);
+});
+
+test("a group teleport leaves behind only the member whose landing is occupied", async(t) => {
+  const origin = makeToken({ id: "origin-group", x: 0, y: 0 });
+  const left = makeToken({ id: "left-group", name: "Left", x: 100, y: 0 });
+  const right = makeToken({ id: "right-group", name: "Right", x: 200, y: 0 });
+  // Keeping the arrangement puts Left on 300,300 and Right on 400,300.
+  const bystander = makeToken({ id: "bystander-group", x: 400, y: 300 });
+  const scene = makeScene([origin, left, right, bystander]);
+  const activity = {
+    actor: { testUserPermission: () => true },
+    teleport: { maxTargets: 2, targetRadius: 0, teleportDistance: 0, keepArrangement: true, snapToGrid: true }
+  };
+  installGlobals(t, { scene, activity });
+
+  const result = await ScCanvasActivityService.handleCanvasQuery({
+    operation: "teleport",
+    activityUuid: "Activity.abc",
+    sceneId: "scene-1",
+    requestUserId: "player",
+    originTokenId: origin.id,
+    tokenIds: [left.id, right.id],
+    destination: { x: 400, y: 350 }
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.skipped, ["Right"]);
+  assert.deepEqual(scene.updates.map((update) => update._id), [left.id]);
+});
+
+test("the placement preview flags an occupied landing and a landing out of sight", (t) => {
+  const origin = makeToken({ id: "origin-preview", x: 0, y: 0 });
+  const target = makeToken({ id: "target-preview", x: 100, y: 0 });
+  const bystander = makeToken({ id: "bystander-preview", x: 300, y: 0 });
+  const scene = makeScene([origin, target, bystander]);
+  const activity = {
+    actor: { testUserPermission: () => true, getActiveTokens: () => [origin] },
+    teleport: { maxTargets: 1, teleportDistance: 0, snapToGrid: true }
+  };
+  installGlobals(t, { scene, activity });
+  globalThis.canvas.tokens = { controlled: [origin], get: (id) => scene.tokens.get(id) };
+
+  const preview = (destination, sightProbe = null) => ScCanvasActivityService.getTeleportPlacementPreview(activity, {
+    tokenIds: [target.id],
+    destination,
+    sightProbe
+  });
+
+  assert.equal(preview({ x: 350, y: 50 })?.blocked, "occupied");
+  assert.equal(preview({ x: 550, y: 50 })?.blocked, null);
+  // Sight stops at x = 450: the landing at 550 is behind a wall.
+  const probe = { kind: "polygon", test: (point) => point.x < 450 };
+  assert.equal(preview({ x: 550, y: 50 }, probe)?.blocked, "sight");
+});
+
+test("the GM only counts the occupants the requesting player reported perceiving", async(t) => {
+  const origin = makeToken({ id: "origin-perceive", x: 0, y: 0 });
+  const target = makeToken({ id: "target-perceive", x: 100, y: 0 });
+  // Not hidden, but invisible to the player: their client never saw it.
+  const unseen = makeToken({ id: "unseen-perceive", x: 300, y: 300 });
+  const scene = makeScene([origin, target, unseen]);
+  const activity = {
+    actor: { testUserPermission: () => true },
+    teleport: { maxTargets: 1, targetRadius: 0, teleportDistance: 0, snapToGrid: true }
+  };
+  installGlobals(t, { scene, activity });
+  const payload = {
+    operation: "teleport",
+    activityUuid: "Activity.abc",
+    sceneId: "scene-1",
+    requestUserId: "player",
+    originTokenId: origin.id,
+    tokenIds: [target.id],
+    destination: { x: 350, y: 350 }
+  };
+
+  const unseenResult = await ScCanvasActivityService.handleCanvasQuery({
+    ...payload,
+    perceivedTokenIds: [origin.id, target.id],
+    executionKey: "perceive-1"
+  });
+  assert.equal(unseenResult.ok, true);
+
+  target.x = 100;
+  target.y = 0;
+  scene.updates.length = 0;
+  const seenResult = await ScCanvasActivityService.handleCanvasQuery({
+    ...payload,
+    perceivedTokenIds: [origin.id, target.id, unseen.id],
+    executionKey: "perceive-2"
+  });
+  assert.equal(seenResult.ok, false);
+  assert.equal(scene.updates.length, 0);
+});
+
+test("a stranded group member blocks the teammate that would land on it", async(t) => {
+  const origin = makeToken({ id: "origin-strand", x: 0, y: 500 });
+  const first = makeToken({ id: "first-strand", name: "First", x: 100, y: 0 });
+  const second = makeToken({ id: "second-strand", name: "Second", x: 200, y: 0 });
+  // Keeping the arrangement sends First to 200,0 (Second's space) and Second
+  // to 300,0, where the bystander stands. Second stays put, so First cannot go.
+  const bystander = makeToken({ id: "bystander-strand", x: 300, y: 0 });
+  const scene = makeScene([origin, first, second, bystander]);
+  const activity = {
+    actor: { testUserPermission: () => true },
+    teleport: { maxTargets: 2, targetRadius: 0, teleportDistance: 0, keepArrangement: true, snapToGrid: true }
+  };
+  installGlobals(t, { scene, activity });
+
+  const result = await ScCanvasActivityService.handleCanvasQuery({
+    operation: "teleport",
+    activityUuid: "Activity.abc",
+    sceneId: "scene-1",
+    requestUserId: "player",
+    originTokenId: origin.id,
+    tokenIds: [first.id, second.id],
+    destination: { x: 300, y: 50 }
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(scene.updates.length, 0);
+});

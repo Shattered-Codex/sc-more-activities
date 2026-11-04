@@ -1,5 +1,6 @@
 import { Constants } from "../../constants/Constants.js";
 import { ScGrantActivityService } from "./ScGrantActivityService.js";
+import { ScGrantBastionOrders } from "./ScGrantBastionOrders.js";
 import { ScGrantEntryHelpers } from "./ScGrantEntryHelpers.js";
 
 export class ScGrantActivitySheet extends dnd5e.applications.activity.ActivitySheet {
@@ -16,6 +17,7 @@ export class ScGrantActivitySheet extends dnd5e.applications.activity.ActivitySh
   };
 
   #checkTrayExpanded = null;
+  #bastionTrayExpanded = null;
 
   async _prepareEffectContext(context, options) {
     context = await super._prepareEffectContext(context, options);
@@ -47,6 +49,7 @@ export class ScGrantActivitySheet extends dnd5e.applications.activity.ActivitySh
           type: entry.type,
           uuid: entry.uuid,
           quantity: entry.quantity,
+          cost: entry.cost,
           name: document?.name ?? entry.uuid,
           img: document?.img ?? (isTable ? "icons/svg/d20-grey.svg" : "icons/svg/hazard.svg"),
           isTable,
@@ -57,6 +60,9 @@ export class ScGrantActivitySheet extends dnd5e.applications.activity.ActivitySh
         };
       })
     );
+
+    this.#prepareSelectionContext(context);
+    await this.#prepareBastionContext(context);
 
     context.check = ScGrantEntryHelpers.normalizeCheck(this.activity?.check);
     context.checkEnabled = ScGrantEntryHelpers.isCheckEnabled(context.check);
@@ -103,6 +109,99 @@ export class ScGrantActivitySheet extends dnd5e.applications.activity.ActivitySh
     }
 
     return context;
+  }
+
+  #prepareSelectionContext(context) {
+    const { CHOOSE, ALL, BUDGET } = ScGrantEntryHelpers.SELECTION_MODES;
+    const selection = ScGrantEntryHelpers.normalizeSelection(this.activity?.selection);
+    const sourceCount = context.grants.filter((entry) => entry.uuid).length;
+    context.selection = selection;
+    context.isChoose = selection.mode === CHOOSE;
+    context.isBudget = selection.mode === BUDGET;
+    context.selectionModeOptions = [
+      { value: ALL, icon: "fa-solid fa-boxes-stacked", key: "All" },
+      { value: CHOOSE, icon: "fa-solid fa-hand-pointer", key: "Choose" },
+      { value: BUDGET, icon: "fa-solid fa-scale-balanced", key: "Budget" }
+    ].map(({ value, icon, key }) => ({
+      value,
+      icon,
+      selected: selection.mode === value,
+      label: game.i18n.localize(`SCMOREACTIVITIES.Activities.ScGrant.Fields.Selection.Choices.${key}`)
+    }));
+    const hintKey = { [ALL]: "All", [CHOOSE]: "Choose", [BUDGET]: "Budget" }[selection.mode];
+    context.selectionHint = game.i18n.format(
+      `SCMOREACTIVITIES.Activities.ScGrant.Fields.Selection.Hint${hintKey}`,
+      { count: selection.count, budget: selection.budget }
+    );
+    context.selectionBadge = "";
+    if (context.isChoose && sourceCount) {
+      context.selectionBadge = game.i18n.format("SCMOREACTIVITIES.Activities.ScGrant.Fields.Selection.Badge", {
+        count: Math.min(selection.count, sourceCount),
+        total: sourceCount
+      });
+    } else if (context.isBudget) {
+      context.selectionBadge = game.i18n.format("SCMOREACTIVITIES.Activities.ScGrant.Fields.Selection.BudgetBadge", {
+        budget: selection.budget
+      });
+    }
+  }
+
+  async #prepareBastionContext(context) {
+    const item = this.activity?.item ?? null;
+    context.isFacility = ScGrantBastionOrders.isFacility(item);
+    if (!context.isFacility) {
+      return;
+    }
+
+    const { BASTION, INSTANT } = ScGrantEntryHelpers.DELIVERY_MODES;
+    const delivery = ScGrantEntryHelpers.normalizeDelivery(this.activity?.delivery);
+    context.delivery = delivery;
+    context.bastionEnabled = delivery === BASTION;
+    context.bastion = ScGrantEntryHelpers.normalizeBastion(this.activity?.bastion);
+    context.bastionTrayExpanded = this.#bastionTrayExpanded ?? context.bastionEnabled;
+    context.deliveryOptions = [
+      { value: INSTANT, label: game.i18n.localize("SCMOREACTIVITIES.Activities.ScGrant.Fields.Delivery.Choices.Instant") },
+      { value: BASTION, label: game.i18n.localize("SCMOREACTIVITIES.Activities.ScGrant.Fields.Delivery.Choices.Bastion") }
+    ];
+    context.bastionOrderOptions = ScGrantEntryHelpers.BASTION_ORDERS.map((value) => ({
+      value,
+      label: ScGrantBastionOrders.orderLabel(value)
+    }));
+
+    const pending = ScGrantBastionOrders.pendingOf(item);
+    // An undelivered order shows in every grant of the facility, so it stays
+    // recoverable when the activity that issued it was deleted.
+    if (!pending || (pending.activityId !== this.activity?.id && !ScGrantBastionOrders.awaitsDelivery(pending))) {
+      context.bastionStatus = null;
+      return;
+    }
+    const progress = item.system?.progress ?? {};
+    const sources = await Promise.all((pending.entries ?? []).map(async(entry) => {
+      const document = await fromUuid(entry.uuid).catch(() => null);
+      return `${entry.quantity}× ${document?.name ?? entry.uuid}`;
+    }));
+    const undelivered = ScGrantBastionOrders.awaitsDelivery(pending);
+    const orderLabel = ScGrantBastionOrders.orderLabel(pending.order);
+    context.bastionStatus = {
+      undelivered,
+      canResolve: ScGrantBastionOrders.isResolver() && ScGrantBastionOrders.canResolve(item, pending),
+      label: undelivered
+        ? game.i18n.format("SCMOREACTIVITIES.Activities.ScGrant.Bastion.Undelivered", {
+          order: orderLabel,
+          reason: ScGrantBastionOrders.reasonLabel(pending)
+        })
+        : game.i18n.format("SCMOREACTIVITIES.Activities.ScGrant.Bastion.Status", {
+          order: orderLabel,
+          value: Number(progress.value) || 0,
+          max: Number(progress.max) || 0
+        }),
+      pct: undelivered ? 100 : Number(progress.pct) || 0,
+      sources: sources.join(", ")
+    };
+    // An undelivered order needs the GM's attention, so its tray opens.
+    if (undelivered && this.#bastionTrayExpanded === null) {
+      context.bastionTrayExpanded = true;
+    }
   }
 
   _prepareSubmitData(event, formData) {
@@ -163,13 +262,38 @@ export class ScGrantActivitySheet extends dnd5e.applications.activity.ActivitySh
 
     this.element.querySelector("[data-action='toggle-check-tray']")?.addEventListener("click", (event) => {
       event.preventDefault();
-      const tray = this.element.querySelector("[data-grant-check-tray]");
-      if (!tray) {
-        return;
-      }
-      tray.classList.toggle("collapsed");
-      this.#checkTrayExpanded = !tray.classList.contains("collapsed");
+      this.#checkTrayExpanded = this.#toggleTray("[data-grant-check-tray]") ?? this.#checkTrayExpanded;
     });
+
+    this.element.querySelector("[data-action='toggle-bastion-tray']")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      this.#bastionTrayExpanded = this.#toggleTray("[data-grant-bastion-tray]") ?? this.#bastionTrayExpanded;
+    });
+
+    this.element.querySelector("[data-action='retry-bastion-delivery']")?.addEventListener("click", async(event) => {
+      event.preventDefault();
+      event.currentTarget.disabled = true;
+      await ScGrantBastionOrders.retry(this.activity.item);
+      this.render();
+    });
+
+    this.element.querySelector("[data-action='discard-bastion-delivery']")?.addEventListener("click", async(event) => {
+      event.preventDefault();
+      if (await ScGrantBastionOrders.confirmDiscard()) {
+        await ScGrantBastionOrders.discard(this.activity.item);
+        this.render();
+      }
+    });
+  }
+
+  /** Flips a collapsible tray and returns whether it is now expanded, or `null` without one. */
+  #toggleTray(selector) {
+    const tray = this.element.querySelector(selector);
+    if (!tray) {
+      return null;
+    }
+    tray.classList.toggle("collapsed");
+    return !tray.classList.contains("collapsed");
   }
 
   #cloneGrants() {
@@ -277,7 +401,11 @@ export class ScGrantActivitySheet extends dnd5e.applications.activity.ActivitySh
 
     const previous = this.#cloneGrants();
     return entries.map((entry, index) => {
-      const normalized = ScGrantEntryHelpers.normalizeEntry(entry);
+      // The weight input only renders in the budget mode; keep stored weights otherwise.
+      const normalized = ScGrantEntryHelpers.normalizeEntry({
+        cost: previous[index]?.cost,
+        ...entry
+      });
       normalized.quantity = this.#validateQuantityFormula(normalized.quantity, previous[index]?.quantity ?? "1");
       return normalized;
     });
