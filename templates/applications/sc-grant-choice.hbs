@@ -1,0 +1,52 @@
+<div class="sc-ma-grant-choice-body">
+  <header class="sc-ma-grant-choice-header">
+    <strong>{{ prompt }}</strong>
+    <span class="sc-ma-grant-choice-counter {{#if complete}}is-complete{{/if}}">{{ counter }}</span>
+  </header>
+  {{#if note}}<p class="sc-ma-grant-choice-note">{{ note }}</p>{{/if}}
+
+  {{#if budgetMode}}
+  <div class="sc-ma-grant-choice-list">
+    {{#each options}}
+    <div class="sc-ma-grant-choice-option sc-ma-grant-choice-option--budget {{#if selected}}active{{/if}}">
+      <img src="{{ img }}" alt="">
+      <span class="sc-ma-grant-choice-details">
+        <span class="sc-ma-grant-choice-name">{{ name }}</span>
+        <span class="sc-ma-grant-choice-meta">
+          &times;{{ quantity }} &middot; <span class="sc-ma-grant-choice-cost">{{ costLabel }}</span>
+          {{#if total}} &middot; <strong>{{ total }}</strong>{{/if}}
+        </span>
+      </span>
+      <span class="sc-ma-grant-choice-stepper">
+        <button type="button" data-action="decrement" data-index="{{ index }}" {{#unless canDecrement}}disabled{{/unless}}
+                aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Choice.Remove" }}">
+          <i class="fa-solid fa-minus" inert></i>
+        </button>
+        <span class="sc-ma-grant-choice-units">{{ units }}</span>
+        <button type="button" data-action="increment" data-index="{{ index }}" {{#unless canIncrement}}disabled{{/unless}}
+                aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Choice.Add" }}">
+          <i class="fa-solid fa-plus" inert></i>
+        </button>
+      </span>
+    </div>
+    {{/each}}
+  </div>
+  {{#if leftover}}<p class="sc-ma-grant-choice-leftover"><i class="fa-solid fa-triangle-exclamation" inert></i> {{ leftover }}</p>{{/if}}
+  {{else}}
+  <div class="sc-ma-grant-choice-list" role="{{#if single}}radiogroup{{else}}group{{/if}}">
+    {{#each options}}
+    <button type="button" class="sc-ma-grant-choice-option {{#if selected}}active{{/if}}" data-action="toggleOption"
+            data-index="{{ index }}" role="{{#if ../single}}radio{{else}}checkbox{{/if}}"
+            aria-checked="{{#if selected}}true{{else}}false{{/if}}">
+      <img src="{{ img }}" alt="">
+      <span class="sc-ma-grant-choice-details">
+        <span class="sc-ma-grant-choice-name">{{ name }}</span>
+        <span class="sc-ma-grant-choice-meta">{{ typeLabel }}</span>
+      </span>
+      <span class="sc-ma-grant-choice-qty">&times;{{ quantity }}</span>
+      <i class="fa-solid {{#if selected}}fa-circle-check{{else}}fa-circle{{/if}} sc-ma-grant-choice-mark" inert></i>
+    </button>
+    {{/each}}
+  </div>
+  {{/if}}
+</div>

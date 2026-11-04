@@ -4,6 +4,137 @@ export class ScGrantEntryHelpers {
     TABLE: "table"
   });
 
+  static SELECTION_MODES = Object.freeze({
+    ALL: "all",
+    CHOOSE: "choose",
+    BUDGET: "budget"
+  });
+
+  static DELIVERY_MODES = Object.freeze({
+    INSTANT: "instant",
+    BASTION: "bastion"
+  });
+
+  /** Native dnd5e facility orders a bastion grant can run as; the first is the default. */
+  static BASTION_ORDERS = Object.freeze(["harvest", "craft"]);
+
+  static DEFAULT_BASTION_DAYS = 7;
+
+  static DEFAULT_BUDGET = "10";
+
+  static normalizeSelection(raw) {
+    const mode = Object.values(ScGrantEntryHelpers.SELECTION_MODES).includes(raw?.mode)
+      ? raw.mode
+      : ScGrantEntryHelpers.SELECTION_MODES.ALL;
+    const count = Math.floor(Number(raw?.count));
+    const budget = String(raw?.budget ?? "").trim();
+    return {
+      mode,
+      count: Number.isFinite(count) && count >= 1 ? count : 1,
+      budget: budget || ScGrantEntryHelpers.DEFAULT_BUDGET
+    };
+  }
+
+  static isBudget(selection) {
+    return ScGrantEntryHelpers.normalizeSelection(selection).mode === ScGrantEntryHelpers.SELECTION_MODES.BUDGET;
+  }
+
+  /** A source's weight in the budget mode: the points one unit of it costs. */
+  static normalizeCost(value) {
+    const cost = Math.floor(Number(value));
+    return Number.isFinite(cost) && cost >= 1 ? cost : 1;
+  }
+
+  /** `units` packs of a quantity formula, as a formula. */
+  static multiplyQuantity(formula, units) {
+    const normalized = ScGrantEntryHelpers.normalizeQuantityFormula(formula);
+    if (units === 1) {
+      return normalized;
+    }
+    if (/^\d+$/.test(normalized)) {
+      return String(Number(normalized) * units);
+    }
+    return `${units} * (${normalized})`;
+  }
+
+  /** The points `units` (one count per entry) spend. */
+  static budgetSpent(entries, units) {
+    return entries.reduce((total, entry, index) => (
+      total + ScGrantEntryHelpers.normalizeCost(entry.cost) * (Number(units?.[index]) || 0)
+    ), 0);
+  }
+
+  /**
+   * How many sources the user must pick from `entryCount` configured ones, or
+   * 0 when every source is granted (the "all" mode, or a choice that covers
+   * the whole list).
+   */
+  static choiceCount(selection, entryCount) {
+    const { mode, count } = ScGrantEntryHelpers.normalizeSelection(selection);
+    if (mode !== ScGrantEntryHelpers.SELECTION_MODES.CHOOSE || count >= entryCount) {
+      return 0;
+    }
+    return count;
+  }
+
+  /**
+   * The entries a user picked, or `null` when the picks do not satisfy the
+   * activity's selection. In the choose mode, picks are indices into the
+   * normalized entry list; in the budget mode, one unit count per entry, which
+   * may spend up to `budget` points and multiplies each entry's quantity.
+   */
+  static applyPicks(entries, selection, picks, { budget = 0 } = {}) {
+    if (ScGrantEntryHelpers.isBudget(selection)) {
+      return ScGrantEntryHelpers.#applyBudget(entries, picks, budget);
+    }
+    const required = ScGrantEntryHelpers.choiceCount(selection, entries.length);
+    if (!required) {
+      return entries;
+    }
+    if (!Array.isArray(picks)) {
+      return null;
+    }
+    const indices = new Set(picks);
+    const valid = [...indices].every((index) => Number.isInteger(index) && index >= 0 && index < entries.length);
+    if (!valid || indices.size !== required || picks.length !== required) {
+      return null;
+    }
+    return [...indices].sort((left, right) => left - right).map((index) => entries[index]);
+  }
+
+  static #applyBudget(entries, units, budget) {
+    if (!Array.isArray(units) || units.length !== entries.length) {
+      return null;
+    }
+    if (!units.every((count) => Number.isSafeInteger(count) && count >= 0)) {
+      return null;
+    }
+    const spent = ScGrantEntryHelpers.budgetSpent(entries, units);
+    if (spent < 1 || spent > budget) {
+      return null;
+    }
+    return entries.flatMap((entry, index) => (units[index] > 0
+      ? [{ ...entry, quantity: ScGrantEntryHelpers.multiplyQuantity(entry.quantity, units[index]) }]
+      : []));
+  }
+
+  static normalizeDelivery(value) {
+    return value === ScGrantEntryHelpers.DELIVERY_MODES.BASTION
+      ? ScGrantEntryHelpers.DELIVERY_MODES.BASTION
+      : ScGrantEntryHelpers.DELIVERY_MODES.INSTANT;
+  }
+
+  static normalizeBastion(raw) {
+    const order = ScGrantEntryHelpers.BASTION_ORDERS.includes(raw?.order)
+      ? raw.order
+      : ScGrantEntryHelpers.BASTION_ORDERS[0];
+    const days = Math.floor(Number(raw?.days));
+    return {
+      order,
+      days: Number.isFinite(days) && days >= 1 ? days : ScGrantEntryHelpers.DEFAULT_BASTION_DAYS
+    };
+  }
+
   static normalizeEntry(raw) {
     const type = raw?.type === ScGrantEntryHelpers.SOURCE_TYPES.TABLE
       ? ScGrantEntryHelpers.SOURCE_TYPES.TABLE
@@ -11,7 +142,8 @@ export class ScGrantEntryHelpers {
     return {
       type,
       uuid: String(raw?.uuid ?? "").trim(),
-      quantity: ScGrantEntryHelpers.normalizeQuantityFormula(raw?.quantity)
+      quantity: ScGrantEntryHelpers.normalizeQuantityFormula(raw?.quantity),
+      cost: ScGrantEntryHelpers.normalizeCost(raw?.cost)
     };
   }
 

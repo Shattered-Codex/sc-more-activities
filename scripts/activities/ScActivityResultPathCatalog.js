@@ -60,6 +60,7 @@ const GROUPS = Object.freeze({
     "activity.checkPassed",
     "activity.createdCount",
     "activity.updatedCount",
+    "activity.bastionOrder",
     "activity.actorUuid",
     "activity.check.dc",
     "activity.check.total",

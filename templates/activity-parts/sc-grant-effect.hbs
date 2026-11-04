@@ -13,11 +13,38 @@
       </div>
       <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Recipient.Hint" }}</p>
     </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Selection.Label" }}</label>
+      <div class="form-fields sc-ma-grant-mode">
+        <div class="sc-ma-segmented" role="radiogroup">
+          {{#each selectionModeOptions}}
+          <label class="sc-ma-segmented-option {{#if this.selected}}active{{/if}}">
+            <input type="radio" name="selection.mode" value="{{ this.value }}" {{ checked this.selected }}>
+            <i class="{{ this.icon }}" inert></i>
+            <span>{{ this.label }}</span>
+          </label>
+          {{/each}}
+        </div>
+        {{#if isChoose}}
+        <input type="number" class="sc-ma-grant-choice-count" name="selection.count" value="{{ selection.count }}"
+               min="1" step="1" aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Selection.Count" }}"
+               data-tooltip="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Selection.Count" }}">
+        {{/if}}
+        {{#if isBudget}}
+        <input type="text" class="sc-ma-grant-budget" name="selection.budget" value="{{ selection.budget }}"
+               placeholder="10" aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Selection.Budget" }}"
+               data-tooltip="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Selection.BudgetTooltip" }}">
+        {{/if}}
+      </div>
+      <p class="hint">{{ selectionHint }}</p>
+    </div>
   </fieldset>
 
   <fieldset data-grant-list>
     <legend>
       <span>{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Sections.Items" }}</span>
+      {{#if selectionBadge}}<span class="sc-ma-grant-badge">{{ selectionBadge }}</span>{{/if}}
       <i class="fa-solid fa-circle-info sc-ma-info-icon"
          data-tooltip="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Quantity.Tooltip" }}"></i>
       <button type="button" class="unbutton control-button" data-action="add-grant"
@@ -52,6 +79,14 @@
                placeholder="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Source.DropHint" }}">
         {{/if}}
 
+        {{#if ../isBudget}}
+        <label class="sc-ma-grant-cost" data-tooltip="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Cost.Tooltip" }}">
+          <i class="fa-solid fa-weight-hanging" inert></i>
+          <input type="number" name="grants.{{ this.index }}.cost" value="{{ this.cost }}" min="1" step="1"
+                 aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Cost.Label" }}">
+        </label>
+        {{/if}}
+
         <button type="button" class="unbutton control-button" data-action="remove-grant" data-index="{{ this.index }}"
                 data-tooltip aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Source.Remove" }}">
           <i class="fas fa-minus" inert></i>
@@ -64,6 +99,69 @@
 
     <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Source.Hint" }}</p>
   </fieldset>
+
+  {{#if isFacility}}
+  <div class="sc-ma-collapsible {{#unless bastionTrayExpanded}}collapsed{{/unless}}" data-grant-bastion-tray>
+    <button type="button" class="sc-ma-collapsible-header" data-action="toggle-bastion-tray">
+      <i class="fa-solid fa-chess-rook" inert></i>
+      <span>{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Sections.Bastion" }}</span>
+      {{#if bastionEnabled}}<span class="sc-ma-grant-badge">{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Delivery.Choices.Bastion" }}</span>{{/if}}
+      <i class="fa-solid fa-caret-down" inert></i>
+    </button>
+    <div class="sc-ma-collapsible-content">
+      <fieldset>
+        <div class="form-group">
+          <label>{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Delivery.Label" }}</label>
+          <div class="form-fields">
+            <select name="delivery">
+              {{ selectOptions deliveryOptions selected=delivery valueAttr="value" labelAttr="label" }}
+            </select>
+          </div>
+          <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Delivery.Hint" }}</p>
+        </div>
+
+        {{#if bastionEnabled}}
+        <div class="form-group">
+          <label>{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Bastion.Order" }}</label>
+          <div class="form-fields sc-ma-grant-bastion-order">
+            <select name="bastion.order">
+              {{ selectOptions bastionOrderOptions selected=bastion.order valueAttr="value" labelAttr="label" }}
+            </select>
+            <input type="number" name="bastion.days" value="{{ bastion.days }}" min="1" step="1"
+                   aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Bastion.Days" }}">
+            <span class="sc-ma-grant-unit">{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Bastion.DaysUnit" }}</span>
+          </div>
+          <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Bastion.Hint" }}</p>
+        </div>
+
+        {{/if}}
+
+        {{#if bastionStatus}}
+        <div class="sc-ma-grant-bastion-status {{#if bastionStatus.undelivered}}is-undelivered{{/if}}">
+          <div class="sc-ma-grant-bastion-status-label">
+            <i class="fa-solid {{#if bastionStatus.undelivered}}fa-triangle-exclamation{{else}}fa-hourglass-half{{/if}}" inert></i>
+            <span>{{ bastionStatus.label }}</span>
+          </div>
+          <div class="sc-ma-grant-progress" role="progressbar" aria-valuenow="{{ bastionStatus.pct }}" aria-valuemin="0" aria-valuemax="100">
+            <span style="width: {{ bastionStatus.pct }}%"></span>
+          </div>
+          {{#if bastionStatus.sources}}<span class="sc-ma-grant-bastion-status-sources">{{ bastionStatus.sources }}</span>{{/if}}
+          {{#if bastionStatus.canResolve}}
+          <div class="sc-ma-grant-bastion-status-actions">
+            <button type="button" data-action="retry-bastion-delivery">
+              <i class="fa-solid fa-rotate-right" inert></i> {{ localize "SCMOREACTIVITIES.Activities.ScGrant.Bastion.Retry" }}
+            </button>
+            <button type="button" data-action="discard-bastion-delivery">
+              <i class="fa-solid fa-trash" inert></i> {{ localize "SCMOREACTIVITIES.Activities.ScGrant.Bastion.Discard" }}
+            </button>
+          </div>
+          {{/if}}
+        </div>
+        {{/if}}
+      </fieldset>
+    </div>
+  </div>
+  {{/if}}
 
   <div class="sc-ma-collapsible {{#unless checkTrayExpanded}}collapsed{{/unless}}" data-grant-check-tray>
     <button type="button" class="sc-ma-collapsible-header" data-action="toggle-check-tray">

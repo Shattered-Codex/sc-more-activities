@@ -589,22 +589,502 @@
   margin-left: 0.2rem;
 }
 
-.sc-ma-grant-card-header {
-  font-weight: 600;
-}
-
-.sc-ma-grant-card-check {
-  font-size: 0.85rem;
-  font-style: italic;
-}
-
-.sc-ma-grant-card-list {
+/* SC Grant chat card */
+.sc-ma-grant-card {
+  --sc-ma-grant-accent: #b08d4a;
+  background: linear-gradient(160deg,
+      color-mix(in srgb, var(--sc-ma-grant-accent) 14%, transparent) 0%,
+      transparent 55%);
+  border: 1px solid color-mix(in srgb, var(--sc-ma-grant-accent) 50%, transparent);
+  border-radius: 8px;
   margin: 0.25rem 0;
+  overflow: hidden;
+}
+
+.sc-ma-grant-card-banner {
+  align-items: center;
+  border-bottom: 1px solid color-mix(in srgb, var(--sc-ma-grant-accent) 35%, transparent);
+  display: flex;
+  gap: 0.55rem;
+  padding: 0.45rem 0.6rem;
+}
+
+.sc-ma-grant-card-banner-art {
+  border: none;
+  border-radius: 6px;
+  flex: 0 0 32px;
+  height: 32px;
+  object-fit: contain;
+  width: 32px;
+}
+
+i.sc-ma-grant-card-banner-art {
+  color: var(--sc-ma-grant-accent);
+  font-size: 1.4rem;
+  line-height: 32px;
+  text-align: center;
+}
+
+.sc-ma-grant-card-banner-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sc-ma-grant-card-banner-text strong {
+  font-size: 1rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.sc-ma-grant-card-banner-text span {
+  color: var(--sc-ma-grant-accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sc-ma-grant-card-intro {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 0.45rem 0.6rem 0.25rem;
+}
+
+.sc-ma-grant-card .sc-ma-grant-card-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  list-style: none;
+  margin: 0;
+  padding: 0 0.6rem 0.5rem;
+}
+
+.sc-ma-grant-card-item {
+  align-items: center;
+  background: color-mix(in srgb, var(--sc-ma-grant-accent) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--sc-ma-grant-accent) 22%, transparent);
+  border-radius: 6px;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  padding: 0.3rem 0.45rem;
+}
+
+/* Positioned so SC Item Rarity Colors can place its effects beside the art. */
+.sc-ma-grant-card-art {
+  height: 36px;
+  position: relative;
+  width: 36px;
+}
+
+.sc-ma-grant-card-art img {
+  border: 1px solid color-mix(in srgb, var(--sc-ma-grant-accent) 45%, transparent);
+  border-radius: 6px;
+  height: 36px;
+  object-fit: cover;
+  width: 36px;
+}
+
+.sc-ma-grant-card-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sc-ma-grant-card-name {
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.sc-ma-grant-card-name a.content-link {
+  background: none;
+  border: none;
+  color: inherit;
+  padding: 0;
+}
+
+.sc-ma-grant-card-name a.content-link i {
+  color: inherit;
 }
 
 .sc-ma-grant-card-roll {
+  font-size: 0.75rem;
+  opacity: 0.75;
+}
+
+/* Tinted from the text color, so it stays legible on any rarity gradient. */
+.sc-ma-grant-card-qty {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
+  border-radius: 999px;
   font-size: 0.85rem;
-  opacity: 0.8;
+  font-weight: 700;
+  padding: 0 0.5rem;
+  white-space: nowrap;
+}
+
+.sc-ma-grant-card-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.sc-ma-grant-card-table-head {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+}
+
+.sc-ma-grant-card-table-head img {
+  border: none;
+  flex: 0 0 24px;
+  height: 24px;
+  width: 24px;
+}
+
+.sc-ma-grant-card-table-meta {
+  font-size: 0.75rem;
+  margin-left: auto;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
+.sc-ma-grant-card .sc-ma-grant-card-table .sc-ma-grant-card-items {
+  border-left: 2px solid color-mix(in srgb, var(--sc-ma-grant-accent) 35%, transparent);
+  margin-left: 0.7rem;
+  padding: 0 0 0 0.5rem;
+}
+
+.sc-ma-grant-card-empty {
+  font-size: 0.8rem;
+  font-style: italic;
+  opacity: 0.75;
+}
+
+.sc-ma-grant-card-footer {
+  background: color-mix(in srgb, var(--sc-ma-grant-accent) 8%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--sc-ma-grant-accent) 25%, transparent);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  gap: 0.35rem 0.75rem;
+  padding: 0.35rem 0.6rem;
+}
+
+.sc-ma-grant-card-footer i {
+  opacity: 0.7;
+}
+
+.sc-ma-grant-card-actions {
+  border-top: 1px solid color-mix(in srgb, var(--sc-ma-grant-accent) 25%, transparent);
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.4rem 0.6rem;
+}
+
+.sc-ma-grant-card-actions button {
+  flex: 1;
+  font-size: 0.8rem;
+}
+
+/* SC Grant: selection mode and bastion delivery */
+.sc-ma-grant-mode {
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sc-ma-segmented {
+  border: 1px solid var(--sc-ma-border-soft);
+  border-radius: 6px;
+  display: inline-flex;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.sc-ma-segmented-option {
+  align-items: center;
+  color: var(--sc-ma-text-dim);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 1 1 0;
+  gap: 0.35rem;
+  justify-content: center;
+  padding: 0.25rem 0.6rem;
+  white-space: nowrap;
+}
+
+.sc-ma-segmented-option + .sc-ma-segmented-option {
+  border-left: 1px solid var(--sc-ma-border-soft);
+}
+
+.sc-ma-segmented-option input {
+  height: 1px;
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+
+.sc-ma-segmented-option.active {
+  background: color-mix(in srgb, var(--sc-ma-accent) 14%, transparent);
+  color: var(--sc-ma-text-strong);
+}
+
+.sc-ma-segmented-option:has(input:focus-visible) {
+  outline: 1px solid var(--sc-ma-accent-soft);
+  outline-offset: -2px;
+}
+
+.sc-ma-grant-choice-count {
+  flex: 0 0 4rem;
+  text-align: center;
+}
+
+.sc-ma-grant-budget {
+  flex: 0 0 6rem;
+  text-align: center;
+}
+
+.sc-ma-grant-cost {
+  align-items: center;
+  color: var(--sc-ma-text-dim);
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 0.3rem;
+}
+
+.sc-ma-grant-cost input {
+  text-align: center;
+  width: 3.2rem;
+}
+
+.sc-ma-grant-badge {
+  background: color-mix(in srgb, var(--sc-ma-accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--sc-ma-accent) 40%, transparent);
+  border-radius: 999px;
+  color: var(--sc-ma-text-strong);
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0 0.45rem;
+  text-transform: none;
+}
+
+.sc-ma-grant-bastion-order {
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.sc-ma-grant-bastion-order input[type="number"] {
+  flex: 0 0 4rem;
+  text-align: center;
+}
+
+.sc-ma-grant-unit {
+  color: var(--sc-ma-text-dim);
+  flex: 0 0 auto;
+}
+
+.sc-ma-grant-bastion-status {
+  background: color-mix(in srgb, var(--sc-ma-bg-card-soft) 88%, black 12%);
+  border: 1px solid var(--sc-ma-border-soft);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+  padding: 0.5rem 0.7rem;
+}
+
+.sc-ma-grant-bastion-status-label {
+  align-items: center;
+  color: var(--sc-ma-text-strong);
+  display: flex;
+  font-weight: 600;
+  gap: 0.4rem;
+}
+
+.sc-ma-grant-bastion-status-sources {
+  color: var(--sc-ma-text-dim);
+  font-size: 0.76rem;
+}
+
+.sc-ma-grant-bastion-status.is-undelivered {
+  border-color: color-mix(in srgb, var(--sc-ma-danger) 55%, var(--sc-ma-border-soft) 45%);
+}
+
+.sc-ma-grant-bastion-status.is-undelivered .sc-ma-grant-progress span {
+  background: var(--sc-ma-danger);
+}
+
+.sc-ma-grant-bastion-status-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.sc-ma-grant-bastion-status-actions button {
+  flex: 1;
+}
+
+.sc-ma-grant-progress {
+  background: color-mix(in srgb, var(--sc-ma-border-soft) 60%, transparent);
+  border-radius: 999px;
+  height: 6px;
+  overflow: hidden;
+}
+
+.sc-ma-grant-progress span {
+  background: var(--sc-ma-accent);
+  display: block;
+  height: 100%;
+}
+
+/* SC Grant choice picker */
+.sc-ma-grant-choice .sc-ma-grant-choice-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sc-ma-space-3, 0.75rem);
+  min-width: 0;
+}
+
+.sc-ma-grant-choice .sc-ma-grant-choice-header {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.sc-ma-grant-choice .sc-ma-grant-choice-counter {
+  border: 1px solid var(--sc-ma-border-soft, #323749);
+  border-radius: 999px;
+  color: var(--sc-ma-text-dim, #aba494);
+  font-size: 0.8rem;
+  padding: 0.05rem 0.55rem;
+}
+
+.sc-ma-grant-choice .sc-ma-grant-choice-counter.is-complete {
+  border-color: var(--sc-ma-accent-soft, #24b86a);
+  color: var(--sc-ma-accent, #39f08c);
+}
+
+.sc-ma-grant-choice .sc-ma-grant-choice-note {
+  color: var(--sc-ma-text-dim, #aba494);
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+.sc-ma-grant-choice .sc-ma-grant-choice-list {
+  display: grid;
+  gap: var(--sc-ma-space-2, 0.5rem);
+}
+
+.sc-ma-grant-choice .sc-ma-grant-choice-option {
+  align-items: center;
+  background: var(--sc-ma-bg-card-soft, #1a1c28);
+  border: 1px solid var(--sc-ma-border-soft, #323749);
+  border-radius: 8px;
+  display: flex;
+  gap: 0.65rem;
+  height: auto;
+  line-height: 1.2;
+  padding: 0.45rem 0.65rem;
+  text-align: left;
+}
+
+.sc-ma-grant-choice .sc-ma-grant-choice-option.active {
+  background: color-mix(in srgb, var(--sc-ma-accent, #39f08c) 10%, var(--sc-ma-bg-card-soft, #1a1c28) 90%);
+  border-color: var(--sc-ma-accent-soft, #24b86a);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--sc-ma-accent, #39f08c) 35%, transparent 65%);
+}
+
+.sc-ma-grant-choice .sc-ma-grant-choice-option img {
+  border: 1px solid var(--sc-ma-border-soft, #323749);
+  border-radius: 6px;
+  flex: 0 0 36px;
+  height: 36px;
+  object-fit: cover;
+  width: 36px;
+}
+
+.sc-ma-grant-choice .sc-ma-grant-choice-details {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sc-ma-grant-choice .sc-ma-grant-choice-name {
+  color: var(--sc-ma-text-strong, #f0ecde);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-ma-grant-choice .sc-ma-grant-choice-meta {
+  color: var(--sc-ma-text-dim, #aba494);
+  font-size: 0.76rem;
+}
+
+.sc-ma-grant-choice .sc-ma-grant-choice-qty {
+  color: var(--sc-ma-text-strong, #f0ecde);
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+
+.sc-ma-grant-choice .sc-ma-grant-choice-mark {
+  color: var(--sc-ma-text-dim, #aba494);
+  flex: 0 0 auto;
+}
+
+.sc-ma-grant-choice .sc-ma-grant-choice-option.active .sc-ma-grant-choice-mark {
+  color: var(--sc-ma-accent, #39f08c);
+}
+
+.sc-ma-grant-choice .sc-ma-grant-choice-option--budget {
+  cursor: default;
+}
+
+.sc-ma-grant-choice .sc-ma-grant-choice-cost {
+  color: var(--sc-ma-accent-warm, #d6a85c);
+}
+
+.sc-ma-grant-choice .sc-ma-grant-choice-stepper {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 0.35rem;
+}
+
+.sc-ma-grant-choice .sc-ma-grant-choice-stepper button {
+  height: 1.7rem;
+  line-height: 1;
+  min-width: 0;
+  padding: 0;
+  width: 1.7rem;
+}
+
+.sc-ma-grant-choice .sc-ma-grant-choice-units {
+  color: var(--sc-ma-text-strong, #f0ecde);
+  font-weight: 700;
+  min-width: 1.5rem;
+  text-align: center;
+}
+
+.sc-ma-grant-choice .sc-ma-grant-choice-leftover {
+  align-items: center;
+  color: var(--sc-ma-text-dim, #aba494);
+  display: flex;
+  font-size: 0.8rem;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.sc-ma-grant-choice .form-footer {
+  display: flex;
+  gap: var(--sc-ma-space-2, 0.5rem);
+}
+
+.sc-ma-grant-choice .form-footer button {
+  flex: 1;
 }
 
 /* SC Identify item picker */

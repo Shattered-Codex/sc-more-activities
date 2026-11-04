@@ -56,6 +56,7 @@ export class ScGrantActivity extends dnd5e.documents.activity.ActivityMixin(ScGr
         } : null,
         createdCount: Array.isArray(grantResult?.created) ? grantResult.created.length : 0,
         updatedCount: Array.isArray(grantResult?.updated) ? grantResult.updated.length : 0,
+        bastionOrder: grantResult?.pending === true,
         actorUuid: String(grantResult?.actor?.uuid ?? "").trim()
       }
     });

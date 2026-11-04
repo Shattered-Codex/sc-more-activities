@@ -54,7 +54,9 @@ The goal is to preserve the value of richer activity workflows while shaping the
 - `sc-chain`: trigger other activities from the same item in sequence
 - `sc-conditional-chain`: route between activities from the same item with conditions, rolls, and manual choices
 - `sc-contest`: resolve a contested roll workflow between participants
-- `sc-grant`: grant item-related rewards or support item flows
+- `sc-grant`: grant item-related rewards or support item flows; can let the user choose X of the
+  configured sources or spend points on weighted sources, and on bastion facilities can deliver
+  through a facility order (see below)
 - `sc-identify`: pick an unidentified item from your inventory, a targeted token's, or a creature's within range, and identify it, optionally behind a check whose DC comes from the item's rarity (including custom rarities from SC Item Rarity Colors) or a custom formula; with SC Item Rarity Colors active, the item picker shows each item in that module's style, including its Unidentified style and hidden image
 - `sc-advancement`: drive item-linked advancement or progression flows
 - `sc-teleport`: move tokens through a guided teleport workflow
@@ -440,6 +442,7 @@ ignored:
 | Grant check passed | `activity.checkPassed` | `true` when the grant's gating check succeeded |
 | Grant check DC / total | `activity.check.dc` / `activity.check.total` | DC and total of the gating check |
 | Documents created / updated | `activity.createdCount` / `activity.updatedCount` | How many documents the grant created / updated |
+| Issued a bastion order | `activity.bastionOrder` | `true` when the grant started a facility order instead of granting at once |
 | Target actor UUID | `activity.actorUuid` | The actor that received the grant |
 | Activity canceled / cancel reason | `activity.canceled` / `activity.reason` | Whether and why the activity was canceled |
 
@@ -738,6 +741,57 @@ forced: every client already holds the world's journals, and the sheet grants a 
 that ends when it closes. Nothing is saved and no GM is needed. When the whole journal opens, pages the GM
 set to None on their own stay hidden, as they do for a forced show. Anyone who can edit the activity can
 point it at any journal whose UUID they know, so keep secret journals out of activities players can edit.
+
+## SC Grant Guide
+
+An SC Grant gives the recipient (the activity's actor, or the one targeted token) the items and roll
+table draws listed under **Granted Items**. Each row's quantity accepts a formula. An optional
+**Grant Check** gates the grant behind an ability or skill check.
+
+### Letting The User Choose
+
+Set **Mode** to *Let them choose* and enter how many sources the user picks. When the activity is
+used, a picker lists the sources, and only the picked ones are granted. A decorative garden, for
+example, can list 10 floral bouquets, 10 vials of perfume and 10 candles, and grant just one of them.
+A choice that covers the whole list grants everything without asking. When a GM relays the grant,
+the GM's client checks the picks against the activity again.
+
+### Spending Points
+
+Set **Mode** to *Spend points* and enter the points to spend: a number such as `10`, or a
+deterministic formula such as `5 + @abilities.wis.mod`. Each source row then shows a **weight**, the
+points one unit of it costs. When the activity is used, the picker lets the user add and remove units
+of each source, up to the points available. Each unit gives the row's quantity, so `5 × Arrow` with
+weight 1 gives 5 arrows per point. With 10 points, bouquets and perfume at weight 1 and candles at
+weight 2, the user could take 3 bouquets, 3 vials of perfume and 2 candles. Points left unspent are
+lost, and the picker warns about them. A relayed grant's units are checked against the budget again
+on the GM's client.
+
+### Delivering Through A Bastion Order
+
+On a facility item, the **Bastion Delivery** tray can change *Delivery* to *Bastion order*. Using
+the activity then issues a native facility order (*Harvest* or *Craft*) that takes the configured
+number of days, instead of granting at once:
+
+- what the order delivers is decided when it is issued: quantity formulas are rolled and roll tables
+  are drawn then (by the GM when a player's order draws a world table), and the order's chat card
+  lists exactly what will arrive;
+- the facility shows the order's icon and progress bar, and bastion turns advance it;
+- when a bastion turn completes the order, the module creates the chosen items on the recipient
+  and posts a chat card (the core turn summary only lists harvested items; it never adds them);
+- using the activity again while the order runs **changes** it: the new choice replaces the old one
+  and the progress restarts;
+- a facility already running another order, or shut down, refuses the grant; issuing a native order
+  over a pending grant drops that grant.
+- a delivery that fails (the recipient no longer exists, or the items cannot be created) keeps the
+  order on the facility, marked as undelivered: the items never go to another actor, and the facility
+  refuses new grant orders until it is resolved. The active GM can **retry** or **discard** it from
+  the Bastion Delivery tray of any grant activity on the facility, or from the GM-only card posted
+  when it failed. A retry delivers the order as it was issued and skips anything that already
+  reached the recipient, and it is never offered while another attempt is running. Deleting the
+  grant activity does not stop a delivery.
+
+Existing grants keep their behavior: the defaults are *Grant all*, weight 1, and *Immediately*.
 
 ## Migration From `more-activities`
 
