@@ -48,7 +48,8 @@ export class ScGrantCard {
     ];
 
     if (intro) {
-      parts.push(`<p class="sc-ma-grant-card-intro">${escape(intro)}</p>`);
+      parts.push(`<div class="sc-ma-grant-card-intro"><i class="fa-solid fa-treasure-chest" inert></i>`
+        + `<span>${escape(intro)}</span></div>`);
     }
 
     const rows = lines.map((line) => (line.kind === "table"
@@ -58,9 +59,10 @@ export class ScGrantCard {
 
     const footer = notes.filter((note) => note?.text);
     if (footer.length) {
-      parts.push(`<footer class="sc-ma-grant-card-footer">${footer.map((note) => (
-        `<span><i class="fa-solid ${escape(note.icon ?? "fa-circle-info")}" inert></i> ${escape(note.text)}</span>`
-      )).join("")}</footer>`);
+      parts.push(`<ul class="sc-ma-grant-card-footer">${footer.map((note) => (
+        `<li class="sc-ma-grant-card-pill"><i class="fa-solid ${escape(note.icon ?? "fa-circle-info")}" inert></i>`
+        + ` <span>${escape(note.text)}</span></li>`
+      )).join("")}</ul>`);
     }
 
     if (actions.length) {
@@ -90,22 +92,57 @@ export class ScGrantCard {
       + `</li>`;
   }
 
-  static #tableRow({ uuid, name, img, draws, formula, total, items = [] }, { emptyText, drawsText }) {
-    const escape = ScGrantCard.#escape;
-    const meta = formula ? `${drawsText(draws)} · ${formula} = ${total}` : drawsText(draws);
-    const children = items.length
-      ? items.map((item) => (item.kind === "table"
-        ? ScGrantCard.#tableRow(item, { emptyText, drawsText })
-        : ScGrantCard.#itemRow(item))).join("")
-      : `<li class="sc-ma-grant-card-empty">${escape(emptyText)}</li>`;
-    return `<li class="sc-ma-grant-card-table">`
-      + `<div class="sc-ma-grant-card-table-head">`
-      + `<img src="${escape(img || FALLBACK_TABLE_IMG)}" alt="">`
-      + `<span class="sc-ma-grant-card-name">@UUID[${uuid}]{${escape(name)}}</span>`
-      + `<span class="sc-ma-grant-card-table-meta">${escape(meta)}</span>`
-      + `</div>`
-      + `<ul class="sc-ma-grant-card-items">${children}</ul>`
-      + `</li>`;
+  /**
+   * A table line as flat groups, one per table that drew items, each headed
+   * by the path of tables it was reached through ("Reward › Gems"), so
+   * nested tables do not indent the card further at every level.
+   */
+  static #tableRow(line, { emptyText, drawsText }) {
+    return ScGrantCard.#tableGroups(line).map(({ path, table, items, nested }) => {
+      const escape = ScGrantCard.#escape;
+      const meta = ScGrantCard.#drawsMeta(table, drawsText);
+      const crumbs = path.map((step) => `<span class="sc-ma-grant-card-crumb">@UUID[${step.uuid}]{${escape(step.name)}}</span>`)
+        .join(`<span class="sc-ma-grant-card-crumb-sep" aria-hidden="true">›</span>`);
+      let children = items.map((item) => ScGrantCard.#itemRow(item)).join("");
+      if (!children && !nested) {
+        children = `<li class="sc-ma-grant-card-empty">${escape(emptyText)}</li>`;
+      }
+      return `<li class="sc-ma-grant-card-table${path.length > 1 ? " is-nested" : ""}">`
+        + `<div class="sc-ma-grant-card-table-head">`
+        + `<img src="${escape(table.img || FALLBACK_TABLE_IMG)}" alt="">`
+        + `<span class="sc-ma-grant-card-path">${crumbs}</span>`
+        + (meta ? `<span class="sc-ma-grant-card-table-meta">${escape(meta)}</span>` : "")
+        + `</div>`
+        + (children ? `<ul class="sc-ma-grant-card-items">${children}</ul>` : "")
+        + `</li>`;
+    }).join("");
+  }
+
+  /**
+   * The groups of a table line: the table's own items, then each inner
+   * table's groups. A table whose draws only reached inner tables shows no
+   * group of its own, unless its draw count says something (see #drawsMeta).
+   */
+  static #tableGroups(table, path = []) {
+    const here = [...path, table];
+    const items = (table.items ?? []).filter((entry) => entry.kind !== "table");
+    const inner = (table.items ?? []).filter((entry) => entry.kind === "table");
+    const groups = [];
+    if (items.length || !inner.length || ScGrantCard.#drawsMeta(table, () => "x")) {
+      groups.push({ path: here, table, items, nested: inner.length > 0 });
+    }
+    for (const nested of inner) {
+      groups.push(...ScGrantCard.#tableGroups(nested, here));
+    }
+    return groups;
+  }
+
+  /** A table's draw count, worth showing only when it was rolled or is more than one. */
+  static #drawsMeta({ draws, formula, total }, drawsText) {
+    if (formula) {
+      return `${drawsText(draws)} · ${formula} = ${total}`;
+    }
+    return Number(draws) > 1 ? drawsText(draws) : "";
   }
 
   static #onRender(html) {

@@ -816,6 +816,10 @@ number of days, instead of granting at once:
   when it failed. A retry delivers the order as it was issued and skips anything that already
   reached the recipient, and it is never offered while another attempt is running. Deleting the
   grant activity does not stop a delivery.
+- an order issued by v0.16.1 or earlier may have added to a stack that, back then, only remembered
+  its last 20 deliveries. When a retry of such an order cannot tell whether a source already reached
+  that stack, it asks the GM: **Already received** skips it, **Deliver again** adds it, and closing
+  the question leaves the order undelivered.
 - a module that refuses the creation of a delivery's items leaves the order undelivered, with
   nothing lost or duplicated, so it can be retried. If that module skips items carrying a marker
   flag, add the flag under **Flags On Granted Items**.

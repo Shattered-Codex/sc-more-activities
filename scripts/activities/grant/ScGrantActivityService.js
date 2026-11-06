@@ -10,13 +10,20 @@ import { ScGrantTableResults } from "./ScGrantTableResults.js";
 
 const QUERY_ID = "sc-more-activities.grantItems";
 const QUERY_TIMEOUT = 30000;
-// Delivery keys a stack remembers. An order records the sources it delivered
-// (see ScGrantBastionOrders), so a key only has to outlive the moment between
-// a stack's write and that record: it is a fallback, and a short list is enough.
-const MAX_DELIVERY_KEYS = 20;
+// Up to v0.16.1 a stack kept only its last 20 delivery keys (`grantDeliveryKeys`),
+// so a full list may have dropped a key whose order is still pending. Stacks
+// now keep every key in `grantDeliveryLedger` until its order is settled, one
+// field per key (`grantDeliveryLedger.<orderId>.<index>: true`): writes add or
+// delete their own fields and never rewrite another order's keys.
+const LEGACY_MAX_DELIVERY_KEYS = 20;
+const LEDGER = "grantDeliveryLedger";
+const LEDGER_SEGMENT = /^[A-Za-z0-9_-]+$/;
 
 /** A bastion delivery stopped because another client took its order over. */
 class ClaimLostError extends Error {}
+
+/** A bastion delivery stopped because nobody confirmed a source that may already have arrived. */
+class UncertainDeliveryError extends Error {}
 
 const ID_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
@@ -301,10 +308,17 @@ export class ScGrantActivityService {
    * this attempt writes, so the order can record it. `holds()` is checked
    * before every write: once it is false (another client took the order over),
    * nothing else is written and the result is "claim-lost".
+   *
+   * `confirmUncertain({ item, quantity, actor })` is asked about a source that
+   * goes to a stack whose legacy key list was full (see
+   * LEGACY_MAX_DELIVERY_KEYS): it may have dropped this source's key, so
+   * whether it arrived cannot be told. It resolves to "deliver" or "skip"
+   * (already there); anything else stops with "uncertain". Without it, such
+   * a source is delivered.
    */
   static async deliverPlan(recipientActor, plan, {
     activityId, deliveryId, checkInfo = null, banner = null, rolls = [], holds = () => true, itemFlags = null,
-    delivered = [], onDelivered = null
+    delivered = [], onDelivered = null, confirmUncertain = null
   }) {
     // Like an immediate grant, a plan that resolved no item delivers nothing.
     if (!plan?.sources?.length) {
@@ -316,7 +330,7 @@ export class ScGrantActivityService {
     }
     try {
       const outcome = await ScGrantActivityService.#applyPlan(recipientActor, plan, {
-        activityId, deliveryId, holds, itemFlags: itemFlags ?? plan.itemFlags, delivered, onDelivered
+        activityId, deliveryId, holds, itemFlags: itemFlags ?? plan.itemFlags, delivered, onDelivered, confirmUncertain
       });
       if (!holds()) {
         return { ok: false, reason: "claim-lost" };
@@ -332,10 +346,54 @@ export class ScGrantActivityService {
       if (error instanceof ClaimLostError) {
         return { ok: false, reason: "claim-lost" };
       }
+      if (error instanceof UncertainDeliveryError) {
+        return { ok: false, reason: "uncertain" };
+      }
       Logger.error("Could not deliver an sc-grant bastion order.", error);
       ui.notifications?.error?.(ScGrantActivityService.#executionFailedMessage(error));
       return { ok: false, error };
     }
+  }
+
+  /**
+   * Drops the delivery keys of a settled order (delivered or discarded) from
+   * the recipient's stacks: no retry of it can happen any more, so they only
+   * took space. Keys of other orders stay.
+   */
+  static async releaseDeliveryKeys(actor, deliveryId) {
+    if (!actor || !LEDGER_SEGMENT.test(String(deliveryId ?? ""))) {
+      return;
+    }
+    // Only this order's field is deleted: keys another delivery adds while
+    // this update is in flight live in fields of their own and stay.
+    const updates = Array.from(actor.items ?? [])
+      .filter((item) => ScGrantActivityService.#ledgerOf(item)?.[deliveryId] !== undefined)
+      .map((item) => ({ _id: item.id, ...ScGrantActivityService.#deleteLedgerOrder(deliveryId) }));
+    if (updates.length) {
+      await actor.updateEmbeddedDocuments("Item", updates);
+    }
+  }
+
+  /** An update that deletes one order's keys from a stack's ledger, in the syntax this Foundry knows. */
+  static #deleteLedgerOrder(deliveryId) {
+    const parent = `flags.${Constants.MODULE_ID}.${LEDGER}`;
+    const ForcedDeletion = globalThis.foundry?.data?.operators?.ForcedDeletion;
+    return typeof ForcedDeletion === "function"
+      ? { [`${parent}.${deliveryId}`]: new ForcedDeletion() }
+      : { [`${parent}.-=${deliveryId}`]: null };
+  }
+
+  static #ledgerOf(item) {
+    const ledger = item?.flags?.[Constants.MODULE_ID]?.[LEDGER];
+    return ledger && typeof ledger === "object" && !Array.isArray(ledger) ? ledger : null;
+  }
+
+  /** The ledger field of a delivery key (`<orderId>.<index>`), or `null` for a key it cannot hold. */
+  static #ledgerPath(key) {
+    const [deliveryId, index, ...rest] = String(key).split(".");
+    return !rest.length && LEDGER_SEGMENT.test(deliveryId ?? "") && /^\d+$/.test(index ?? "")
+      ? { deliveryId, index }
+      : null;
   }
 
   /**
@@ -431,7 +489,7 @@ export class ScGrantActivityService {
    */
   static async #applyPlan(recipientActor, plan, {
     activityId = null, deliveryId = null, holds = () => true, itemFlags = plan.itemFlags,
-    delivered = [], onDelivered = null
+    delivered = [], onDelivered = null, confirmUncertain = null
   } = {}) {
     const created = [];
     const updated = [];
@@ -461,6 +519,22 @@ export class ScGrantActivityService {
         ));
       }
 
+      // A stack whose legacy key list was full may have dropped this key: only
+      // whoever delivers can tell whether the source already arrived.
+      if (key && confirmUncertain) {
+        const target = ScGrantActivityService.#findExistingStack(recipientActor, sourceItem, activityId);
+        if (target && ScGrantActivityService.#mayHaveDroppedKeys(target)) {
+          const answer = await confirmUncertain({ item: sourceItem, quantity: source.quantity, actor: recipientActor });
+          if (answer === "skip") {
+            await onDelivered?.(index);
+            continue;
+          }
+          if (answer !== "deliver") {
+            throw new UncertainDeliveryError();
+          }
+        }
+      }
+
       // From here to the write nothing awaits: the claim and the delivery key
       // are checked against the state the write starts from, so a client that
       // lost its claim, or a source another client delivered, is never written.
@@ -478,9 +552,11 @@ export class ScGrantActivityService {
           _id: stack.id,
           "system.quantity": (Number(stack.system?.quantity) || 0) + source.quantity
         };
-        if (key) {
-          const keys = stack.flags?.[Constants.MODULE_ID]?.grantDeliveryKeys ?? [];
-          update[`flags.${Constants.MODULE_ID}.grantDeliveryKeys`] = [...keys, key].slice(-MAX_DELIVERY_KEYS);
+        const entry = key ? ScGrantActivityService.#ledgerPath(key) : null;
+        if (entry) {
+          // A field of its own, never trimmed: it leaves only once its order is
+          // settled (see releaseDeliveryKeys), and no other write rewrites it.
+          update[`flags.${Constants.MODULE_ID}.${LEDGER}.${entry.deliveryId}.${entry.index}`] = true;
         }
         const result = await recipientActor.updateEmbeddedDocuments("Item", [update]) ?? [];
         // A hook can veto the update: nothing was delivered then.
@@ -594,7 +670,10 @@ export class ScGrantActivityService {
   static #holdsDeliveryKey(actor, key) {
     const items = Array.from(actor?.items ?? []);
     const flagsOf = (item) => item.flags?.[Constants.MODULE_ID] ?? {};
-    if (items.some((item) => (flagsOf(item).grantDeliveryKeys ?? []).includes(key))) {
+    const entry = ScGrantActivityService.#ledgerPath(key);
+    const stacked = (item) => (entry && ScGrantActivityService.#ledgerOf(item)?.[entry.deliveryId]?.[entry.index] === true)
+      || (Array.isArray(flagsOf(item).grantDeliveryKeys) && flagsOf(item).grantDeliveryKeys.includes(key));
+    if (items.some(stacked)) {
       return true;
     }
     const copies = Number(items.find((item) => flagsOf(item).grantDeliveryKey === key)
@@ -604,6 +683,12 @@ export class ScGrantActivityService {
     }
     return Array.from({ length: copies }, (_unused, copy) => ScGrantActivityService.#deliveryItemId(key, copy))
       .every((id) => ScGrantActivityService.#hasItem(actor, id));
+  }
+
+  /** Whether a stack's legacy key list was full, and so may have dropped keys of pending orders. */
+  static #mayHaveDroppedKeys(stack) {
+    const legacy = stack?.flags?.[Constants.MODULE_ID]?.grantDeliveryKeys;
+    return Array.isArray(legacy) && legacy.length >= LEGACY_MAX_DELIVERY_KEYS;
   }
 
   /**

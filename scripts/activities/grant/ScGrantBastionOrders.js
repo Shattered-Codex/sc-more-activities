@@ -42,10 +42,13 @@ const LANG = "SCMOREACTIVITIES.Activities.ScGrant.Bastion";
  * once written it is recorded on the order (`delivered.<orderId>.<index>`,
  * one field per source, so records only ever add up and each order reads its
  * own), so a retry delivers
- * only what is still missing. The record is what a retry relies on: a stack
- * only keeps its most recent keys, and many other deliveries may reach it
- * while an order waits. The key covers the moment between a source's write
- * and its record. A delivery that fails (the
+ * only what is still missing. The key covers the moment between a source's
+ * write and its record, and a write of the record that fails: a stack keeps
+ * every key until the key's order is settled (delivered or discarded), however
+ * many other deliveries reach it meanwhile. Orders issued before that (up to
+ * v0.16.1, without `keyLedger`) went to stacks that kept only their last 20
+ * keys; when a retry of such an order finds a full list without its key, the
+ * GM confirms whether the source already arrived. A delivery that fails (the
  * recipient is gone, or the items cannot be created) stays on the facility,
  * marked as failed: items never go to another actor than the one the order
  * was issued for. Only the active GM retries or discards it, from any grant
@@ -216,6 +219,8 @@ export class ScGrantBastionOrders {
       [`flags.${Constants.MODULE_ID}.${FLAG}`]: {
         // Names this order in every delivery key.
         orderId: foundry.utils.randomID(),
+        // Its keys stay on the recipient's stacks until it is settled.
+        keyLedger: true,
         activityId: activity.id,
         recipientUuid: recipientActor?.uuid ?? null,
         order,
@@ -354,19 +359,59 @@ export class ScGrantBastionOrders {
     if (!ScGrantBastionOrders.isResolver() || !ScGrantBastionOrders.canResolve(facility, pending)) {
       return { ok: false, reason: "not-retryable" };
     }
-    return ScGrantBastionOrders.#deliver(facility, pending, { settle: true });
+    return ScGrantBastionOrders.#deliver(facility, pending, { settle: true, retrying: true });
   }
 
   /** Drops a completed order's undelivered items. */
   static async discard(facility) {
-    if (!ScGrantBastionOrders.isResolver() || !ScGrantBastionOrders.canResolve(facility)) {
+    const pending = ScGrantBastionOrders.pendingOf(facility);
+    if (!ScGrantBastionOrders.isResolver() || !ScGrantBastionOrders.canResolve(facility, pending)) {
       return { ok: false, reason: "not-discardable" };
     }
     await ScGrantBastionOrders.#clear(facility);
+    await ScGrantBastionOrders.#releaseKeys(pending);
     return { ok: true };
   }
 
-  static async #deliver(facility, pending, { settle = false } = {}) {
+  /**
+   * Asks the GM about a source that may already have arrived, of an order
+   * issued before stacks kept every delivery key (no `keyLedger`; see
+   * ScGrantActivityService.deliverPlan). Resolves to "deliver", "skip", or
+   * `null` when the dialog is closed, which leaves the order pending.
+   */
+  static async confirmUncertain({ item, quantity, actor }) {
+    const escape = (value) => foundry.utils.escapeHTML?.(String(value ?? "")) ?? String(value ?? "");
+    const content = Constants.format(
+      `${LANG}.Uncertain.Content`,
+      { quantity, item: escape(item?.name), actor: escape(actor?.name) },
+      `${quantity}× ${escape(item?.name)} may already have reached ${escape(actor?.name)}. Check their inventory.`
+    );
+    try {
+      return await foundry.applications.api.DialogV2.wait({
+        window: { title: Constants.localize(`${LANG}.Uncertain.Title`, "Was this already delivered?") },
+        content: `<p>${content}</p>`,
+        buttons: [
+          {
+            action: "skip",
+            icon: "fa-solid fa-check",
+            label: Constants.localize(`${LANG}.Uncertain.Skip`, "Already received"),
+            default: true
+          },
+          {
+            action: "deliver",
+            icon: "fa-solid fa-truck",
+            label: Constants.localize(`${LANG}.Uncertain.Deliver`, "Deliver again")
+          }
+        ],
+        rejectClose: false
+      }) ?? null;
+    } catch (error) {
+      Logger.warn("Could not ask about an uncertain sc-grant delivery.", error);
+      return null;
+    }
+  }
+
+  static async #deliver(facility, pending, { settle = false, retrying = false } = {}) {
     const lock = ScGrantBastionOrders.#lockOf(facility);
     if (ScGrantBastionOrders.#inFlight.has(lock)) {
       return { ok: false, reason: "in-progress" };
@@ -396,7 +441,7 @@ export class ScGrantBastionOrders {
         // marked as running.
         let reason;
         try {
-          reason = await ScGrantBastionOrders.#attemptDelivery(facility, pending, lease.holds);
+          reason = await ScGrantBastionOrders.#attemptDelivery(facility, pending, lease.holds, { retrying });
         } catch (error) {
           Logger.error("Could not deliver an sc-grant bastion order.", error);
           reason = "grant-failed";
@@ -412,6 +457,7 @@ export class ScGrantBastionOrders {
         }
 
         await ScGrantBastionOrders.#clear(facility);
+        await ScGrantBastionOrders.#releaseKeys(pending);
         return { ok: true };
       } finally {
         lease.release();
@@ -463,12 +509,25 @@ export class ScGrantBastionOrders {
     await ScGrantBastionOrders.#createRecoveryCard(facility, reason);
   }
 
+  /** Drops a settled order's keys from its recipient's stacks; a failure only leaves them there. */
+  static async #releaseKeys(pending) {
+    if (!pending?.orderId || !pending.recipientUuid) {
+      return;
+    }
+    try {
+      const recipient = await fromUuid(pending.recipientUuid);
+      await ScGrantActivityService.releaseDeliveryKeys(recipient, pending.orderId);
+    } catch (error) {
+      Logger.warn("Could not release the delivery keys of a settled sc-grant bastion order.", error);
+    }
+  }
+
   static #lockOf(facility) {
     return facility?.uuid ?? facility?.id ?? null;
   }
 
   /** Creates the order's items, or returns why it could not. */
-  static async #attemptDelivery(facility, pending, holds = () => true) {
+  static async #attemptDelivery(facility, pending, holds = () => true, { retrying = false } = {}) {
     // The order is owed to the actor it was issued for, and to no other.
     let recipient = null;
     try {
@@ -517,12 +576,17 @@ export class ScGrantBastionOrders {
       deliveryId: pending.orderId,
       checkInfo: pending.checkInfo ?? null,
       banner: ScGrantBastionOrders.#banner(facility, pending.order, "Completed"),
-      holds
+      holds,
+      // Only a retry of an order issued before the stacks kept every key can
+      // meet a source whose key was dropped. The first attempt never wrote it.
+      confirmUncertain: retrying && !pending.keyLedger
+        ? (source) => ScGrantBastionOrders.confirmUncertain(source)
+        : null
     });
     if (outcome?.ok) {
       return null;
     }
-    return ["no-items", "claim-lost"].includes(outcome?.reason) ? outcome.reason : "grant-failed";
+    return ["no-items", "claim-lost", "uncertain"].includes(outcome?.reason) ? outcome.reason : "grant-failed";
   }
 
   /** Why an undelivered order is still waiting, localized. */
@@ -539,7 +603,11 @@ export class ScGrantBastionOrders {
 
   /** The localized reason a delivery failed. */
   static failureLabel(reason) {
-    const key = { "recipient-missing": "RecipientMissing", "no-items": "NoItems" }[reason] ?? "GrantFailed";
+    const key = {
+      "recipient-missing": "RecipientMissing",
+      "no-items": "NoItems",
+      uncertain: "Uncertain"
+    }[reason] ?? "GrantFailed";
     return Constants.localize(`${LANG}.Failure.${key}`, reason);
   }
 
@@ -624,7 +692,7 @@ export class ScGrantBastionOrders {
       } else if (facility && action === "discard" && await ScGrantBastionOrders.confirmDiscard()) {
         result = await ScGrantBastionOrders.discard(facility);
       }
-      if (!result.ok && result.reason !== "grant-failed" && result.reason !== "recipient-missing") {
+      if (!result.ok && !["grant-failed", "recipient-missing", "uncertain"].includes(result.reason)) {
         ui.notifications?.info?.(Constants.localize(
           `${LANG}.Info.NothingToResolve`,
           "This order has nothing left to retry or discard right now."
