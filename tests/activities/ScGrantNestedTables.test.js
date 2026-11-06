@@ -148,6 +148,27 @@ test("results that grant nothing in an inner table are named with that table", a
   assert.match(warning[1], /"Wolf"/);
 });
 
+test("a result whose document was deleted still grants the items its text links", async() => {
+  const reward = makeTable("reward", "Reward", [{
+    type: "document",
+    name: "Old gem",
+    documentUuid: "Item.deleted",
+    description: `<p>Now: @UUID[${ruby.uuid}]{Ruby}</p>`
+  }]);
+  useDocuments(ruby, reward);
+
+  const plan = await ScGrantActivityService.planGrant([{ type: "table", uuid: reward.uuid, quantity: "1" }]);
+
+  assert.deepEqual(plan.sources.map((source) => source.uuid), [ruby.uuid]);
+  assert.equal(notices.length, 0);
+
+  // The sheet still points out the dangling link.
+  const report = await ScGrantTableResults.inspect(reward, { resolve: (uuid) => globalThis.fromUuid(uuid) });
+  assert.equal(report.status, "warning");
+  assert.deepEqual(report.issues.map((issue) => issue.code), [ScGrantTableResults.CODES.MISSING]);
+  assert.equal(report.itemCount, 1);
+});
+
 test("the inspection accepts a table whose nested results all grant items", async() => {
   const gems = makeTable("gems", "Gems", [linkTo(ruby), linkTo(opal)]);
   const rare = makeTable("rare", "Rare", [linkTo(gems), linkTo(sword)]);

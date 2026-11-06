@@ -28,12 +28,14 @@ export class ScGrantTableResults {
    * What a drawn result stands for: `{ items, tables, missing }`, the Items
    * and Roll Tables it names (each once) and the UUIDs it names that resolve
    * to nothing. A document result that names an Item or a Roll Table stands
-   * for that document alone; any other result is read through its text links.
+   * for that document alone; any other result, including one whose document
+   * was deleted, is read through its text links.
    *
    * @param {object} result
    * @param {(uuid: string, relative: object) => Promise<object|null>} resolve
    */
   static async classify(result, resolve) {
+    const missing = [];
     const uuid = ScGrantTableResults.documentUuid(result);
     if (uuid) {
       const document = await ScGrantTableResults.#safeResolve(resolve, uuid, result);
@@ -44,13 +46,12 @@ export class ScGrantTableResults {
         return { items: [], tables: [document], missing: [] };
       }
       if (!document) {
-        return { items: [], tables: [], missing: [uuid] };
+        missing.push(uuid);
       }
     }
 
     const items = [];
     const tables = [];
-    const missing = [];
     const seen = new Set();
     for (const linked of ScGrantTableResults.linkedUuids(result)) {
       const document = await ScGrantTableResults.#safeResolve(resolve, linked, result);
@@ -124,7 +125,9 @@ export class ScGrantTableResults {
           items.add(item.uuid ?? item.id ?? item.name);
         }
         if (classified.missing.length) {
-          report({ level: ERROR, code: MISSING, table: name, result: label });
+          // A dead link only costs the result when nothing else in it grants.
+          const grants = classified.items.length || classified.tables.length;
+          report({ level: grants ? WARNING : ERROR, code: MISSING, table: name, result: label });
         }
         for (const inner of classified.tables) {
           if (chain.includes(inner.uuid)) {
