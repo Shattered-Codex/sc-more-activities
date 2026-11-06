@@ -9,7 +9,9 @@ import { ScGrantEntryHelpers } from "./ScGrantEntryHelpers.js";
 
 const QUERY_ID = "sc-more-activities.grantItems";
 const QUERY_TIMEOUT = 30000;
-// Delivery keys a stack remembers, so a retried bastion delivery skips what it already added.
+// Delivery keys a stack remembers. An order records the sources it delivered
+// (see ScGrantBastionOrders), so a key only has to outlive the moment between
+// a stack's write and that record: it is a fallback, and a short list is enough.
 const MAX_DELIVERY_KEYS = 20;
 
 /** A bastion delivery stopped because another client took its order over. */
@@ -292,12 +294,16 @@ export class ScGrantActivityService {
   /**
    * Delivers a completed bastion order's stored plan (see ScGrantBastionOrders).
    * Each source is written with `deliveryId`, so a retry after a partial
-   * failure skips the sources that already reached the recipient. `holds()`
-   * is checked before every write: once it is false (another client took the
-   * order over), nothing else is written and the result is "claim-lost".
+   * failure skips the sources that already reached the recipient. The sources
+   * in `delivered` (indexes into `plan.sources`, as the order recorded them)
+   * are skipped as well, and `onDelivered(index)` is awaited after each source
+   * this attempt writes, so the order can record it. `holds()` is checked
+   * before every write: once it is false (another client took the order over),
+   * nothing else is written and the result is "claim-lost".
    */
   static async deliverPlan(recipientActor, plan, {
-    activityId, deliveryId, checkInfo = null, banner = null, rolls = [], holds = () => true, itemFlags = null
+    activityId, deliveryId, checkInfo = null, banner = null, rolls = [], holds = () => true, itemFlags = null,
+    delivered = [], onDelivered = null
   }) {
     // Like an immediate grant, a plan that resolved no item delivers nothing.
     if (!plan?.sources?.length) {
@@ -309,7 +315,7 @@ export class ScGrantActivityService {
     }
     try {
       const outcome = await ScGrantActivityService.#applyPlan(recipientActor, plan, {
-        activityId, deliveryId, holds, itemFlags: itemFlags ?? plan.itemFlags
+        activityId, deliveryId, holds, itemFlags: itemFlags ?? plan.itemFlags, delivered, onDelivered
       });
       if (!holds()) {
         return { ok: false, reason: "claim-lost" };
@@ -419,13 +425,16 @@ export class ScGrantActivityService {
    * Writes a plan's sources to the recipient, one source per write: a stack
    * gets its quantity raised, anything else is created. With a `deliveryId`,
    * each source's key is written in the same update as its items, and a
-   * source whose key the recipient already holds is skipped.
+   * source whose key the recipient already holds is skipped, like a source
+   * listed in `delivered`.
    */
   static async #applyPlan(recipientActor, plan, {
-    activityId = null, deliveryId = null, holds = () => true, itemFlags = plan.itemFlags
+    activityId = null, deliveryId = null, holds = () => true, itemFlags = plan.itemFlags,
+    delivered = [], onDelivered = null
   } = {}) {
     const created = [];
     const updated = [];
+    const done = new Set(Array.isArray(delivered) ? delivered : []);
     let totalGranted = 0;
 
     for (const [index, source] of (plan.sources ?? []).entries()) {
@@ -433,7 +442,12 @@ export class ScGrantActivityService {
       totalGranted += source.quantity;
       // Delivered sources are skipped before anything is loaded: their source
       // item may since have been deleted, which must not block the rest.
+      if (done.has(index)) {
+        continue;
+      }
       if (key && ScGrantActivityService.#holdsDeliveryKey(recipientActor, key)) {
+        // Delivered by an attempt that stopped before recording it.
+        await onDelivered?.(index);
         continue;
       }
 
@@ -450,6 +464,7 @@ export class ScGrantActivityService {
       // are checked against the state the write starts from, so a client that
       // lost its claim, or a source another client delivered, is never written.
       if (key && ScGrantActivityService.#holdsDeliveryKey(recipientActor, key)) {
+        await onDelivered?.(index);
         continue;
       }
       if (!holds()) {
@@ -472,6 +487,7 @@ export class ScGrantActivityService {
           throw new Error(ScGrantActivityService.#refusedMessage(sourceItem));
         }
         updated.push(...result);
+        await onDelivered?.(index);
         continue;
       }
 
@@ -482,6 +498,7 @@ export class ScGrantActivityService {
         itemFlags
       );
       created.push(...await ScGrantActivityService.#createDocuments(recipientActor, documents, key, sourceItem));
+      await onDelivered?.(index);
     }
 
     return { totalGranted, created, updated };
@@ -979,27 +996,106 @@ export class ScGrantActivityService {
   static async #drawTableItems(table, draws) {
     const { results } = await table.drawMany(draws, { displayChat: false });
     const items = [];
-    let invalidCount = 0;
+    const ignored = [];
 
     for (const result of results ?? []) {
-      const uuid = ScGrantActivityService.#resultDocumentUuid(result);
-      const document = uuid ? await fromUuid(uuid).catch(() => null) : null;
-      if (document && ScGrantActivityService.#isItemDocument(document)) {
-        items.push(document);
+      const resolved = await ScGrantActivityService.#resultItems(result);
+      if (resolved.length) {
+        items.push(...resolved);
       } else {
-        invalidCount += 1;
+        ignored.push(result);
       }
     }
 
-    if (invalidCount > 0) {
+    if (ignored.length > 0) {
+      const names = ignored
+        .map((result) => ScGrantActivityService.#resultLabel(result))
+        .map((label) => `"${label}"`)
+        .join(", ");
       ui.notifications?.warn?.(Constants.format(
         "SCMOREACTIVITIES.Activities.ScGrant.Warning.TableInvalidResults",
-        { count: invalidCount, table: table.name ?? "" },
-        `${invalidCount} result(s) from "${table.name ?? ""}" did not resolve to items and were ignored.`
+        { count: ignored.length, table: table.name ?? "", results: names },
+        `${ignored.length} result(s) from "${table.name ?? ""}" did not resolve to items and were ignored: ${names}`
       ));
+      Logger.warn(`Results drawn from "${table.name ?? ""}" (${table.uuid ?? ""}) that are not items:`, ignored.map((result) => ({
+        name: result?.name ?? "",
+        type: result?.type ?? "",
+        documentUuid: result?.documentUuid ?? null,
+        description: result?.description ?? ""
+      })));
     }
 
     return items;
+  }
+
+  /**
+   * The items a drawn result stands for: the Item it links to (a document
+   * result), or else every Item linked in its text (`@UUID[...]{...}`), which
+   * is how text results usually name their loot.
+   */
+  static async #resultItems(result) {
+    const uuid = ScGrantActivityService.#resultDocumentUuid(result);
+    if (uuid) {
+      const document = await ScGrantActivityService.#lookup(uuid, result);
+      if (document && ScGrantActivityService.#isItemDocument(document)) {
+        return [document];
+      }
+    }
+
+    const items = [];
+    const seen = new Set();
+    for (const linked of ScGrantActivityService.#linkedUuids(result)) {
+      const document = await ScGrantActivityService.#lookup(linked, result);
+      if (!document || !ScGrantActivityService.#isItemDocument(document)) {
+        continue;
+      }
+      const key = document.uuid ?? linked;
+      if (!seen.has(key)) {
+        seen.add(key);
+        items.push(document);
+      }
+    }
+    return items;
+  }
+
+  static async #lookup(uuid, relative) {
+    try {
+      return await fromUuid(uuid, { relative }) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** The UUIDs a result's text links to, in order: `@UUID[...]` and content-link anchors. */
+  static #linkedUuids(result) {
+    const text = [result?.description, result?.name]
+      .filter((value) => typeof value === "string" && value)
+      .join("\n");
+    const uuids = [];
+    for (const match of text.matchAll(/@UUID\[([^\]]+)\]/g)) {
+      uuids.push(match[1].trim());
+    }
+    for (const match of text.matchAll(/data-uuid=["']([^"']+)["']/g)) {
+      uuids.push(match[1].trim());
+    }
+    return uuids.filter(Boolean);
+  }
+
+  /** A readable name for a drawn result, for the warning that lists ignored ones. */
+  static #resultLabel(result) {
+    const name = String(result?.name ?? "").trim();
+    if (name) {
+      return name;
+    }
+    const description = String(result?.description ?? "")
+      .replace(/@\w+\[[^\]]*\]\{([^}]*)\}/g, "$1")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (description) {
+      return description.length > 40 ? `${description.slice(0, 39)}…` : description;
+    }
+    return result?.documentUuid ?? "?";
   }
 
   static #resultDocumentUuid(result) {

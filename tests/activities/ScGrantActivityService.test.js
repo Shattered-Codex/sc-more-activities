@@ -745,6 +745,114 @@ test("a retry after a partial failure only delivers what is still missing", asyn
   assert.equal(caster.created.length, 1);
 });
 
+/** Twenty bastion deliveries from other activities, each adding 1 to the compendium stack. */
+async function deliverElsewhere(caster, stack, count = 20) {
+  stack._source = { _stats: { compendiumSource: sourceItem.uuid } };
+  for (let index = 0; index < count; index += 1) {
+    const outcome = await ScGrantActivityService.deliverPlan(caster, { sources: [{ uuid: sourceItem.uuid, quantity: 1 }], lines: [] }, {
+      activityId: `other-${index}`, deliveryId: `other-order-${index}`
+    });
+    assert.equal(outcome.ok, true);
+  }
+}
+
+test("a retry does not deliver again what reached a stack, however many deliveries the stack received since", async() => {
+  const { activity, caster, facility } = setupBastionDelivery();
+  const stack = giveStack(caster, 5);
+  await ScGrantActivityService.execute(activity);
+  const create = caster.createEmbeddedDocuments;
+  caster.createEmbeddedDocuments = async() => { throw new Error("database offline"); };
+  await completeOrder(facility);
+  assert.equal(stack.system.quantity, 7);
+  assert.equal(ScGrantBastionOrders.pendingOf(facility).state, "failed");
+
+  await deliverElsewhere(caster, stack);
+  assert.equal(stack.system.quantity, 27);
+
+  caster.createEmbeddedDocuments = create;
+  assert.equal((await ScGrantBastionOrders.retry(facility)).ok, true);
+
+  assert.equal(stack.system.quantity, 27);
+  assert.deepEqual(caster.created.map((item) => [item.name, item.system.quantity]), [["Candle", 10]]);
+  assert.equal(ScGrantBastionOrders.pendingOf(facility), null);
+});
+
+test("an order records each source it delivered, and the record goes away with the order", async() => {
+  const { activity, caster, facility } = setupBastionDelivery();
+  const stack = giveStack(caster, 5);
+  await ScGrantActivityService.execute(activity);
+  const create = caster.createEmbeddedDocuments;
+  caster.createEmbeddedDocuments = async() => { throw new Error("database offline"); };
+  await completeOrder(facility);
+
+  // The potion (source 0) reached the stack; the candles (source 1) did not.
+  const recorded = ScGrantBastionOrders.pendingOf(facility);
+  assert.deepEqual(ScGrantBastionOrders.deliveredOf(recorded, 2), [0]);
+
+  // Even with every key gone from the stack, the record keeps the retry from adding the potions again.
+  stack.flags["sc-more-activities"].grantDeliveryKeys = [];
+  caster.createEmbeddedDocuments = create;
+  assert.equal((await ScGrantBastionOrders.retry(facility)).ok, true);
+  assert.equal(stack.system.quantity, 7);
+  assert.equal(caster.created.length, 1);
+  assert.equal(facility.flags["sc-more-activities"].bastionGrant, null);
+});
+
+test("a source written just before its record failed is still skipped by the retry, through its key", async() => {
+  const { activity, caster, facility } = setupBastionDelivery();
+  const stack = giveStack(caster, 5);
+  await ScGrantActivityService.execute(activity);
+  const update = facility.update;
+  let refuse = true;
+  facility.update = async function(changes) {
+    if (refuse && Object.keys(changes).some((path) => path.includes("bastionGrant.delivered"))) {
+      refuse = false;
+      throw new Error("connection lost");
+    }
+    return update.call(this, changes);
+  };
+
+  await completeOrder(facility);
+
+  // The stack was raised, but the order could not record it.
+  assert.equal(stack.system.quantity, 7);
+  const pending = ScGrantBastionOrders.pendingOf(facility);
+  assert.equal(pending.state, "failed");
+  assert.deepEqual(ScGrantBastionOrders.deliveredOf(pending), []);
+
+  assert.equal((await ScGrantBastionOrders.retry(facility)).ok, true);
+  assert.equal(stack.system.quantity, 7);
+  assert.deepEqual(caster.created.map((item) => [item.name, item.system.quantity]), [["Candle", 10]]);
+});
+
+test("deliveries to the same stack each add their quantity, and the stack keeps a bounded list of keys", async() => {
+  const { activity, caster, facility } = setupBastionDelivery();
+  activity.grants = [{ type: "item", uuid: sourceItem.uuid, quantity: "2" }];
+  const stack = giveStack(caster, 5);
+
+  await ScGrantActivityService.execute(activity);
+  await completeOrder(facility);
+  assert.equal(stack.system.quantity, 7);
+  assert.equal(ScGrantBastionOrders.pendingOf(facility), null);
+
+  await deliverElsewhere(caster, stack, 25);
+  assert.equal(stack.system.quantity, 32);
+
+  // A second order of the same activity adds to the same stack again.
+  await ScGrantActivityService.execute(activity);
+  await completeOrder(facility);
+  assert.equal(stack.system.quantity, 34);
+  assert.equal(stack.flags["sc-more-activities"].grantDeliveryKeys.length, 20);
+});
+
+test("only valid source indexes count as delivered", () => {
+  const pending = { orderId: "o", delivered: { o: { 0: true, 2: true, "-1": true, "1.5": true, x: true, 7: true, 1: "o" } } };
+  assert.deepEqual(ScGrantBastionOrders.deliveredOf(pending, 3), [0, 2]);
+  assert.deepEqual(ScGrantBastionOrders.deliveredOf({ orderId: "o", delivered: [0, 1] }, 3), []);
+  assert.deepEqual(ScGrantBastionOrders.deliveredOf({}), []);
+  assert.deepEqual(ScGrantBastionOrders.deliveredOf(null), []);
+});
+
 test("a retry while a delivery is running does not deliver it twice", async() => {
   const { activity, caster, facility } = setupBastionDelivery();
   activity.grants = [{ type: "item", uuid: candle.uuid, quantity: "10" }];
@@ -904,6 +1012,40 @@ test("an order whose table resolves no item is refused when issued", async() => 
   assert.equal(caster.created.length, 0);
 });
 
+test("text results grant the items they link, and the warning names the ones that link none", async() => {
+  const { activity, caster, facility } = setupBastionDelivery();
+  const table = {
+    documentName: "RollTable",
+    uuid: "Compendium.world.tables.RollTable.hunt",
+    name: "Hunt",
+    async drawMany() {
+      return {
+        results: [
+          { type: "text", name: "", description: `<p>You harvest @UUID[${candle.uuid}]{Candle} and @UUID[${candle.uuid}]{Candle}</p>` },
+          { type: "text", name: "Nothing", description: "<p>The prey escapes.</p>" },
+          { type: "document", name: "Wolf", documentUuid: "Actor.wolf" }
+        ]
+      };
+    }
+  };
+  activity.grants = [{ type: "table", uuid: table.uuid, quantity: "3" }];
+  const lookup = globalThis.fromUuid;
+  globalThis.fromUuid = async (uuid) => {
+    if (uuid === table.uuid) return table;
+    if (uuid === "Actor.wolf") return { documentName: "Actor", uuid, name: "Wolf" };
+    return lookup(uuid);
+  };
+  notices.length = 0;
+
+  await ScGrantActivityService.execute(activity);
+
+  assert.deepEqual(ScGrantBastionOrders.pendingOf(facility).plan.sources.map((source) => source.uuid), [candle.uuid]);
+  const warning = notices.find(([level, message]) => level === "warn" && /Hunt/.test(message));
+  assert.ok(warning);
+  assert.match(warning[1], /"Nothing", "Wolf"/);
+  assert.equal(caster.created.length, 0);
+});
+
 test("delivering an empty plan reports a failure", async() => {
   const { caster } = setupBastionDelivery();
   const result = await ScGrantActivityService.deliverPlan(caster, { sources: [], lines: [] }, { activityId: "grant", deliveryId: "x" });
@@ -1057,6 +1199,156 @@ test("a creation that lands after its claim was taken over does not duplicate th
   await first;
   assert.equal(caster.created.length, 1);
   assert.equal(caster.items.filter((item) => item.name === "Candle").length, 1);
+});
+
+test("a record write that lands late, after another tab took the order over, erases nothing", async(t) => {
+  const { activity, caster, facility } = setupBastionDelivery();
+  const rope = {
+    documentName: "Item",
+    uuid: "Compendium.world.items.Item.rope",
+    name: "Rope",
+    toObject: () => ({ _id: "rope", name: "Rope", type: "loot", system: {}, flags: {} })
+  };
+  activity.grants = [
+    { type: "item", uuid: sourceItem.uuid, quantity: "2" },
+    { type: "item", uuid: candle.uuid, quantity: "10" },
+    { type: "item", uuid: rope.uuid, quantity: "1" }
+  ];
+  // Potions and candles both go to stacks, whose keys a retry may not find again.
+  const stackOf = (id, source, quantity) => ({
+    id,
+    flags: { "sc-more-activities": { grantSourceUuid: source.uuid, grantActivityId: "grant" } },
+    system: { quantity },
+    toObject() { return { system: { quantity: this.system.quantity } }; }
+  });
+  const potions = stackOf("potions", sourceItem, 5);
+  const candles = stackOf("candles", candle, 3);
+  caster.items.push(potions, candles);
+  caster.updateEmbeddedDocuments = async(_name, updates) => updates.map((update) => {
+    const stack = caster.items.find((item) => item.id === update._id);
+    stack.system.quantity = update["system.quantity"];
+    stack.flags["sc-more-activities"].grantDeliveryKeys = update["flags.sc-more-activities.grantDeliveryKeys"];
+    return stack;
+  });
+  const lookup = globalThis.fromUuid;
+  globalThis.fromUuid = async (uuid) => (uuid === rope.uuid ? rope : lookup(uuid));
+  await ScGrantActivityService.execute(activity);
+  const { ScGrantBastionOrders: OtherTab } = await import("../../scripts/activities/grant/ScGrantBastionOrders.js?tab=6");
+  OtherTab.CLAIM_SETTLE_MS = 0;
+
+  // This tab's first record write stays in flight until released.
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  t.after(() => release());
+  let held = false;
+  const update = facility.update;
+  facility.update = async function(changes) {
+    if (!held && Object.keys(changes).some((path) => path.includes("bastionGrant.delivered"))) {
+      held = true;
+      await gate;
+    }
+    return update.call(this, changes);
+  };
+  const create = caster.createEmbeddedDocuments;
+  caster.createEmbeddedDocuments = async() => { throw new Error("database offline"); };
+
+  const first = completeOrder(facility);
+  while (!held) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.equal(potions.system.quantity, 7);
+
+  // Its heartbeat stopped: the other tab takes over, raises the candles, and the rope fails.
+  facility.flags["sc-more-activities"].bastionGrant.claimedAt = Date.now() - (2 * ScGrantBastionOrders.CLAIM_TIMEOUT_MS);
+  assert.equal((await OtherTab.retry(facility)).ok, false);
+  assert.equal(candles.system.quantity, 13);
+  assert.deepEqual(ScGrantBastionOrders.deliveredOf(ScGrantBastionOrders.pendingOf(facility), 3), [0, 1]);
+
+  // The first tab's write lands now, and stops there.
+  release();
+  await first;
+  const pending = ScGrantBastionOrders.pendingOf(facility);
+  assert.deepEqual(ScGrantBastionOrders.deliveredOf(pending, 3), [0, 1]);
+
+  // Even with every key gone, the retry only delivers the rope.
+  potions.flags["sc-more-activities"].grantDeliveryKeys = [];
+  candles.flags["sc-more-activities"].grantDeliveryKeys = [];
+  caster.createEmbeddedDocuments = create;
+  facility.flags["sc-more-activities"].bastionGrant.state = "failed";
+  assert.equal((await ScGrantBastionOrders.retry(facility)).ok, true);
+  assert.equal(potions.system.quantity, 7);
+  assert.equal(candles.system.quantity, 13);
+  assert.deepEqual(caster.created.map((item) => item.name), ["Rope"]);
+});
+
+test("a record write of an earlier order that lands late does not touch the next order's record", async(t) => {
+  const { activity, caster, facility } = setupBastionDelivery();
+  const stack = giveStack(caster, 5);
+  // Updates reach the stack they name: the first order's candles become a stack of their own.
+  let failCandles = false;
+  caster.updateEmbeddedDocuments = async(_name, updates) => updates.map((update) => {
+    const item = caster.items.find((entry) => entry.id === update._id);
+    if (item !== stack && failCandles) {
+      throw new Error("database offline");
+    }
+    item.system.quantity = update["system.quantity"];
+    foundry.utils.setProperty(item, "flags.sc-more-activities.grantDeliveryKeys", update["flags.sc-more-activities.grantDeliveryKeys"]);
+    return item;
+  });
+  await ScGrantActivityService.execute(activity);
+  const { ScGrantBastionOrders: OtherTab } = await import("../../scripts/activities/grant/ScGrantBastionOrders.js?tab=7");
+  const { ScGrantBastionOrders: ThirdTab } = await import("../../scripts/activities/grant/ScGrantBastionOrders.js?tab=8");
+  OtherTab.CLAIM_SETTLE_MS = 0;
+
+  // This tab's first record write (the first order's potions) stays in flight until released.
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  t.after(() => release());
+  let held = false;
+  const update = facility.update;
+  facility.update = async function(changes) {
+    if (!held && Object.keys(changes).some((path) => path.includes("bastionGrant.delivered"))) {
+      held = true;
+      await gate;
+    }
+    return update.call(this, changes);
+  };
+  const first = completeOrder(facility);
+  while (!held) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+
+  // The other tab takes the first order over and completes it.
+  facility.flags["sc-more-activities"].bastionGrant.claimedAt = Date.now() - (2 * ScGrantBastionOrders.CLAIM_TIMEOUT_MS);
+  assert.equal((await OtherTab.retry(facility)).ok, true);
+  assert.equal(ScGrantBastionOrders.pendingOf(facility), null);
+  assert.equal(stack.system.quantity, 7);
+
+  // A second order delivers its potions, and its candles fail.
+  const candles = caster.items.find((item) => item.name === "Candle");
+  assert.equal(candles.system.quantity, 10);
+  await ScGrantActivityService.execute(activity);
+  failCandles = true;
+  await completeOrder(facility, ThirdTab);
+  assert.equal(stack.system.quantity, 9);
+  assert.deepEqual(ScGrantBastionOrders.deliveredOf(ScGrantBastionOrders.pendingOf(facility), 2), [0]);
+
+  // The first order's write lands now, on the second order.
+  release();
+  await first;
+  assert.deepEqual(ScGrantBastionOrders.deliveredOf(ScGrantBastionOrders.pendingOf(facility), 2), [0]);
+
+  // Even with every key gone, the retry only delivers the candles.
+  stack.flags["sc-more-activities"].grantDeliveryKeys = [];
+  failCandles = false;
+  assert.equal((await ScGrantBastionOrders.retry(facility)).ok, true);
+  assert.equal(stack.system.quantity, 9);
+  assert.equal(candles.system.quantity, 20);
+});
+
+test("a record left by an earlier order does not count for the next one", () => {
+  const pending = { orderId: "new", delivered: { old: { 0: true, 2: true }, new: { 1: true, 4: true } } };
+  assert.deepEqual(ScGrantBastionOrders.deliveredOf(pending, 3), [1]);
 });
 
 test("a creation a hook vetoes keeps the order pending instead of completing it", async() => {

@@ -760,7 +760,7 @@
   "SCMOREACTIVITIES.Activities.ScGrant.Warning.TargetActorMissing": "The selected target token does not have a valid actor.",
   "SCMOREACTIVITIES.Activities.ScGrant.Warning.NoResolvedItems": "No valid items could be resolved for this grant activity.",
   "SCMOREACTIVITIES.Activities.ScGrant.Warning.InvalidTable": "Invalid roll table UUID: {uuid}",
-  "SCMOREACTIVITIES.Activities.ScGrant.Warning.TableInvalidResults": "{count} result(s) from \"{table}\" did not resolve to items and were ignored.",
+  "SCMOREACTIVITIES.Activities.ScGrant.Warning.TableInvalidResults": "{count} result(s) from \"{table}\" did not resolve to items and were ignored: {results}. Table results must be Items, or text that links Items with @UUID[...].",
   "SCMOREACTIVITIES.Activities.ScGrant.Warning.CheckUnavailable": "Could not roll the configured grant check.",
   "SCMOREACTIVITIES.Activities.ScGrant.Warning.InvalidQuantityFormula": "Invalid quantity formula \"{formula}\". Keeping the previous value.",
   "SCMOREACTIVITIES.Activities.ScGrant.Info.CheckFailed": "{actor} failed the check (DC {dc}). No items were granted.",

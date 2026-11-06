@@ -760,7 +760,7 @@
   "SCMOREACTIVITIES.Activities.ScGrant.Warning.TargetActorMissing": "O token alvo selecionado não possui um ator válido.",
   "SCMOREACTIVITIES.Activities.ScGrant.Warning.NoResolvedItems": "Nenhum item válido pôde ser resolvido para esta atividade de concessão.",
   "SCMOREACTIVITIES.Activities.ScGrant.Warning.InvalidTable": "UUID de tabela de rolagem inválido: {uuid}",
-  "SCMOREACTIVITIES.Activities.ScGrant.Warning.TableInvalidResults": "{count} resultado(s) de \"{table}\" não resolveram para itens e foram ignorados.",
+  "SCMOREACTIVITIES.Activities.ScGrant.Warning.TableInvalidResults": "{count} resultado(s) de \"{table}\" não resolveram para itens e foram ignorados: {results}. Os resultados da tabela devem ser Itens, ou texto que vincule Itens com @UUID[...].",
   "SCMOREACTIVITIES.Activities.ScGrant.Warning.CheckUnavailable": "Não foi possível rolar o teste de concessão configurado.",
   "SCMOREACTIVITIES.Activities.ScGrant.Warning.InvalidQuantityFormula": "Fórmula de quantidade inválida \"{formula}\". Mantendo o valor anterior.",
   "SCMOREACTIVITIES.Activities.ScGrant.Info.CheckFailed": "{actor} falhou no teste (CD {dc}). Nenhum item foi concedido.",
