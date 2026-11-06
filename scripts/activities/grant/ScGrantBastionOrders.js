@@ -38,8 +38,14 @@ const LANG = "SCMOREACTIVITIES.Activities.ScGrant.Bastion";
  *
  * Delivery is recoverable. Its first attempt rolls the quantities and draws
  * the tables once, and stores the result as a plan on the facility; each
- * source is then written with a delivery key the recipient's item keeps, so a
- * retry delivers only what is still missing. A delivery that fails (the
+ * source is then written with a delivery key the recipient's item keeps, and
+ * once written it is recorded on the order (`delivered.<orderId>.<index>`,
+ * one field per source, so records only ever add up and each order reads its
+ * own), so a retry delivers
+ * only what is still missing. The record is what a retry relies on: a stack
+ * only keeps its most recent keys, and many other deliveries may reach it
+ * while an order waits. The key covers the moment between a source's write
+ * and its record. A delivery that fails (the
  * recipient is gone, or the items cannot be created) stays on the facility,
  * marked as failed: items never go to another actor than the one the order
  * was issued for. Only the active GM retries or discards it, from any grant
@@ -93,6 +99,30 @@ export class ScGrantBastionOrders {
   static pendingOf(facility) {
     const pending = facility?.flags?.[Constants.MODULE_ID]?.[FLAG];
     return pending && typeof pending === "object" && pending.activityId ? pending : null;
+  }
+
+  /**
+   * The plan sources (indexes) a pending order recorded as delivered, read
+   * from `delivered.<orderId>`: what other orders recorded is ignored. The
+   * record lives on the order, so it is bounded by the plan's size and goes
+   * away with the order; it does not depend on what the recipient's items kept.
+   */
+  static deliveredOf(pending, sourceCount = Infinity) {
+    const recorded = pending?.delivered?.[ScGrantBastionOrders.#orderTag(pending)];
+    if (!recorded || typeof recorded !== "object" || Array.isArray(recorded)) {
+      return [];
+    }
+    return Object.entries(recorded)
+      .filter(([key, value]) => /^\d+$/.test(key) && value === true)
+      .map(([key]) => Number(key))
+      .filter((index) => index < sourceCount)
+      .sort((left, right) => left - right);
+  }
+
+  /** The key an order's record is written under: its id, a valid flag path segment. */
+  static #orderTag(pending) {
+    const id = String(pending?.orderId || pending?.activityId || "order");
+    return /^[A-Za-z0-9_-]+$/.test(id) ? id : "order";
   }
 
   /** Whether a pending grant's order already completed and only awaits its items. */
@@ -459,7 +489,29 @@ export class ScGrantBastionOrders {
     // nor how many. So a delivery (or a retry) follows the activity's current
     // flags, and the ones stored with the order only once the activity is gone.
     const activity = facility.system?.activities?.get?.(pending.activityId) ?? null;
+    // The sources already delivered, as the order recorded them: read from the
+    // facility as it is now, so a retry sees what every earlier attempt wrote.
+    const delivered = new Set(ScGrantBastionOrders.deliveredOf(
+      ScGrantBastionOrders.pendingOf(facility) ?? pending,
+      plan.sources.length
+    ));
     const outcome = await ScGrantActivityService.deliverPlan(recipient, plan, {
+      delivered: [...delivered],
+      // Recorded right after each source's write, at a path of its own under
+      // the order's id: a write only ever adds its own source of its own
+      // order. One that lands late (after another client took the order over,
+      // or after a later order was issued) erases nothing and counts for no
+      // other order. A client that already lost its claim records nothing: the
+      // delivery key on the recipient covers its source.
+      onDelivered: async(index) => {
+        if (delivered.has(index) || !holds()) {
+          return;
+        }
+        delivered.add(index);
+        await ScGrantBastionOrders.#writeState(facility, {
+          [`delivered.${ScGrantBastionOrders.#orderTag(pending)}.${index}`]: true
+        });
+      },
       itemFlags: activity ? ScGrantEntryHelpers.normalizeItemFlags(activity.itemFlags) : (plan.itemFlags ?? []),
       activityId: pending.activityId,
       deliveryId: pending.orderId,
