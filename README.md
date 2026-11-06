@@ -748,6 +748,22 @@ An SC Grant gives the recipient (the activity's actor, or the one targeted token
 table draws listed under **Granted Items**. Each row's quantity accepts a formula. An optional
 **Grant Check** gates the grant behind an ability or skill check.
 
+### Roll Tables
+
+A roll table row draws as many results as its quantity. Each result can be:
+
+- an Item, which is granted;
+- another Roll Table, which is drawn in turn: a first table can pick the kind of reward and an inner
+  table the item, so an upgrade only has to swap one inner table. Tables nest up to **3 levels**,
+  the table on the grant being the first;
+- text that links Items or Roll Tables with `@UUID[...]`, which grants (or draws) every one it links.
+
+Results that grant nothing (an Actor, plain text, a deleted document, a table nested too deep, a
+table that leads back to one it was drawn from) are skipped with a warning naming them. The sheet
+checks each table when it renders: a table that cannot grant every result is outlined in red, with
+the reasons under its row, and a working one shows how many items it can give across how many
+tables. A table drawn without replacement whose results are all drawn is flagged as a warning.
+
 ### Letting The User Choose
 
 Set **Mode** to *Let them choose* and enter how many sources the user picks. When the activity is

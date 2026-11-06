@@ -6,6 +6,7 @@ import { ScGrantBastionOrders } from "./ScGrantBastionOrders.js";
 import { ScGrantCard } from "./ScGrantCard.js";
 import { ScGrantChoiceApp } from "./ScGrantChoiceApp.js";
 import { ScGrantEntryHelpers } from "./ScGrantEntryHelpers.js";
+import { ScGrantTableResults } from "./ScGrantTableResults.js";
 
 const QUERY_ID = "sc-more-activities.grantItems";
 const QUERY_TIMEOUT = 30000;
@@ -878,18 +879,12 @@ export class ScGrantActivityService {
           ));
           continue;
         }
-        const drawnItems = await ScGrantActivityService.#drawTableItems(table, quantity);
-        const counts = new Map();
-        for (const drawnItem of drawnItems) {
+        const ignored = [];
+        const drawn = await ScGrantActivityService.#drawTable(table, quantity, { ignored });
+        for (const drawnItem of drawn.items) {
           append(drawnItem, 1, table.uuid);
-          const key = drawnItem.uuid ?? drawnItem.id;
-          const existing = counts.get(key);
-          if (existing) {
-            existing.quantity += 1;
-          } else {
-            counts.set(key, { uuid: drawnItem.uuid, name: drawnItem.name ?? "", img: drawnItem.img ?? "", quantity: 1 });
-          }
         }
+        ScGrantActivityService.#warnIgnored(ignored);
         lines.push({
           kind: "table",
           uuid: table.uuid,
@@ -898,7 +893,7 @@ export class ScGrantActivityService {
           draws: quantity,
           formula: roll ? roll.formula : null,
           total: roll?.total ?? null,
-          items: Array.from(counts.values())
+          items: drawn.rows
         });
         continue;
       }
@@ -993,122 +988,120 @@ export class ScGrantActivityService {
     return { img: item?.img ?? "", title, subtitle };
   }
 
-  static async #drawTableItems(table, draws) {
-    const { results } = await table.drawMany(draws, { displayChat: false });
+  /**
+   * Draws `draws` results from `table` and, in turn, from the inner tables
+   * they name, down to ScGrantTableResults.MAX_DEPTH levels. Returns the
+   * items drawn (one per unit) and the card rows: items by count, and inner
+   * tables with what they drew. Results that grant nothing are collected in
+   * `ignored` (see #warnIgnored) instead of failing the draw.
+   */
+  static async #drawTable(table, draws, { depth = 1, chain = [table.uuid], ignored = [] } = {}) {
+    const { CYCLE, TOO_DEEP, NOT_ITEM } = ScGrantTableResults.CODES;
+    // Inner tables are drawn here rather than by Foundry, which would mark
+    // their results as drawn on this table and does not follow text links.
+    const { results } = await table.drawMany(draws, { displayChat: false, recursive: false });
     const items = [];
-    const ignored = [];
+    const rows = new Map();
+    const inner = new Map();
 
     for (const result of results ?? []) {
-      const resolved = await ScGrantActivityService.#resultItems(result);
-      if (resolved.length) {
-        items.push(...resolved);
-      } else {
-        ignored.push(result);
+      const classified = await ScGrantTableResults.classify(result, ScGrantActivityService.#resolveDocument);
+      for (const item of classified.items) {
+        items.push(item);
+        const key = `item:${item.uuid ?? item.id}`;
+        const row = rows.get(key);
+        if (row) {
+          row.quantity += 1;
+        } else {
+          rows.set(key, { kind: "item", uuid: item.uuid, name: item.name ?? "", img: item.img ?? "", quantity: 1 });
+        }
+      }
+      for (const nested of classified.tables) {
+        if (chain.includes(nested.uuid)) {
+          ignored.push({ table, result, code: CYCLE });
+        } else if (depth >= ScGrantTableResults.MAX_DEPTH) {
+          ignored.push({ table, result, code: TOO_DEEP });
+        } else {
+          const pending = inner.get(nested.uuid) ?? { table: nested, draws: 0 };
+          pending.draws += 1;
+          inner.set(nested.uuid, pending);
+          // Keeps the card in draw order: the row is filled once the table is drawn.
+          if (!rows.has(`table:${nested.uuid}`)) {
+            rows.set(`table:${nested.uuid}`, null);
+          }
+        }
+      }
+      if (!classified.items.length && !classified.tables.length) {
+        ignored.push({ table, result, code: NOT_ITEM });
       }
     }
 
-    if (ignored.length > 0) {
-      const names = ignored
-        .map((result) => ScGrantActivityService.#resultLabel(result))
-        .map((label) => `"${label}"`)
-        .join(", ");
-      ui.notifications?.warn?.(Constants.format(
-        "SCMOREACTIVITIES.Activities.ScGrant.Warning.TableInvalidResults",
-        { count: ignored.length, table: table.name ?? "", results: names },
-        `${ignored.length} result(s) from "${table.name ?? ""}" did not resolve to items and were ignored: ${names}`
-      ));
-      Logger.warn(`Results drawn from "${table.name ?? ""}" (${table.uuid ?? ""}) that are not items:`, ignored.map((result) => ({
+    for (const { table: nested, draws: count } of inner.values()) {
+      const drawn = await ScGrantActivityService.#drawTable(nested, count, {
+        depth: depth + 1,
+        chain: [...chain, nested.uuid],
+        ignored
+      });
+      items.push(...drawn.items);
+      rows.set(`table:${nested.uuid}`, {
+        kind: "table",
+        uuid: nested.uuid,
+        name: nested.name ?? "",
+        img: nested.img ?? "",
+        draws: count,
+        items: drawn.rows
+      });
+    }
+
+    return { items, rows: Array.from(rows.values()).filter(Boolean) };
+  }
+
+  /** One warning per table and reason for the drawn results that granted nothing. */
+  static #warnIgnored(ignored) {
+    const { CYCLE, TOO_DEEP } = ScGrantTableResults.CODES;
+    const groups = new Map();
+    for (const entry of ignored) {
+      const key = `${entry.table.uuid ?? entry.table.name}|${entry.code}`;
+      const group = groups.get(key) ?? { table: entry.table, code: entry.code, results: [] };
+      group.results.push(entry.result);
+      groups.set(key, group);
+    }
+
+    for (const { table, code, results } of groups.values()) {
+      const names = results.map((result) => `"${ScGrantTableResults.label(result)}"`).join(", ");
+      const data = { count: results.length, table: table.name ?? "", results: names, max: ScGrantTableResults.MAX_DEPTH };
+      let message;
+      if (code === CYCLE) {
+        message = Constants.format(
+          "SCMOREACTIVITIES.Activities.ScGrant.Warning.TableCycle",
+          data,
+          `${data.count} result(s) from "${data.table}" lead back to a table they were drawn from and were ignored: ${names}.`
+        );
+      } else if (code === TOO_DEEP) {
+        message = Constants.format(
+          "SCMOREACTIVITIES.Activities.ScGrant.Warning.TableTooDeep",
+          data,
+          `${data.count} result(s) from "${data.table}" go deeper than ${data.max} levels of roll tables and were ignored: ${names}.`
+        );
+      } else {
+        message = Constants.format(
+          "SCMOREACTIVITIES.Activities.ScGrant.Warning.TableInvalidResults",
+          data,
+          `${data.count} result(s) from "${data.table}" did not resolve to items and were ignored: ${names}`
+        );
+      }
+      ui.notifications?.warn?.(message);
+      Logger.warn(`Results drawn from "${table.name ?? ""}" (${table.uuid ?? ""}) that grant no item (${code}):`, results.map((result) => ({
         name: result?.name ?? "",
         type: result?.type ?? "",
         documentUuid: result?.documentUuid ?? null,
         description: result?.description ?? ""
       })));
     }
-
-    return items;
   }
 
-  /**
-   * The items a drawn result stands for: the Item it links to (a document
-   * result), or else every Item linked in its text (`@UUID[...]{...}`), which
-   * is how text results usually name their loot.
-   */
-  static async #resultItems(result) {
-    const uuid = ScGrantActivityService.#resultDocumentUuid(result);
-    if (uuid) {
-      const document = await ScGrantActivityService.#lookup(uuid, result);
-      if (document && ScGrantActivityService.#isItemDocument(document)) {
-        return [document];
-      }
-    }
-
-    const items = [];
-    const seen = new Set();
-    for (const linked of ScGrantActivityService.#linkedUuids(result)) {
-      const document = await ScGrantActivityService.#lookup(linked, result);
-      if (!document || !ScGrantActivityService.#isItemDocument(document)) {
-        continue;
-      }
-      const key = document.uuid ?? linked;
-      if (!seen.has(key)) {
-        seen.add(key);
-        items.push(document);
-      }
-    }
-    return items;
-  }
-
-  static async #lookup(uuid, relative) {
-    try {
-      return await fromUuid(uuid, { relative }) ?? null;
-    } catch {
-      return null;
-    }
-  }
-
-  /** The UUIDs a result's text links to, in order: `@UUID[...]` and content-link anchors. */
-  static #linkedUuids(result) {
-    const text = [result?.description, result?.name]
-      .filter((value) => typeof value === "string" && value)
-      .join("\n");
-    const uuids = [];
-    for (const match of text.matchAll(/@UUID\[([^\]]+)\]/g)) {
-      uuids.push(match[1].trim());
-    }
-    for (const match of text.matchAll(/data-uuid=["']([^"']+)["']/g)) {
-      uuids.push(match[1].trim());
-    }
-    return uuids.filter(Boolean);
-  }
-
-  /** A readable name for a drawn result, for the warning that lists ignored ones. */
-  static #resultLabel(result) {
-    const name = String(result?.name ?? "").trim();
-    if (name) {
-      return name;
-    }
-    const description = String(result?.description ?? "")
-      .replace(/@\w+\[[^\]]*\]\{([^}]*)\}/g, "$1")
-      .replace(/<[^>]*>/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (description) {
-      return description.length > 40 ? `${description.slice(0, 39)}…` : description;
-    }
-    return result?.documentUuid ?? "?";
-  }
-
-  static #resultDocumentUuid(result) {
-    if (result?.documentUuid) {
-      return String(result.documentUuid);
-    }
-    const collection = result?.documentCollection;
-    const id = result?.documentId;
-    if (!collection || !id) {
-      return null;
-    }
-    const isPack = collection.includes(".");
-    return isPack ? `Compendium.${collection}.Item.${id}` : `${collection}.${id}`;
+  static async #resolveDocument(uuid, relative) {
+    return await fromUuid(uuid, { relative }) ?? null;
   }
 
   static #isItemDocument(document) {

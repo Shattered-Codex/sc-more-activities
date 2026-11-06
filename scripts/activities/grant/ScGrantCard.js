@@ -23,7 +23,8 @@ export class ScGrantCard {
    * @param {object} card.banner   `{ img, title, subtitle }`
    * @param {string} [card.intro]  The line above the list, e.g. "Beiro received:".
    * @param {object[]} card.lines  Items `{ kind: "item", uuid, name, img, quantity, formula, total }`
-   *                               and tables `{ kind: "table", uuid, name, img, draws, formula, total, items }`.
+   *                               and tables `{ kind: "table", uuid, name, img, draws, formula, total, items }`,
+   *                               whose `items` may hold the inner tables they drew from, as table lines.
    * @param {object[]} [card.notes] Footer notes `{ icon, text }`.
    * @param {string} [card.emptyText] Shown under a table that drew nothing.
    * @param {Function} [card.drawsText] `(count) => string` for a table's draw count.
@@ -93,7 +94,9 @@ export class ScGrantCard {
     const escape = ScGrantCard.#escape;
     const meta = formula ? `${drawsText(draws)} · ${formula} = ${total}` : drawsText(draws);
     const children = items.length
-      ? items.map((item) => ScGrantCard.#itemRow(item)).join("")
+      ? items.map((item) => (item.kind === "table"
+        ? ScGrantCard.#tableRow(item, { emptyText, drawsText })
+        : ScGrantCard.#itemRow(item))).join("")
       : `<li class="sc-ma-grant-card-empty">${escape(emptyText)}</li>`;
     return `<li class="sc-ma-grant-card-table">`
       + `<div class="sc-ma-grant-card-table-head">`

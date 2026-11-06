@@ -1,7 +1,19 @@
 import { Constants } from "../../constants/Constants.js";
+import { Logger } from "../../support/Logger.js";
 import { ScGrantActivityService } from "./ScGrantActivityService.js";
 import { ScGrantBastionOrders } from "./ScGrantBastionOrders.js";
 import { ScGrantEntryHelpers } from "./ScGrantEntryHelpers.js";
+import { ScGrantTableResults } from "./ScGrantTableResults.js";
+
+const SHOWN_ISSUES = 4;
+const ISSUE_KEYS = Object.freeze({
+  [ScGrantTableResults.CODES.EMPTY]: "Empty",
+  [ScGrantTableResults.CODES.EXHAUSTED]: "Exhausted",
+  [ScGrantTableResults.CODES.NOT_ITEM]: "NotItem",
+  [ScGrantTableResults.CODES.MISSING]: "Missing",
+  [ScGrantTableResults.CODES.TOO_DEEP]: "TooDeep",
+  [ScGrantTableResults.CODES.CYCLE]: "Cycle"
+});
 
 export class ScGrantActivitySheet extends dnd5e.applications.activity.ActivitySheet {
   static DEFAULT_OPTIONS = {
@@ -45,6 +57,8 @@ export class ScGrantActivitySheet extends dnd5e.applications.activity.ActivitySh
         }
 
         const isTable = entry.type === ScGrantEntryHelpers.SOURCE_TYPES.TABLE;
+        const missing = Boolean(entry.uuid) && !document;
+        const validation = isTable && document ? await ScGrantActivitySheet.#validateTable(document) : null;
         return {
           index,
           type: entry.type,
@@ -54,13 +68,23 @@ export class ScGrantActivitySheet extends dnd5e.applications.activity.ActivitySh
           name: document?.name ?? entry.uuid,
           img: document?.img ?? (isTable ? "icons/svg/d20-grey.svg" : "icons/svg/hazard.svg"),
           isTable,
+          typeIcon: isTable ? "fa-solid fa-table-list" : "fa-solid fa-box",
           typeLabel: game.i18n.localize(isTable
             ? "SCMOREACTIVITIES.Activities.ScGrant.Fields.Source.TypeTable"
             : "SCMOREACTIVITIES.Activities.ScGrant.Fields.Source.TypeItem"),
-          missing: Boolean(entry.uuid) && !document
+          quantityLabel: game.i18n.localize(isTable
+            ? "SCMOREACTIVITIES.Activities.ScGrant.Fields.Quantity.Draws"
+            : "SCMOREACTIVITIES.Activities.ScGrant.Fields.Quantity.Label"),
+          missing,
+          status: missing ? "invalid" : (validation?.status ?? "valid"),
+          validation
         };
       })
     );
+    context.invalidSourceCount = context.grants.filter((entry) => entry.status === "invalid").length;
+    context.invalidSourceBadge = context.invalidSourceCount
+      ? game.i18n.format("SCMOREACTIVITIES.Activities.ScGrant.Validation.InvalidBadge", { count: context.invalidSourceCount })
+      : "";
 
     this.#prepareSelectionContext(context);
     await this.#prepareBastionContext(context);
@@ -117,6 +141,56 @@ export class ScGrantActivitySheet extends dnd5e.applications.activity.ActivitySh
     }
 
     return context;
+  }
+
+  /**
+   * What the sheet shows about a table source: a summary of what it can grant
+   * when it works, or the reasons some of its results grant nothing.
+   */
+  static async #validateTable(table) {
+    let report;
+    try {
+      report = await ScGrantTableResults.inspect(table, { resolve: ScGrantTableResults.lookup });
+    } catch (error) {
+      Logger.warn("Could not validate a grant roll table.", error);
+      return null;
+    }
+
+    const summary = report.depth > 1
+      ? game.i18n.format("SCMOREACTIVITIES.Activities.ScGrant.Validation.SummaryNested", {
+        items: report.itemCount, tables: report.tableCount, depth: report.depth
+      })
+      : game.i18n.format("SCMOREACTIVITIES.Activities.ScGrant.Validation.Summary", { items: report.itemCount });
+    const messages = report.issues.slice(0, SHOWN_ISSUES).map((issue) => ({
+      level: issue.level,
+      text: game.i18n.format(`SCMOREACTIVITIES.Activities.ScGrant.Validation.Issue.${ISSUE_KEYS[issue.code]}`, {
+        table: issue.table ?? "",
+        result: issue.result ?? "",
+        inner: issue.inner ?? "",
+        max: issue.max ?? ScGrantTableResults.MAX_DEPTH
+      })
+    }));
+    if (report.issues.length > SHOWN_ISSUES) {
+      messages.push({
+        level: "more",
+        text: game.i18n.format("SCMOREACTIVITIES.Activities.ScGrant.Validation.More", {
+          count: report.issues.length - SHOWN_ISSUES
+        })
+      });
+    }
+
+    const titleKey = report.status === "invalid" ? "InvalidTitle" : "WarningTitle";
+    return {
+      status: report.status,
+      summary,
+      title: report.issues.length ? game.i18n.localize(`SCMOREACTIVITIES.Activities.ScGrant.Validation.${titleKey}`) : "",
+      messages,
+      statusIcon: {
+        valid: "fa-solid fa-circle-check",
+        warning: "fa-solid fa-triangle-exclamation",
+        invalid: "fa-solid fa-circle-xmark"
+      }[report.status]
+    };
   }
 
   #prepareSelectionContext(context) {
@@ -275,6 +349,14 @@ export class ScGrantActivitySheet extends dnd5e.applications.activity.ActivitySh
       this.#bindRowInput(input);
     });
 
+    this.element.querySelectorAll("[data-action='open-grant-source']").forEach((element) => {
+      element.addEventListener("click", async(event) => {
+        event.preventDefault();
+        const document = await fromUuid(element.dataset.uuid).catch(() => null);
+        document?.sheet?.render(true);
+      });
+    });
+
     this.element.querySelector("[data-action='toggle-check-tray']")?.addEventListener("click", (event) => {
       event.preventDefault();
       this.#checkTrayExpanded = this.#toggleTray("[data-grant-check-tray]") ?? this.#checkTrayExpanded;
@@ -356,9 +438,27 @@ export class ScGrantActivitySheet extends dnd5e.applications.activity.ActivitySh
   }
 
   #bindListDrop(listElement) {
+    let depth = 0;
+    const highlight = (on) => listElement.classList.toggle("is-dragover", on);
+    listElement.addEventListener("dragenter", () => {
+      depth += 1;
+      highlight(true);
+    });
+    listElement.addEventListener("dragleave", () => {
+      depth = Math.max(0, depth - 1);
+      if (!depth) {
+        highlight(false);
+      }
+    });
     listElement.addEventListener("dragover", (event) => {
       event.preventDefault();
     });
+
+    // Captured, so a drop a row input handles (and stops) still clears the highlight.
+    listElement.addEventListener("drop", () => {
+      depth = 0;
+      highlight(false);
+    }, true);
 
     listElement.addEventListener("drop", async(event) => {
       if (event.target?.closest?.("[data-grant-drop]")) {
