@@ -41,10 +41,11 @@
     </div>
   </fieldset>
 
-  <fieldset data-grant-list>
+  <fieldset class="sc-ma-grant-sources" data-grant-list>
     <legend>
       <span>{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Sections.Items" }}</span>
       {{#if selectionBadge}}<span class="sc-ma-grant-badge">{{ selectionBadge }}</span>{{/if}}
+      {{#if invalidSourceBadge}}<span class="sc-ma-grant-badge is-invalid">{{ invalidSourceBadge }}</span>{{/if}}
       <i class="fa-solid fa-circle-info sc-ma-info-icon"
          data-tooltip="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Quantity.Tooltip" }}"></i>
       <button type="button" class="unbutton control-button" data-action="add-grant"
@@ -55,22 +56,36 @@
 
     <ul class="sc-ma-grant-list unlist">
       {{#each grants}}
-      <li class="sc-ma-grant-row {{#if this.missing}}is-missing{{/if}}" data-index="{{ this.index }}">
+      <li class="sc-ma-grant-row is-{{ this.status }} {{#if this.missing}}is-missing{{/if}}" data-index="{{ this.index }}">
         <input type="hidden" name="grants.{{ this.index }}.type" value="{{ this.type }}">
         <input type="hidden" name="grants.{{ this.index }}.uuid" value="{{ this.uuid }}">
 
         <input type="text" class="sc-ma-grant-qty" name="grants.{{ this.index }}.quantity" value="{{ this.quantity }}"
-               placeholder="1" aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Quantity.Label" }}">
+               placeholder="1" aria-label="{{ this.quantityLabel }}" data-tooltip="{{ this.quantityLabel }}">
 
         <span class="sc-ma-grant-sep">&times;</span>
 
         {{#if this.uuid}}
-        <div class="sc-ma-grant-source" data-tooltip="{{ this.uuid }}">
-          <img src="{{ this.img }}" alt="{{ this.name }}">
+        <div class="sc-ma-grant-source">
+          {{#if this.missing}}
+          <img src="{{ this.img }}" alt="">
+          {{else}}
+          <a class="sc-ma-grant-source-art" data-action="open-grant-source" data-uuid="{{ this.uuid }}"
+             data-tooltip="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Source.Open" }}"
+             aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Source.Open" }}">
+            <img src="{{ this.img }}" alt="">
+          </a>
+          {{/if}}
           <div class="sc-ma-grant-meta">
-            <span class="sc-ma-grant-name">{{ this.name }}</span>
+            <span class="sc-ma-grant-name" data-tooltip="{{ this.uuid }}">
+              {{#if this.missing}}{{ this.name }}{{else}}<a data-action="open-grant-source" data-uuid="{{ this.uuid }}">{{ this.name }}</a>{{/if}}
+              {{#if this.validation}}
+              <i class="{{ this.validation.statusIcon }} sc-ma-grant-status" inert></i>
+              {{/if}}
+            </span>
             <span class="sc-ma-grant-type">
-              {{ this.typeLabel }}{{#if this.missing}} &mdash; {{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Source.Missing" }}{{/if}}
+              <i class="{{ this.typeIcon }}" inert></i>
+              {{ this.typeLabel }}{{#if this.missing}} &mdash; {{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Source.Missing" }}{{/if}}{{#if this.validation.summary}} &middot; {{ this.validation.summary }}{{/if}}
             </span>
           </div>
         </div>
@@ -91,9 +106,23 @@
                 data-tooltip aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Source.Remove" }}">
           <i class="fas fa-minus" inert></i>
         </button>
+
+        {{#if this.validation.messages.length}}
+        <div class="sc-ma-grant-issues" role="alert">
+          <strong>{{ this.validation.title }}</strong>
+          <ul class="unlist">
+            {{#each this.validation.messages}}
+            <li class="is-{{ this.level }}">{{ this.text }}</li>
+            {{/each}}
+          </ul>
+        </div>
+        {{/if}}
       </li>
       {{else}}
-      <li class="sc-ma-grant-empty">{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Items.Empty" }}</li>
+      <li class="sc-ma-grant-empty">
+        <i class="fa-solid fa-box-open" inert></i>
+        <span>{{ localize "SCMOREACTIVITIES.Activities.ScGrant.Fields.Items.Empty" }}</span>
+      </li>
       {{/each}}
     </ul>
 

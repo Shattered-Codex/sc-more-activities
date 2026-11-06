@@ -6,16 +6,24 @@ import { ScGrantBastionOrders } from "./ScGrantBastionOrders.js";
 import { ScGrantCard } from "./ScGrantCard.js";
 import { ScGrantChoiceApp } from "./ScGrantChoiceApp.js";
 import { ScGrantEntryHelpers } from "./ScGrantEntryHelpers.js";
+import { ScGrantTableResults } from "./ScGrantTableResults.js";
 
 const QUERY_ID = "sc-more-activities.grantItems";
 const QUERY_TIMEOUT = 30000;
-// Delivery keys a stack remembers. An order records the sources it delivered
-// (see ScGrantBastionOrders), so a key only has to outlive the moment between
-// a stack's write and that record: it is a fallback, and a short list is enough.
-const MAX_DELIVERY_KEYS = 20;
+// Up to v0.16.1 a stack kept only its last 20 delivery keys (`grantDeliveryKeys`),
+// so a full list may have dropped a key whose order is still pending. Stacks
+// now keep every key in `grantDeliveryLedger` until its order is settled, one
+// field per key (`grantDeliveryLedger.<orderId>.<index>: true`): writes add or
+// delete their own fields and never rewrite another order's keys.
+const LEGACY_MAX_DELIVERY_KEYS = 20;
+const LEDGER = "grantDeliveryLedger";
+const LEDGER_SEGMENT = /^[A-Za-z0-9_-]+$/;
 
 /** A bastion delivery stopped because another client took its order over. */
 class ClaimLostError extends Error {}
+
+/** A bastion delivery stopped because nobody confirmed a source that may already have arrived. */
+class UncertainDeliveryError extends Error {}
 
 const ID_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
@@ -300,10 +308,17 @@ export class ScGrantActivityService {
    * this attempt writes, so the order can record it. `holds()` is checked
    * before every write: once it is false (another client took the order over),
    * nothing else is written and the result is "claim-lost".
+   *
+   * `confirmUncertain({ item, quantity, actor })` is asked about a source that
+   * goes to a stack whose legacy key list was full (see
+   * LEGACY_MAX_DELIVERY_KEYS): it may have dropped this source's key, so
+   * whether it arrived cannot be told. It resolves to "deliver" or "skip"
+   * (already there); anything else stops with "uncertain". Without it, such
+   * a source is delivered.
    */
   static async deliverPlan(recipientActor, plan, {
     activityId, deliveryId, checkInfo = null, banner = null, rolls = [], holds = () => true, itemFlags = null,
-    delivered = [], onDelivered = null
+    delivered = [], onDelivered = null, confirmUncertain = null
   }) {
     // Like an immediate grant, a plan that resolved no item delivers nothing.
     if (!plan?.sources?.length) {
@@ -315,7 +330,7 @@ export class ScGrantActivityService {
     }
     try {
       const outcome = await ScGrantActivityService.#applyPlan(recipientActor, plan, {
-        activityId, deliveryId, holds, itemFlags: itemFlags ?? plan.itemFlags, delivered, onDelivered
+        activityId, deliveryId, holds, itemFlags: itemFlags ?? plan.itemFlags, delivered, onDelivered, confirmUncertain
       });
       if (!holds()) {
         return { ok: false, reason: "claim-lost" };
@@ -331,10 +346,54 @@ export class ScGrantActivityService {
       if (error instanceof ClaimLostError) {
         return { ok: false, reason: "claim-lost" };
       }
+      if (error instanceof UncertainDeliveryError) {
+        return { ok: false, reason: "uncertain" };
+      }
       Logger.error("Could not deliver an sc-grant bastion order.", error);
       ui.notifications?.error?.(ScGrantActivityService.#executionFailedMessage(error));
       return { ok: false, error };
     }
+  }
+
+  /**
+   * Drops the delivery keys of a settled order (delivered or discarded) from
+   * the recipient's stacks: no retry of it can happen any more, so they only
+   * took space. Keys of other orders stay.
+   */
+  static async releaseDeliveryKeys(actor, deliveryId) {
+    if (!actor || !LEDGER_SEGMENT.test(String(deliveryId ?? ""))) {
+      return;
+    }
+    // Only this order's field is deleted: keys another delivery adds while
+    // this update is in flight live in fields of their own and stay.
+    const updates = Array.from(actor.items ?? [])
+      .filter((item) => ScGrantActivityService.#ledgerOf(item)?.[deliveryId] !== undefined)
+      .map((item) => ({ _id: item.id, ...ScGrantActivityService.#deleteLedgerOrder(deliveryId) }));
+    if (updates.length) {
+      await actor.updateEmbeddedDocuments("Item", updates);
+    }
+  }
+
+  /** An update that deletes one order's keys from a stack's ledger, in the syntax this Foundry knows. */
+  static #deleteLedgerOrder(deliveryId) {
+    const parent = `flags.${Constants.MODULE_ID}.${LEDGER}`;
+    const ForcedDeletion = globalThis.foundry?.data?.operators?.ForcedDeletion;
+    return typeof ForcedDeletion === "function"
+      ? { [`${parent}.${deliveryId}`]: new ForcedDeletion() }
+      : { [`${parent}.-=${deliveryId}`]: null };
+  }
+
+  static #ledgerOf(item) {
+    const ledger = item?.flags?.[Constants.MODULE_ID]?.[LEDGER];
+    return ledger && typeof ledger === "object" && !Array.isArray(ledger) ? ledger : null;
+  }
+
+  /** The ledger field of a delivery key (`<orderId>.<index>`), or `null` for a key it cannot hold. */
+  static #ledgerPath(key) {
+    const [deliveryId, index, ...rest] = String(key).split(".");
+    return !rest.length && LEDGER_SEGMENT.test(deliveryId ?? "") && /^\d+$/.test(index ?? "")
+      ? { deliveryId, index }
+      : null;
   }
 
   /**
@@ -430,7 +489,7 @@ export class ScGrantActivityService {
    */
   static async #applyPlan(recipientActor, plan, {
     activityId = null, deliveryId = null, holds = () => true, itemFlags = plan.itemFlags,
-    delivered = [], onDelivered = null
+    delivered = [], onDelivered = null, confirmUncertain = null
   } = {}) {
     const created = [];
     const updated = [];
@@ -460,6 +519,22 @@ export class ScGrantActivityService {
         ));
       }
 
+      // A stack whose legacy key list was full may have dropped this key: only
+      // whoever delivers can tell whether the source already arrived.
+      if (key && confirmUncertain) {
+        const target = ScGrantActivityService.#findExistingStack(recipientActor, sourceItem, activityId);
+        if (target && ScGrantActivityService.#mayHaveDroppedKeys(target)) {
+          const answer = await confirmUncertain({ item: sourceItem, quantity: source.quantity, actor: recipientActor });
+          if (answer === "skip") {
+            await onDelivered?.(index);
+            continue;
+          }
+          if (answer !== "deliver") {
+            throw new UncertainDeliveryError();
+          }
+        }
+      }
+
       // From here to the write nothing awaits: the claim and the delivery key
       // are checked against the state the write starts from, so a client that
       // lost its claim, or a source another client delivered, is never written.
@@ -477,9 +552,11 @@ export class ScGrantActivityService {
           _id: stack.id,
           "system.quantity": (Number(stack.system?.quantity) || 0) + source.quantity
         };
-        if (key) {
-          const keys = stack.flags?.[Constants.MODULE_ID]?.grantDeliveryKeys ?? [];
-          update[`flags.${Constants.MODULE_ID}.grantDeliveryKeys`] = [...keys, key].slice(-MAX_DELIVERY_KEYS);
+        const entry = key ? ScGrantActivityService.#ledgerPath(key) : null;
+        if (entry) {
+          // A field of its own, never trimmed: it leaves only once its order is
+          // settled (see releaseDeliveryKeys), and no other write rewrites it.
+          update[`flags.${Constants.MODULE_ID}.${LEDGER}.${entry.deliveryId}.${entry.index}`] = true;
         }
         const result = await recipientActor.updateEmbeddedDocuments("Item", [update]) ?? [];
         // A hook can veto the update: nothing was delivered then.
@@ -593,7 +670,10 @@ export class ScGrantActivityService {
   static #holdsDeliveryKey(actor, key) {
     const items = Array.from(actor?.items ?? []);
     const flagsOf = (item) => item.flags?.[Constants.MODULE_ID] ?? {};
-    if (items.some((item) => (flagsOf(item).grantDeliveryKeys ?? []).includes(key))) {
+    const entry = ScGrantActivityService.#ledgerPath(key);
+    const stacked = (item) => (entry && ScGrantActivityService.#ledgerOf(item)?.[entry.deliveryId]?.[entry.index] === true)
+      || (Array.isArray(flagsOf(item).grantDeliveryKeys) && flagsOf(item).grantDeliveryKeys.includes(key));
+    if (items.some(stacked)) {
       return true;
     }
     const copies = Number(items.find((item) => flagsOf(item).grantDeliveryKey === key)
@@ -603,6 +683,12 @@ export class ScGrantActivityService {
     }
     return Array.from({ length: copies }, (_unused, copy) => ScGrantActivityService.#deliveryItemId(key, copy))
       .every((id) => ScGrantActivityService.#hasItem(actor, id));
+  }
+
+  /** Whether a stack's legacy key list was full, and so may have dropped keys of pending orders. */
+  static #mayHaveDroppedKeys(stack) {
+    const legacy = stack?.flags?.[Constants.MODULE_ID]?.grantDeliveryKeys;
+    return Array.isArray(legacy) && legacy.length >= LEGACY_MAX_DELIVERY_KEYS;
   }
 
   /**
@@ -878,18 +964,12 @@ export class ScGrantActivityService {
           ));
           continue;
         }
-        const drawnItems = await ScGrantActivityService.#drawTableItems(table, quantity);
-        const counts = new Map();
-        for (const drawnItem of drawnItems) {
+        const ignored = [];
+        const drawn = await ScGrantActivityService.#drawTable(table, quantity, { ignored });
+        for (const drawnItem of drawn.items) {
           append(drawnItem, 1, table.uuid);
-          const key = drawnItem.uuid ?? drawnItem.id;
-          const existing = counts.get(key);
-          if (existing) {
-            existing.quantity += 1;
-          } else {
-            counts.set(key, { uuid: drawnItem.uuid, name: drawnItem.name ?? "", img: drawnItem.img ?? "", quantity: 1 });
-          }
         }
+        ScGrantActivityService.#warnIgnored(ignored);
         lines.push({
           kind: "table",
           uuid: table.uuid,
@@ -898,7 +978,7 @@ export class ScGrantActivityService {
           draws: quantity,
           formula: roll ? roll.formula : null,
           total: roll?.total ?? null,
-          items: Array.from(counts.values())
+          items: drawn.rows
         });
         continue;
       }
@@ -993,122 +1073,120 @@ export class ScGrantActivityService {
     return { img: item?.img ?? "", title, subtitle };
   }
 
-  static async #drawTableItems(table, draws) {
-    const { results } = await table.drawMany(draws, { displayChat: false });
+  /**
+   * Draws `draws` results from `table` and, in turn, from the inner tables
+   * they name, down to ScGrantTableResults.MAX_DEPTH levels. Returns the
+   * items drawn (one per unit) and the card rows: items by count, and inner
+   * tables with what they drew. Results that grant nothing are collected in
+   * `ignored` (see #warnIgnored) instead of failing the draw.
+   */
+  static async #drawTable(table, draws, { depth = 1, chain = [table.uuid], ignored = [] } = {}) {
+    const { CYCLE, TOO_DEEP, NOT_ITEM } = ScGrantTableResults.CODES;
+    // Inner tables are drawn here rather than by Foundry, which would mark
+    // their results as drawn on this table and does not follow text links.
+    const { results } = await table.drawMany(draws, { displayChat: false, recursive: false });
     const items = [];
-    const ignored = [];
+    const rows = new Map();
+    const inner = new Map();
 
     for (const result of results ?? []) {
-      const resolved = await ScGrantActivityService.#resultItems(result);
-      if (resolved.length) {
-        items.push(...resolved);
-      } else {
-        ignored.push(result);
+      const classified = await ScGrantTableResults.classify(result, ScGrantActivityService.#resolveDocument);
+      for (const item of classified.items) {
+        items.push(item);
+        const key = `item:${item.uuid ?? item.id}`;
+        const row = rows.get(key);
+        if (row) {
+          row.quantity += 1;
+        } else {
+          rows.set(key, { kind: "item", uuid: item.uuid, name: item.name ?? "", img: item.img ?? "", quantity: 1 });
+        }
+      }
+      for (const nested of classified.tables) {
+        if (chain.includes(nested.uuid)) {
+          ignored.push({ table, result, code: CYCLE });
+        } else if (depth >= ScGrantTableResults.MAX_DEPTH) {
+          ignored.push({ table, result, code: TOO_DEEP });
+        } else {
+          const pending = inner.get(nested.uuid) ?? { table: nested, draws: 0 };
+          pending.draws += 1;
+          inner.set(nested.uuid, pending);
+          // Keeps the card in draw order: the row is filled once the table is drawn.
+          if (!rows.has(`table:${nested.uuid}`)) {
+            rows.set(`table:${nested.uuid}`, null);
+          }
+        }
+      }
+      if (!classified.items.length && !classified.tables.length) {
+        ignored.push({ table, result, code: NOT_ITEM });
       }
     }
 
-    if (ignored.length > 0) {
-      const names = ignored
-        .map((result) => ScGrantActivityService.#resultLabel(result))
-        .map((label) => `"${label}"`)
-        .join(", ");
-      ui.notifications?.warn?.(Constants.format(
-        "SCMOREACTIVITIES.Activities.ScGrant.Warning.TableInvalidResults",
-        { count: ignored.length, table: table.name ?? "", results: names },
-        `${ignored.length} result(s) from "${table.name ?? ""}" did not resolve to items and were ignored: ${names}`
-      ));
-      Logger.warn(`Results drawn from "${table.name ?? ""}" (${table.uuid ?? ""}) that are not items:`, ignored.map((result) => ({
+    for (const { table: nested, draws: count } of inner.values()) {
+      const drawn = await ScGrantActivityService.#drawTable(nested, count, {
+        depth: depth + 1,
+        chain: [...chain, nested.uuid],
+        ignored
+      });
+      items.push(...drawn.items);
+      rows.set(`table:${nested.uuid}`, {
+        kind: "table",
+        uuid: nested.uuid,
+        name: nested.name ?? "",
+        img: nested.img ?? "",
+        draws: count,
+        items: drawn.rows
+      });
+    }
+
+    return { items, rows: Array.from(rows.values()).filter(Boolean) };
+  }
+
+  /** One warning per table and reason for the drawn results that granted nothing. */
+  static #warnIgnored(ignored) {
+    const { CYCLE, TOO_DEEP } = ScGrantTableResults.CODES;
+    const groups = new Map();
+    for (const entry of ignored) {
+      const key = `${entry.table.uuid ?? entry.table.name}|${entry.code}`;
+      const group = groups.get(key) ?? { table: entry.table, code: entry.code, results: [] };
+      group.results.push(entry.result);
+      groups.set(key, group);
+    }
+
+    for (const { table, code, results } of groups.values()) {
+      const names = results.map((result) => `"${ScGrantTableResults.label(result)}"`).join(", ");
+      const data = { count: results.length, table: table.name ?? "", results: names, max: ScGrantTableResults.MAX_DEPTH };
+      let message;
+      if (code === CYCLE) {
+        message = Constants.format(
+          "SCMOREACTIVITIES.Activities.ScGrant.Warning.TableCycle",
+          data,
+          `${data.count} result(s) from "${data.table}" lead back to a table they were drawn from and were ignored: ${names}.`
+        );
+      } else if (code === TOO_DEEP) {
+        message = Constants.format(
+          "SCMOREACTIVITIES.Activities.ScGrant.Warning.TableTooDeep",
+          data,
+          `${data.count} result(s) from "${data.table}" go deeper than ${data.max} levels of roll tables and were ignored: ${names}.`
+        );
+      } else {
+        message = Constants.format(
+          "SCMOREACTIVITIES.Activities.ScGrant.Warning.TableInvalidResults",
+          data,
+          `${data.count} result(s) from "${data.table}" did not resolve to items and were ignored: ${names}`
+        );
+      }
+      ui.notifications?.warn?.(message);
+      Logger.warn(`Results drawn from "${table.name ?? ""}" (${table.uuid ?? ""}) that grant no item (${code}):`, results.map((result) => ({
         name: result?.name ?? "",
         type: result?.type ?? "",
         documentUuid: result?.documentUuid ?? null,
         description: result?.description ?? ""
       })));
     }
-
-    return items;
   }
 
-  /**
-   * The items a drawn result stands for: the Item it links to (a document
-   * result), or else every Item linked in its text (`@UUID[...]{...}`), which
-   * is how text results usually name their loot.
-   */
-  static async #resultItems(result) {
-    const uuid = ScGrantActivityService.#resultDocumentUuid(result);
-    if (uuid) {
-      const document = await ScGrantActivityService.#lookup(uuid, result);
-      if (document && ScGrantActivityService.#isItemDocument(document)) {
-        return [document];
-      }
-    }
-
-    const items = [];
-    const seen = new Set();
-    for (const linked of ScGrantActivityService.#linkedUuids(result)) {
-      const document = await ScGrantActivityService.#lookup(linked, result);
-      if (!document || !ScGrantActivityService.#isItemDocument(document)) {
-        continue;
-      }
-      const key = document.uuid ?? linked;
-      if (!seen.has(key)) {
-        seen.add(key);
-        items.push(document);
-      }
-    }
-    return items;
-  }
-
-  static async #lookup(uuid, relative) {
-    try {
-      return await fromUuid(uuid, { relative }) ?? null;
-    } catch {
-      return null;
-    }
-  }
-
-  /** The UUIDs a result's text links to, in order: `@UUID[...]` and content-link anchors. */
-  static #linkedUuids(result) {
-    const text = [result?.description, result?.name]
-      .filter((value) => typeof value === "string" && value)
-      .join("\n");
-    const uuids = [];
-    for (const match of text.matchAll(/@UUID\[([^\]]+)\]/g)) {
-      uuids.push(match[1].trim());
-    }
-    for (const match of text.matchAll(/data-uuid=["']([^"']+)["']/g)) {
-      uuids.push(match[1].trim());
-    }
-    return uuids.filter(Boolean);
-  }
-
-  /** A readable name for a drawn result, for the warning that lists ignored ones. */
-  static #resultLabel(result) {
-    const name = String(result?.name ?? "").trim();
-    if (name) {
-      return name;
-    }
-    const description = String(result?.description ?? "")
-      .replace(/@\w+\[[^\]]*\]\{([^}]*)\}/g, "$1")
-      .replace(/<[^>]*>/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (description) {
-      return description.length > 40 ? `${description.slice(0, 39)}…` : description;
-    }
-    return result?.documentUuid ?? "?";
-  }
-
-  static #resultDocumentUuid(result) {
-    if (result?.documentUuid) {
-      return String(result.documentUuid);
-    }
-    const collection = result?.documentCollection;
-    const id = result?.documentId;
-    if (!collection || !id) {
-      return null;
-    }
-    const isPack = collection.includes(".");
-    return isPack ? `Compendium.${collection}.Item.${id}` : `${collection}.${id}`;
+  static async #resolveDocument(uuid, relative) {
+    return await fromUuid(uuid, { relative }) ?? null;
   }
 
   static #isItemDocument(document) {
