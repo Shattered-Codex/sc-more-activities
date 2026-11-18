@@ -18,6 +18,9 @@ import {
 
 const QUERY_ID = "sc-more-activities.canvasOperation";
 const QUERY_TIMEOUT = 30000;
+// Measured distances are compared with this slack so float noise in a grid
+// measurement never pushes an exact landing over the chosen distance.
+const DISTANCE_TOLERANCE = 1e-6;
 
 export class ScCanvasActivityService {
   /**
@@ -675,7 +678,6 @@ export class ScCanvasActivityService {
       originCenter,
       selectedSelfDirectionPoint
     );
-    const movementPixels = ScCanvasActivityService.#distanceToPixels(normalizedConfig.distance, scene);
     const direction = normalizedConfig.type === MOVEMENT_TYPES.PULL ? -1 : 1;
     const previewTargets = [];
     const updates = [];
@@ -720,11 +722,10 @@ export class ScCanvasActivityService {
           movementDirection = 1;
         }
 
-        const projectedCenter = {
-          x: currentCenter.x + ((dx / length) * movementPixels * movementDirection),
-          y: currentCenter.y + ((dy / length) * movementPixels * movementDirection)
-        };
-        destinationPoint = ScCanvasActivityService.#topLeftForCenter(projectedCenter, token, normalizedConfig.snapToGrid, scene);
+        destinationPoint = ScCanvasActivityService.#movementLanding(token, currentCenter, {
+          x: (dx / length) * movementDirection,
+          y: (dy / length) * movementDirection
+        }, normalizedConfig.distance, normalizedConfig.snapToGrid, scene);
         destinationCenter = ScCanvasActivityService.#tokenCenter({
           ...token,
           x: destinationPoint.x,
@@ -1305,10 +1306,7 @@ export class ScCanvasActivityService {
       originCenter,
       ScCanvasActivityService.#validPoint(payload.selfDirectionPoint)
     );
-    const movementPixels = ScCanvasActivityService.#distanceToPixels(
-      ScMovementDistance.resolve(config, payload.distance),
-      scene
-    );
+    const movementDistance = ScMovementDistance.resolve(config, payload.distance);
     const movementType = ScCanvasActivityService.#movementType(config.type, payload.movementType);
     const maxRange = Number(config.maxRange ?? 0);
     const updates = [];
@@ -1348,11 +1346,10 @@ export class ScCanvasActivityService {
         direction = 1;
       }
 
-      const destination = {
-        x: center.x + ((dx / length) * movementPixels * direction),
-        y: center.y + ((dy / length) * movementPixels * direction)
-      };
-      const point = ScCanvasActivityService.#topLeftForCenter(destination, token, config.snapToGrid !== false, scene);
+      const point = ScCanvasActivityService.#movementLanding(token, center, {
+        x: (dx / length) * direction,
+        y: (dy / length) * direction
+      }, movementDistance, config.snapToGrid !== false, scene);
       updates.push({
         id: token.id,
         x: point.x,
@@ -1827,6 +1824,187 @@ export class ScCanvasActivityService {
       y: Number(center.y) - (size.height / 2)
     };
     return snapToGrid ? ScCanvasActivityService.#snapPoint(point, scene) : point;
+  }
+
+  /**
+   * The top-left a token moving `distance` along `unit` (a unit vector) comes
+   * to rest at. The distance is what the scene's grid measures, not the
+   * straight-line length: a diagonal can count shorter (equidistant) or longer
+   * (5/10/5) than it is, and snapping a projected point can round it past the
+   * chosen distance or well short of it. The requesting client and the
+   * executing GM both land tokens here, so the preview matches the result.
+   * A gridless scene has no squares to snap to, so it always moves freely.
+   */
+  static #movementLanding(token, center, unit, distance, snapToGrid, scene = canvas?.scene) {
+    const pixels = ScCanvasActivityService.#distanceToPixels(distance, scene);
+    const along = (length) => ({ x: center.x + (unit.x * length), y: center.y + (unit.y * length) });
+    if (snapToGrid && !ScCanvasActivityService.#isGridless(scene)) {
+      return ScCanvasActivityService.#snappedLanding(token, center, unit, along, distance, pixels, scene);
+    }
+
+    const length = ScCanvasActivityService.#freeMovementLength(center, along, distance, pixels, scene);
+    const point = ScCanvasActivityService.#topLeftForCenter(along(length), token, false, scene);
+    return ScCanvasActivityService.#wholePixelLanding(point, token, center, unit, distance, scene);
+  }
+
+  /**
+   * Token documents store whole-pixel positions, so Foundry rounds a
+   * fractional landing on its own and can push it past the distance. Of the
+   * whole-pixel corners around the exact landing, the farthest that still
+   * fits is kept; the corner toward the start always fits.
+   */
+  static #wholePixelLanding(point, token, center, unit, distance, scene) {
+    const size = ScCanvasActivityService.#tokenPixelSize(token, scene);
+    let best = null;
+    for (const x of new Set([Math.floor(point.x), Math.ceil(point.x)])) {
+      for (const y of new Set([Math.floor(point.y), Math.ceil(point.y)])) {
+        const landing = { x: x + (size.width / 2), y: y + (size.height / 2) };
+        const moved = ScCanvasActivityService.#movementSceneDistance(center, landing, scene);
+        if (moved > distance + DISTANCE_TOLERANCE) {
+          continue;
+        }
+
+        const offLine = Math.abs(((landing.x - center.x) * unit.y) - ((landing.y - center.y) * unit.x));
+        if (!best
+          || moved > best.moved + DISTANCE_TOLERANCE
+          || (moved >= best.moved - DISTANCE_TOLERANCE && offLine < best.offLine)) {
+          best = { point: { x, y }, moved, offLine };
+        }
+      }
+    }
+    return best?.point ?? { x: Math.round(point.x), y: Math.round(point.y) };
+  }
+
+  /**
+   * The grid position near the line that goes as far as the measured distance
+   * allows without passing it, preferring the one closest to the line. Each
+   * square the line snaps to is weighed with its neighbours, since a shallow
+   * line can skip the one square that covers the distance exactly. The search
+   * runs past the straight-line length because a rule that counts diagonals
+   * short reaches squares up to √2 times as far. When no square fits, such as
+   * a distance shorter than one square, the token stays where it is.
+   */
+  static #snappedLanding(token, center, unit, along, distance, pixels, scene) {
+    const gridSize = Number(scene?.grid?.size ?? canvas?.grid?.size ?? 100) || 100;
+    const size = ScCanvasActivityService.#tokenPixelSize(token, scene);
+    const step = gridSize / 4;
+    const steps = Math.ceil(((pixels * Math.SQRT2) + gridSize) / step);
+    const seen = new Set();
+    let best = {
+      point: { x: center.x - (size.width / 2), y: center.y - (size.height / 2) },
+      moved: 0,
+      offLine: 0
+    };
+
+    const consider = (point) => {
+      const key = `${point.x},${point.y}`;
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+
+      const landing = { x: point.x + (size.width / 2), y: point.y + (size.height / 2) };
+      const moved = ScCanvasActivityService.#movementSceneDistance(center, landing, scene);
+      const dx = landing.x - center.x;
+      const dy = landing.y - center.y;
+      // Never past the distance, and never backwards or sideways.
+      if (moved > distance + DISTANCE_TOLERANCE
+        || ((dx * unit.x) + (dy * unit.y) <= 0 && moved > DISTANCE_TOLERANCE)) {
+        return;
+      }
+
+      const offLine = Math.abs((dx * unit.y) - (dy * unit.x));
+      if (moved > best.moved + DISTANCE_TOLERANCE
+        || (moved >= best.moved - DISTANCE_TOLERANCE && offLine < best.offLine)) {
+        best = { point, moved, offLine };
+      }
+    };
+
+    for (let index = 0; index <= steps; index += 1) {
+      const point = ScCanvasActivityService.#topLeftForCenter(along(index * step), token, true, scene);
+      for (const offsetX of [0, -gridSize, gridSize]) {
+        for (const offsetY of [0, -gridSize, gridSize]) {
+          consider({ x: point.x + offsetX, y: point.y + offsetY });
+        }
+      }
+    }
+
+    return best.point;
+  }
+
+  /**
+   * How many pixels along the line an unsnapped token travels to cover the
+   * measured distance: the farthest point that does not pass it. Measured
+   * distance only grows along a line, so it is bisected between a point under
+   * the distance and one past it. Scaling finds the point at once for rules
+   * that grow evenly along a line; the alternating diagonal rule does not, and
+   * its guess can land short of the distance as well as past it.
+   */
+  static #freeMovementLength(center, along, distance, pixels, scene) {
+    const measure = (length) => ScCanvasActivityService.#movementSceneDistance(center, along(length), scene);
+    const fits = (length) => measure(length) <= distance + DISTANCE_TOLERANCE;
+    const reaches = (length) => Math.abs(measure(length) - distance) <= DISTANCE_TOLERANCE;
+    const measured = measure(pixels);
+    if (!(measured > 0) || reaches(pixels)) {
+      return pixels;
+    }
+
+    const guess = pixels * (distance / measured);
+    if (reaches(guess)) {
+      return guess;
+    }
+
+    let low = 0;
+    let high = guess;
+    for (let index = 0; index < 32 && fits(high); index += 1) {
+      low = high;
+      high *= 2;
+    }
+    if (fits(high)) {
+      return high;
+    }
+
+    for (let index = 0; index < 64 && !reaches(low); index += 1) {
+      const middle = (low + high) / 2;
+      if (fits(middle)) {
+        low = middle;
+      } else {
+        high = middle;
+      }
+    }
+    return low;
+  }
+
+  /** Foundry's grid instance reports it; a bare grid config gives its type. */
+  static #isGridless(scene = canvas?.scene) {
+    const grid = scene?.grid;
+    if (typeof grid?.isGridless === "boolean") {
+      return grid.isGridless;
+    }
+    const gridless = globalThis.CONST?.GRID_TYPES?.GRIDLESS ?? 0;
+    return grid?.type === gridless;
+  }
+
+  /**
+   * Distance between two points by the scene's own grid rules. The scene's
+   * grid is measured directly, not the canvas one, so a GM viewing another
+   * scene measures a movement the same way the requesting client did.
+   */
+  static #movementSceneDistance(pointA, pointB, scene = canvas?.scene) {
+    if (typeof scene?.grid?.measurePath === "function") {
+      try {
+        const distance = Number(scene.grid.measurePath([
+          { x: Number(pointA.x), y: Number(pointA.y) },
+          { x: Number(pointB.x), y: Number(pointB.y) }
+        ])?.distance);
+        if (Number.isFinite(distance)) {
+          return distance;
+        }
+      } catch (error) {
+        Logger.debug("Could not measure movement distance on the scene grid.", error);
+      }
+    }
+    return ScCanvasActivityService.sceneDistanceBetweenPoints(pointA, pointB, scene);
   }
 
   static #tokenPixelSize(token, scene = canvas?.scene) {
