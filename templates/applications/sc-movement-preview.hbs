@@ -11,7 +11,7 @@
   <div class="sc-ma-mv-stats">
     <div class="sc-ma-mv-stat">
       <span class="sc-ma-mv-label">{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Distance" }}</span>
-      <span class="sc-ma-mv-value">{{ movementDistance }}</span>
+      <span class="sc-ma-mv-value" data-movement-distance-value>{{ movementDistance }}</span>
     </div>
     <div class="sc-ma-mv-stat">
       <span class="sc-ma-mv-label">{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.Range" }}</span>
@@ -40,6 +40,43 @@
           {{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.ChoosePull" }}
         </button>
       </div>
+    </section>
+  {{/if}}
+
+  {{#if hasDistanceChoice}}
+    <section class="sc-ma-mv-section">
+      <h4 class="sc-ma-mv-section-title">
+        {{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.ChooseDistance" }}
+        <span class="sc-ma-mv-section-meta">{{ distanceRangeLabel }}</span>
+      </h4>
+      {{#if distanceUsesSlider}}
+        <div class="sc-ma-mv-slider">
+          <button type="button" data-movement-distance-step="-1"
+                  aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.DecreaseDistance" }}"
+                  data-tooltip="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.DecreaseDistance" }}"
+                  {{#unless canDecreaseDistance}}disabled{{/unless}}>
+            <i class="fas fa-minus" aria-hidden="true"></i>
+          </button>
+          <input type="range" data-movement-distance-slider min="0" max="{{ distanceMaxIndex }}" step="1" value="{{ distanceIndex }}"
+                 aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.ChooseDistance" }}"
+                 aria-valuetext="{{ distanceLabel }}" {{#if isSubmitting}}disabled{{/if}}>
+          <button type="button" data-movement-distance-step="1"
+                  aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.IncreaseDistance" }}"
+                  data-tooltip="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.IncreaseDistance" }}"
+                  {{#unless canIncreaseDistance}}disabled{{/unless}}>
+            <i class="fas fa-plus" aria-hidden="true"></i>
+          </button>
+          <output class="sc-ma-mv-slider-value" data-movement-distance-label>{{ distanceLabel }}</output>
+        </div>
+      {{else}}
+        <div class="sc-ma-mv-chips" role="group" aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.App.ChooseDistance" }}">
+          {{#each distanceChoices as |choice|}}
+            <button type="button" data-movement-distance="{{ choice.value }}" class="{{#if choice.selected}}placing{{/if}}" aria-pressed="{{ choice.selected }}" {{#if ../isSubmitting}}disabled{{/if}}>
+              {{ choice.label }}
+            </button>
+          {{/each}}
+        </div>
+      {{/if}}
     </section>
   {{/if}}
 

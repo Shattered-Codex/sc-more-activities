@@ -7,6 +7,7 @@ import { ScWallConfig } from "../wall/ScWallConfig.js";
 import { ScBlockedArea } from "./ScBlockedArea.js";
 import { ScRangeShape } from "./ScRangeShape.js";
 import { ScTokenSize } from "./ScTokenSize.js";
+import { ScMovementDistance } from "./ScMovementDistance.js";
 import { ScWallGeometry } from "../wall/ScWallGeometry.js";
 import {
   CANVAS_TARGET_SOURCES,
@@ -62,13 +63,21 @@ export class ScCanvasActivityService {
 
   static async executeMovement(
     activity,
-    { tokenIds = null, originTokenId = null, selfDirectionPoint = null, movementType = null, executionKey = null } = {}
+    {
+      tokenIds = null,
+      originTokenId = null,
+      selfDirectionPoint = null,
+      movementType = null,
+      distance = null,
+      executionKey = null
+    } = {}
   ) {
     try {
       const request = ScCanvasActivityService.#buildMovementRequest(activity, {
         originTokenId,
         selfDirectionPoint,
         movementType,
+        distance,
         tokenIds,
         useExplicitTokenIds: Array.isArray(tokenIds)
       });
@@ -94,6 +103,7 @@ export class ScCanvasActivityService {
       originTokenId = null,
       selfDirectionPoint = null,
       movementType = null,
+      distance = null,
       useExplicitTokenIds = false
     } = {}
   ) {
@@ -101,6 +111,7 @@ export class ScCanvasActivityService {
       originTokenId,
       selfDirectionPoint,
       movementType,
+      distance,
       tokenIds,
       useExplicitTokenIds,
       requireTargets: false
@@ -559,9 +570,19 @@ export class ScCanvasActivityService {
       originTokenId = null,
       selfDirectionPoint = null,
       movementType = null,
+      distance = null,
       useExplicitTokenIds = false
     } = {}
   ) {
+    // Validate before the preview resolver clamps distances. This also covers
+    // saved requests whose distance is no longer allowed by the activity.
+    if (!ScMovementDistance.accepts(activity?.movement, distance)) {
+      throw new Error(Constants.localize(
+        "SCMOREACTIVITIES.Activities.Canvas.Warning.InvalidRequest",
+        "The canvas operation request is no longer valid."
+      ));
+    }
+
     if (activity?.movement?.type === MOVEMENT_TYPES.EITHER
       && ![MOVEMENT_TYPES.PUSH, MOVEMENT_TYPES.PULL].includes(movementType)) {
       throw new Error(Constants.localize(
@@ -574,6 +595,7 @@ export class ScCanvasActivityService {
       originTokenId,
       selfDirectionPoint,
       movementType,
+      distance,
       tokenIds,
       useExplicitTokenIds,
       requireTargets: true
@@ -589,6 +611,7 @@ export class ScCanvasActivityService {
     return ScCanvasActivityService.#request("movement", activity, operation.scene, {
       originTokenId: operation.origin.id,
       movementType: operation.config.type,
+      distance: operation.config.distance,
       selfDirectionPoint: operation.selfDirectionPoint,
       skipped: operation.skipped,
       tokenIds: operation.targets.map((entry) => entry.token.id),
@@ -601,6 +624,7 @@ export class ScCanvasActivityService {
     originTokenId = null,
     selfDirectionPoint = null,
     movementType = null,
+    distance = null,
     useExplicitTokenIds = false,
     requireTargets = true
   } = {}) {
@@ -615,7 +639,7 @@ export class ScCanvasActivityService {
 
     const config = activity?.movement ?? {};
     const normalizedConfig = {
-      distance: Math.max(0, Number(config.distance ?? 10) || 0),
+      distance: ScMovementDistance.resolve(config, distance),
       maxRange: Math.max(0, Number(config.maxRange ?? 0) || 0),
       rangeShape: ScRangeShape.normalize(config.rangeShape),
       targetSize: ScTokenSize.normalize(config.targetSize),
@@ -1255,6 +1279,15 @@ export class ScCanvasActivityService {
         "The canvas operation request is no longer valid."
       );
     }
+    // Re-check against the authoritative activity, which may have changed
+    // since the request was built. Older requests without a distance use the
+    // configured distance.
+    if (!ScMovementDistance.accepts(config, payload.distance)) {
+      return ScCanvasActivityService.#failure(
+        "SCMOREACTIVITIES.Activities.Canvas.Warning.InvalidRequest",
+        "The canvas operation request is no longer valid."
+      );
+    }
     const origin = scene.tokens?.get(payload.originTokenId);
     const targets = ScCanvasActivityService.#limitedTargets(
       ScCanvasActivityService.#tokenDocumentsFromIds(scene, payload.tokenIds),
@@ -1272,7 +1305,10 @@ export class ScCanvasActivityService {
       originCenter,
       ScCanvasActivityService.#validPoint(payload.selfDirectionPoint)
     );
-    const movementPixels = ScCanvasActivityService.#distanceToPixels(config.distance ?? 5, scene);
+    const movementPixels = ScCanvasActivityService.#distanceToPixels(
+      ScMovementDistance.resolve(config, payload.distance),
+      scene
+    );
     const movementType = ScCanvasActivityService.#movementType(config.type, payload.movementType);
     const maxRange = Number(config.maxRange ?? 0);
     const updates = [];

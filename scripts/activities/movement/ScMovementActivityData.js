@@ -2,6 +2,7 @@ import {
   CANVAS_TARGET_SOURCES,
   MOVEMENT_TYPES
 } from "../canvas/ScCanvasActivityConstants.js";
+import { ScMovementDistance } from "../canvas/ScMovementDistance.js";
 import { ScRangeShape } from "../canvas/ScRangeShape.js";
 import { ScTokenSize } from "../canvas/ScTokenSize.js";
 
@@ -21,11 +22,13 @@ export class ScMovementActivityData extends dnd5e.dataModels.activity.BaseActivi
           initial: MOVEMENT_TYPES.PUSH,
           choices: Object.values(MOVEMENT_TYPES)
         }),
+        // The fixed distance, or the maximum when the distance is chosen on use.
         distance: new fields.NumberField({
           required: false,
           initial: 10,
           min: 0
         }),
+        ...ScMovementDistance.fields(fields),
         maxRange: new fields.NumberField({
           required: false,
           initial: 0,

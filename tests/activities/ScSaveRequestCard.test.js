@@ -64,6 +64,7 @@ test("the movement request posts the native save link, targets, and execution fl
   const request = await ScSaveRequestCard.postMovementRequest(activity, {
     originTokenId: "origin",
     movementType: "push",
+    distance: 10,
     selfDirectionPoint: { x: 1, y: 2 },
     tokenIds: ["origin", "t1"]
   });
@@ -92,6 +93,7 @@ test("the movement request posts the native save link, targets, and execution fl
   assert.deepEqual(flags.selfIds, ["origin"]);
   assert.deepEqual(flags.externalTargets.map((entry) => entry.id), ["t1"]);
   assert.equal(flags.execution.movementType, "push");
+  assert.equal(flags.execution.distance, 10);
   assert.deepEqual(flags.execution.selfDirectionPoint, { x: 1, y: 2 });
   assert.equal(flags.executed, false);
 });

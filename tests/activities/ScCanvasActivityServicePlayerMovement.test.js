@@ -268,3 +268,49 @@ test("an absolute size list is enforced server side too", async(t) => {
   assert.equal(result.ok, false);
   assert.deepEqual(scene.moved, []);
 });
+
+test("a player's ranged movement keeps the selected distance and the targeting range separate", async(t) => {
+  const activity = makeActivity();
+  Object.assign(activity.movement, { distanceMode: "range", minDistance: 5, distance: 30, maxRange: 40 });
+  const origin = makeToken({ id: "hero", x: 100, y: 100, ownedBy: "player" });
+  const target = makeToken({ id: "target", x: 800, y: 100, ownedBy: "player" });
+  origin.actor = activity.actor;
+  const scene = makeScene([origin, target]);
+  installGlobals(t, scene, { allowPlayerTokenMovement: false });
+  globalThis.fromUuid = async() => activity;
+
+  for (const distance of [5, 15, 30]) {
+    const result = await ScCanvasActivityService.handleCanvasQuery({
+      ...pushRequest(scene, activity, { originId: origin.id, targetId: target.id }), distance
+    });
+    assert.equal(result.ok, true);
+    assert.deepEqual(scene.moved.at(-1).documents, [{ _id: target.id, x: 800 + distance * 20, y: 100 }]);
+  }
+
+  scene.moved.length = 0;
+  target.x = 1000; // Beyond the 40-foot targeting range.
+  const result = await ScCanvasActivityService.handleCanvasQuery({
+    ...pushRequest(scene, activity, { originId: origin.id, targetId: target.id }), distance: 5
+  });
+  assert.equal(result.ok, false);
+  assert.deepEqual(scene.moved, []);
+});
+
+test("a distance choice cannot bypass player ownership restrictions", async(t) => {
+  const activity = makeActivity();
+  Object.assign(activity.movement, { distanceMode: "range", minDistance: 5, distance: 30 });
+  const origin = makeToken({ id: "hero", x: 100, y: 100, ownedBy: "player" });
+  const target = makeToken({ id: "target", x: 800, y: 100, ownedBy: "gm" });
+  origin.actor = activity.actor;
+  const scene = makeScene([origin, target]);
+  installGlobals(t, scene, { allowPlayerTokenMovement: false });
+  globalThis.fromUuid = async() => activity;
+
+  const result = await ScCanvasActivityService.handleCanvasQuery({
+    ...pushRequest(scene, activity, { originId: origin.id, targetId: target.id }), distance: 15
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.message, "i18n:SCMOREACTIVITIES.Activities.Canvas.Warning.TokenPermission");
+  assert.deepEqual(scene.moved, []);
+});
