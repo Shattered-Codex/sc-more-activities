@@ -60,7 +60,7 @@ The goal is to preserve the value of richer activity workflows while shaping the
 - `sc-identify`: pick an unidentified item from your inventory, a targeted token's, or a creature's within range, and identify it, optionally behind a check whose DC comes from the item's rarity (including custom rarities from SC Item Rarity Colors) or a custom formula; with SC Item Rarity Colors active, the item picker shows each item in that module's style, including its Unidentified style and hidden image
 - `sc-advancement`: drive item-linked advancement or progression flows
 - `sc-teleport`: move tokens through a guided teleport workflow
-- `sc-movement`: push or pull tokens, with an optional direction choice at use time and preview support
+- `sc-movement`: push or pull tokens, with an optional direction and distance choice at use time and preview support
 - `sc-wall`: create wall previews and GM-mediated wall placement
 - `sc-portal`: open a linked pair of portals and ask tokens whether they want to cross
 - `sc-recall`: travel to a chosen region on any scene, or back home beside the NPC a character bound, at once or through a portal that stays open, like a portal scroll or a home stone
@@ -294,6 +294,20 @@ second is not read as a cancellation.
 
 This only applies to a tracked usage, which is what a chain creates. Clicking an
 activity directly is unaffected.
+
+## Movement Distance
+
+`sc-movement` moves its targets a **Fixed** distance by default. Set the
+distance mode to **Choose on use** and give a minimum and a maximum: the movement
+preview then offers the distances between them in grid steps (5, 10, 15 on a
+5 ft grid), with the maximum preselected, and the canvas shows each target's
+landing spot for the distance picked. Up to six distances show as buttons; a
+longer range becomes a slider with − and + buttons, still in grid steps.
+
+Activities configured before this option keep their fixed distance; nothing has
+to be migrated. On a ranged activity the existing **Distance** value is the
+maximum. The GM's client re-checks the picked distance against the activity, and
+a saving throw card carries the distance chosen when it was posted.
 
 ## Target Size Rule
 

@@ -1890,6 +1890,106 @@ i.sc-ma-grant-card-banner-art {
   padding-top: 0.35rem;
 }
 
+/* Movement effect. The accent matches the movement preview's default border. */
+.sc-more-activities.sc-ma-activity--movement {
+  --sc-ma-activity-accent: #4da3ff;
+}
+
+.sc-more-activities.sc-ma-activity--movement .sc-ma-mv-type-choices {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 0.5rem;
+}
+
+.sc-more-activities.sc-ma-activity--movement .sc-ma-mv-type-choice {
+  align-content: start;
+  background: var(--sc-ma-wash);
+  border: 1px solid var(--sc-ma-line);
+  border-radius: 8px;
+  cursor: pointer;
+  display: grid;
+  gap: 0.15rem;
+  justify-items: center;
+  padding: 0.5rem 0.45rem;
+  position: relative;
+  text-align: center;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.sc-more-activities.sc-ma-activity--movement .sc-ma-mv-type-choice:hover {
+  border-color: color-mix(in srgb, var(--sc-ma-activity-accent) 60%, transparent);
+}
+
+.sc-more-activities.sc-ma-activity--movement .sc-ma-mv-type-choice:has(input:checked) {
+  background: color-mix(in srgb, var(--sc-ma-activity-accent) 14%, transparent);
+  border-color: var(--sc-ma-activity-accent);
+}
+
+.sc-more-activities.sc-ma-activity--movement .sc-ma-mv-type-choice:has(input:focus-visible) {
+  outline: 2px solid var(--sc-ma-activity-accent);
+  outline-offset: 2px;
+}
+
+/* The radio stays in the form and the tab order; the card shows its state. */
+.sc-more-activities.sc-ma-activity--movement .sc-ma-mv-type-choice input {
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+
+.sc-more-activities.sc-ma-activity--movement .sc-ma-mv-type-choice > i {
+  font-size: 1.2rem;
+  opacity: 0.7;
+}
+
+.sc-more-activities.sc-ma-activity--movement .sc-ma-mv-type-choice:has(input:checked) > i {
+  color: var(--sc-ma-activity-accent);
+  opacity: 1;
+}
+
+.sc-more-activities.sc-ma-activity--movement .sc-ma-mv-type-title {
+  font-weight: 600;
+}
+
+.sc-more-activities.sc-ma-activity--movement .sc-ma-mv-type-description {
+  font-size: 0.75rem;
+  line-height: 1.3;
+  opacity: 0.75;
+}
+
+/* Mode select, then one distance or a minimum–maximum pair, on one line. */
+.sc-more-activities.sc-ma-activity--movement .sc-ma-mv-distance-fields {
+  align-items: center;
+}
+
+.sc-more-activities.sc-ma-activity--movement .sc-ma-mv-distance-fields select {
+  flex: 0 0 auto;
+  width: auto;
+}
+
+.sc-more-activities.sc-ma-activity--movement .sc-ma-mv-distance-fields input {
+  flex: 1 1 4rem;
+  min-width: 0;
+}
+
+.sc-more-activities.sc-ma-activity--movement .sc-ma-mv-distance-sep {
+  flex: 0 0 auto;
+  opacity: 0.6;
+}
+
+.sc-more-activities.sc-ma-activity--movement .sc-ma-mv-notice {
+  color: var(--sc-ma-activity-accent);
+}
+
+@media (max-width: 520px) {
+  .sc-more-activities.sc-ma-activity--movement .sc-ma-mv-type-choices {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Recall effect. */
 .sc-more-activities.sc-ma-activity--recall {
   --sc-ma-activity-accent: #ffb3a7;
@@ -3102,6 +3202,60 @@ i.sc-ma-grant-card-banner-art {
   gap: 0.35rem;
   justify-content: center;
   min-height: 2rem;
+}
+
+/* The distances a ranged movement offers, as one row of buttons that wraps. */
+.sc-more-activities .sc-ma-mv-chips {
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: repeat(auto-fill, minmax(3.6rem, 1fr));
+}
+
+.sc-more-activities .sc-ma-mv-chips button {
+  font-variant-numeric: tabular-nums;
+  min-height: 1.9rem;
+  padding: 0 0.35rem;
+  white-space: nowrap;
+}
+
+/* A long range of distances: − slider + and the value, on one line. */
+.sc-more-activities .sc-ma-mv-slider {
+  align-items: center;
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: 1.9rem minmax(0, 1fr) 1.9rem 4.2rem;
+}
+
+.sc-more-activities .sc-ma-mv-slider button {
+  justify-content: center;
+  min-height: 1.9rem;
+  padding: 0;
+  width: 1.9rem;
+}
+
+.sc-more-activities .sc-ma-mv-slider input[type="range"] {
+  accent-color: var(--sc-ma-accent, #39f08c);
+  margin: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.sc-more-activities .sc-ma-mv-slider-value {
+  border: 1px solid var(--sc-ma-accent, #39f08c);
+  border-radius: 6px;
+  color: var(--sc-ma-text-strong, #f0ecde);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 1.9rem;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.sc-more-activities .sc-ma-mv-section-meta {
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: none;
 }
 
 .sc-more-activities .sc-ma-mv-picker {

@@ -49,13 +49,14 @@ export class ScSaveRequestCard {
     originTokenId = null,
     selfDirectionPoint = null,
     movementType = null,
+    distance = null,
     tokenIds = []
   } = {}) {
     return ScSaveRequestCard.#post(activity, activity?.movement?.save, {
       group: "movement",
       originTokenId,
       tokenIds,
-      execution: { movementType, selfDirectionPoint },
+      execution: { movementType, selfDirectionPoint, distance },
       buttonKey: "SCMOREACTIVITIES.Activities.Canvas.Save.Request.MoveButton",
       buttonFallback: "Move failed targets"
     });
@@ -577,6 +578,8 @@ export class ScSaveRequestCard {
           originTokenId: data.originTokenId,
           selfDirectionPoint: data.execution?.selfDirectionPoint ?? null,
           movementType: data.execution?.movementType ?? null,
+          // Cards posted before distance ranges existed carry none and move the configured distance.
+          distance: data.execution?.distance ?? null,
           tokenIds: moveIds,
           executionKey
         });

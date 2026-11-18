@@ -1,11 +1,77 @@
 <section class="tab activity-{{ tab.id }} {{ tab.cssClass }}" data-tab="{{ tab.id }}" data-group="{{ tab.group }}">
   {{> "systems/dnd5e/templates/activity/parts/activity-effects.hbs" }}
 
+  <details class="sc-ma-howto" data-sc-panel="howto" {{#if openPanels.howto}}open{{/if}}>
+    <summary><i class="fa-solid fa-circle-question" inert></i>{{ localize "SCMOREACTIVITIES.Activities.ScMovement.HowTo.Title" }}</summary>
+    <ul>
+      <li><i class="fa-solid fa-bullseye" inert></i><span>{{{ localize "SCMOREACTIVITIES.Activities.ScMovement.HowTo.Targets" }}}</span></li>
+      <li><i class="fa-solid fa-arrows-left-right" inert></i><span>{{{ localize "SCMOREACTIVITIES.Activities.ScMovement.HowTo.Move" }}}</span></li>
+      <li><i class="fa-solid fa-shield-halved" inert></i><span>{{{ localize "SCMOREACTIVITIES.Activities.ScMovement.HowTo.Save" }}}</span></li>
+    </ul>
+  </details>
+
   <fieldset>
     <legend>{{ localize "SCMOREACTIVITIES.Activities.ScMovement.Sections.Configuration" }}</legend>
 
+    <div class="sc-ma-mv-type-choices" role="radiogroup"
+         aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.Fields.Type.Label" }}">
+      {{#each movementTypeChoices}}
+      <label class="sc-ma-mv-type-choice">
+        <input type="radio" name="movement.type" value="{{ this.value }}" {{#if this.checked}}checked{{/if}}>
+        <i class="{{ this.icon }}" inert></i>
+        <span class="sc-ma-mv-type-title">{{ this.label }}</span>
+        <span class="sc-ma-mv-type-description">{{ this.description }}</span>
+      </label>
+      {{/each}}
+    </div>
+
     <div class="form-group">
-      <label>{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.TargetSource.Label" }}</label>
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScMovement.Fields.Distance.Label" }}</label>
+      <div class="form-fields sc-ma-mv-distance-fields">
+        <select name="movement.distanceMode" aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.Fields.DistanceMode.Label" }}">
+          {{ selectOptions distanceModeOptions selected=movement.distanceMode valueAttr="value" labelAttr="label" }}
+        </select>
+        {{#if distanceIsRange}}
+          <input type="number" name="movement.minDistance" value="{{ movement.minDistance }}" min="0" step="any"
+                 aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.Fields.Distance.Min" }}"
+                 data-tooltip="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.Fields.Distance.Min" }}">
+          <span class="sc-ma-mv-distance-sep" aria-hidden="true">&ndash;</span>
+          <input type="number" name="movement.distance" value="{{ movement.distance }}" min="0" step="any"
+                 aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.Fields.Distance.Max" }}"
+                 data-tooltip="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.Fields.Distance.Max" }}">
+        {{else}}
+          <input type="number" name="movement.distance" value="{{ movement.distance }}" min="0" step="any"
+                 aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.Fields.Distance.Label" }}">
+        {{/if}}
+      </div>
+      <p class="hint">
+        {{#if distanceIsRange}}
+          {{ localize "SCMOREACTIVITIES.Activities.ScMovement.Fields.Distance.RangeHint" }}
+        {{else}}
+          {{ localize "SCMOREACTIVITIES.Activities.ScMovement.Fields.Distance.Hint" }}
+        {{/if}}
+      </p>
+      {{#if distanceCollapsedNotice}}
+        <p class="hint sc-ma-mv-notice"><i class="fa-solid fa-circle-info" inert></i> {{ distanceCollapsedNotice }}</p>
+      {{/if}}
+    </div>
+
+    <div class="sc-ma-toggles">
+      <label class="sc-ma-toggle">
+        <input type="checkbox" name="movement.snapToGrid" {{#if movement.snapToGrid}}checked{{/if}}>
+        <span>
+          <span class="sc-ma-toggle-title">{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.SnapToGrid.Label" }}</span>
+          <span class="hint">{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.SnapToGrid.Hint" }}</span>
+        </span>
+      </label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ localize "SCMOREACTIVITIES.Activities.ScMovement.Sections.Targets" }}</legend>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScMovement.Fields.TargetSource.Label" }}</label>
       <div class="form-fields">
         <select name="movement.targetSource">
           {{ selectOptions targetSourceOptions selected=movement.targetSource valueAttr="value" labelAttr="label" }}
@@ -15,47 +81,24 @@
     </div>
 
     <div class="form-group">
-      <label>{{ localize "SCMOREACTIVITIES.Activities.ScMovement.Fields.Type.Label" }}</label>
-      <div class="form-fields">
-        <select name="movement.type">
-          {{ selectOptions movementTypeOptions selected=movement.type valueAttr="value" labelAttr="label" }}
-        </select>
-      </div>
-      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScMovement.Fields.Type.Hint" }}</p>
-    </div>
-
-    <div class="form-group">
-      <label>{{ localize "SCMOREACTIVITIES.Activities.ScMovement.Fields.Distance.Label" }}</label>
-      <div class="form-fields">
-        <input type="number" name="movement.distance" value="{{ movement.distance }}" min="0" step="1">
-      </div>
-      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScMovement.Fields.Distance.Hint" }}</p>
-    </div>
-
-    <div class="form-group">
-      <label>{{ localize "SCMOREACTIVITIES.Activities.ScMovement.Fields.MaxRange.Label" }}</label>
-      <div class="form-fields">
-        <input type="number" name="movement.maxRange" value="{{ movement.maxRange }}" min="0" step="1">
-      </div>
-      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScMovement.Fields.MaxRange.Hint" }}</p>
-    </div>
-
-    <div class="form-group">
-      <label>{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.RangeShape.Label" }}</label>
-      <div class="form-fields">
-        <select name="movement.rangeShape">
-          {{ selectOptions rangeShapeOptions selected=movement.rangeShape valueAttr="value" labelAttr="label" }}
-        </select>
-      </div>
-      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScMovement.Fields.RangeShape.Hint" }}</p>
-    </div>
-
-    <div class="form-group">
       <label>{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.MaxTargets.Label" }}</label>
       <div class="form-fields">
         <input type="number" name="movement.maxTargets" value="{{ movement.maxTargets }}" min="1" step="1">
       </div>
       <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.MaxTargets.Hint" }}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{ localize "SCMOREACTIVITIES.Activities.ScMovement.Fields.MaxRange.Label" }}</label>
+      <div class="form-fields sc-ma-range-fields">
+        <input type="number" name="movement.maxRange" value="{{ movement.maxRange }}" min="0" step="any"
+               aria-label="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.Fields.MaxRange.Label" }}">
+        <select name="movement.rangeShape" data-tooltip="{{ localize "SCMOREACTIVITIES.Activities.ScMovement.Fields.RangeShape.Hint" }}"
+                aria-label="{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.RangeShape.Label" }}">
+          {{ selectOptions rangeShapeOptions selected=movement.rangeShape valueAttr="value" labelAttr="label" }}
+        </select>
+      </div>
+      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.ScMovement.Fields.MaxRange.Hint" }}</p>
     </div>
 
     <div class="form-group">
@@ -104,26 +147,20 @@
         <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.TargetSize.Offsets.Hint" }}</p>
       </div>
     {{/if}}
-
-    <div class="form-group">
-      <label>{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.SnapToGrid.Label" }}</label>
-      <div class="form-fields">
-        <input type="checkbox" name="movement.snapToGrid" {{#if movement.snapToGrid}}checked{{/if}}>
-      </div>
-      <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.SnapToGrid.Hint" }}</p>
-    </div>
   </fieldset>
 
   {{#if movementShowsSave}}
     <fieldset>
       <legend>{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.Save.Legend" }}</legend>
 
-      <div class="form-group">
-        <label>{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.Save.Enabled.Label" }}</label>
-        <div class="form-fields">
+      <div class="sc-ma-toggles">
+        <label class="sc-ma-toggle">
           <input type="checkbox" name="movement.save.enabled" {{#if movement.save.enabled}}checked{{/if}}>
-        </div>
-        <p class="hint">{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.Save.Enabled.Hint" }}</p>
+          <span>
+            <span class="sc-ma-toggle-title">{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.Save.Enabled.Label" }}</span>
+            <span class="hint">{{ localize "SCMOREACTIVITIES.Activities.Canvas.Fields.Save.Enabled.Hint" }}</span>
+          </span>
+        </label>
       </div>
 
       {{#if movement.save.enabled}}

@@ -3,6 +3,7 @@ import { Logger } from "../../support/Logger.js";
 import { ModuleSettings } from "../../settings/ModuleSettings.js";
 import { ScCanvasActivityService } from "../canvas/ScCanvasActivityService.js";
 import { ScRangeShape } from "../canvas/ScRangeShape.js";
+import { ScMovementDistance } from "../canvas/ScMovementDistance.js";
 import { ScBlockedArea } from "../canvas/ScBlockedArea.js";
 import { ScCanvasResultCard } from "../canvas/ScCanvasResultCard.js";
 import { ScSaveRequestCard } from "../canvas/ScSaveRequestCard.js";
@@ -24,6 +25,9 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
     }
   };
 
+  /** Up to this many distances show as buttons; more become a slider. */
+  static DISTANCE_BUTTON_LIMIT = 6;
+
   static PARTS = {
     form: {
       template: "modules/sc-more-activities/templates/applications/sc-movement-preview.hbs"
@@ -42,6 +46,10 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
     this.settlement = settlement;
     this.requiresMovementChoice = activity?.movement?.type === MOVEMENT_TYPES.EITHER;
     this.movementType = this.requiresMovementChoice ? null : activity?.movement?.type;
+    // Null moves the maximum: a ranged activity opens on its full distance.
+    this.movementDistance = null;
+    this.distanceValues = [];
+    this.distanceUnits = "";
     this.originTokenId = ScCanvasActivityService.getOriginTokenDocument(activity)?.id ?? null;
     this.selectedTargetIds = [];
     this.previewGraphics = null;
@@ -64,6 +72,9 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
         originName: "",
         movementTypeLabel: "",
         movementDistance: 0,
+        hasDistanceChoice: false,
+        distanceChoices: [],
+        distanceRangeLabel: "",
         maxRange: 0,
         rangeLabel: "",
         maxTargets: 0,
@@ -105,6 +116,7 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
       isPush: this.movementType === MOVEMENT_TYPES.PUSH,
       isPull: this.movementType === MOVEMENT_TYPES.PULL,
       movementDistance: preview.config.distance,
+      ...this.#distanceContext(preview),
       maxRange,
       rangeLabel: maxRange > 0
         ? String(maxRange)
@@ -174,6 +186,42 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
         this.render();
       });
     });
+    this.element.querySelectorAll("[data-movement-distance]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        const distance = Number(event.currentTarget.dataset.movementDistance);
+        if (!ScMovementDistance.accepts(this.activity?.movement, distance)) {
+          return;
+        }
+        this.movementDistance = distance;
+        this.render();
+      });
+    });
+    const slider = this.element.querySelector("input[data-movement-distance-slider]");
+    // Dragging only redraws the canvas and the readout: a full render would
+    // replace the slider under the pointer. Letting go renders the window.
+    slider?.addEventListener("input", (event) => {
+      const distance = this.distanceValues[Number(event.currentTarget.value)];
+      if (distance === undefined) {
+        return;
+      }
+      this.movementDistance = distance;
+      const readout = this.element.querySelector("[data-movement-distance-label]");
+      if (readout) {
+        readout.textContent = this.#distanceLabel(distance);
+      }
+      slider.setAttribute("aria-valuetext", this.#distanceLabel(distance));
+      const distanceStat = this.element.querySelector("[data-movement-distance-value]");
+      if (distanceStat) {
+        distanceStat.textContent = String(distance);
+      }
+      this.#drawPreviewState();
+    });
+    slider?.addEventListener("change", () => this.render());
+    this.element.querySelectorAll("[data-movement-distance-step]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        this.#stepDistance(Number(event.currentTarget.dataset.movementDistanceStep));
+      });
+    });
     this.element.querySelector(".sc-ma-movement-choose-self-direction")?.addEventListener("click", () => {
       this.#toggleSelfDirectionSelection();
     });
@@ -208,7 +256,8 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
     try {
       const preview = ScCanvasActivityService.getMovementPreviewData(this.activity, {
         originTokenId: this.originTokenId,
-        movementType: this.movementType
+        movementType: this.movementType,
+        distance: this.movementDistance
       });
       this.selectedTargetIds = preview.targets.map((entry) => entry.token?.id).filter(Boolean);
       this.previewError = null;
@@ -225,6 +274,7 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
         originTokenId: this.originTokenId,
         selfDirectionPoint: this.selfDirectionPoint,
         movementType: this.movementType,
+        distance: this.movementDistance,
         tokenIds: this.selectedTargetIds,
         useExplicitTokenIds: true
       });
@@ -232,6 +282,69 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
       this.previewError = error;
       return null;
     }
+  }
+
+  /** The distance picker of a ranged activity; a fixed one shows none. */
+  #distanceContext(preview) {
+    const config = this.activity?.movement ?? {};
+    const { isRange, min, max } = ScMovementDistance.bounds(config);
+    if (!isRange) {
+      this.distanceValues = [];
+      return { hasDistanceChoice: false, distanceChoices: [], distanceRangeLabel: "" };
+    }
+
+    this.distanceUnits = String(preview?.scene?.grid?.units ?? "").trim();
+    this.distanceValues = ScMovementDistance.choices(config, Number(preview?.scene?.grid?.distance) || 5);
+    // A grid or bounds change may remove a still-valid choice from the steps.
+    // Retain it so the picker reports the same distance as the canvas preview.
+    const chosen = this.#chosenDistance();
+    if (!this.distanceValues.includes(chosen)) {
+      this.distanceValues.push(chosen);
+      this.distanceValues.sort((a, b) => a - b);
+    }
+    const selected = this.#distanceIndex();
+    const lastIndex = this.distanceValues.length - 1;
+    const usesSlider = this.distanceValues.length > ScMovementPreviewApp.DISTANCE_BUTTON_LIMIT;
+    return {
+      hasDistanceChoice: true,
+      distanceRangeLabel: `${this.#distanceLabel(min)} – ${this.#distanceLabel(max)}`,
+      distanceUsesSlider: usesSlider,
+      distanceChoices: usesSlider
+        ? []
+        : this.distanceValues.map((value, index) => ({
+          value,
+          label: this.#distanceLabel(value),
+          selected: index === selected
+        })),
+      distanceIndex: selected,
+      distanceMaxIndex: lastIndex,
+      distanceLabel: this.#distanceLabel(this.distanceValues[selected]),
+      canDecreaseDistance: !this.isSubmitting && selected > 0,
+      canIncreaseDistance: !this.isSubmitting && selected < lastIndex
+    };
+  }
+
+  /** Where the chosen distance sits among the offered ones; the maximum when it is not one of them. */
+  #distanceIndex() {
+    const index = this.distanceValues.indexOf(this.#chosenDistance());
+    return index >= 0 ? index : this.distanceValues.length - 1;
+  }
+
+  #stepDistance(delta) {
+    if (!this.distanceValues.length || !Number.isInteger(delta)) {
+      return;
+    }
+    const index = Math.min(Math.max(this.#distanceIndex() + delta, 0), this.distanceValues.length - 1);
+    this.movementDistance = this.distanceValues[index];
+    this.render();
+  }
+
+  #distanceLabel(value) {
+    return this.distanceUnits ? `${value} ${this.distanceUnits}` : String(value);
+  }
+
+  #chosenDistance() {
+    return ScMovementDistance.resolve(this.activity?.movement, this.movementDistance);
   }
 
   #availableTokens(preview) {
@@ -639,6 +752,7 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
           originTokenId: this.originTokenId,
           selfDirectionPoint: this.selfDirectionPoint,
           movementType: this.movementType,
+          distance: this.#chosenDistance(),
           tokenIds: this.selectedTargetIds
         });
         if (request.posted) {
@@ -657,6 +771,7 @@ export class ScMovementPreviewApp extends HandlebarsApplicationMixin(Application
         originTokenId: this.originTokenId,
         selfDirectionPoint: this.selfDirectionPoint,
         movementType: this.movementType,
+        distance: this.#chosenDistance(),
         tokenIds: this.selectedTargetIds
       });
       if (result?.ok) {
